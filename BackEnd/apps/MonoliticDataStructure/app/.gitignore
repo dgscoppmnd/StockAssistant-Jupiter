@@ -1,0 +1,12 @@
+.env
+data/raw/
+data/generated/
+data/processed/
+__pycache__/
+*.pyc
+*.log
+.pytest_cache/
+.vscode/
+.idea/
+*.db
+*.sqlite

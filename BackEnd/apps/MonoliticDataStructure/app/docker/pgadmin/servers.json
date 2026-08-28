@@ -1,0 +1,14 @@
+{
+    "Servers": {
+        "1": {
+            "Name": "Supply Chain DB",
+            "Group": "Servers",
+            "Host": "postgres",
+            "Port": 5432,
+            "MaintenanceDB": "supply_chain",
+            "Username": "admin",
+            "SSLMode": "prefer",
+            "ConnectTimeout": 10
+        }
+    }
+}

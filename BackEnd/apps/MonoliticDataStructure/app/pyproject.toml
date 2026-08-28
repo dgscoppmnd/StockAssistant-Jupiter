@@ -1,0 +1,22 @@
+[project]
+name = "StockAssistant-Jupiter"
+version = "0.1.0"
+description = "Asistente de stock y supply chain para TFM"
+authors = [{name = "Tu Nombre", email = "tu@email.com"}]
+requires-python = ">=3.10"
+
+[project.scripts]
+generate-data = "src.generators.main_generator:run"
+load-data = "src.database.loader:run"
+start-api = "src.api.main:start"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
