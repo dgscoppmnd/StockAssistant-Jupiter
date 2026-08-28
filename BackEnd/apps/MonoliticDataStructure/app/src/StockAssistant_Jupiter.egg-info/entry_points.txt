@@ -1,0 +1,4 @@
+[console_scripts]
+generate-data = src.generators.main_generator:run
+load-data = src.database.loader:run
+start-api = src.api.main:start
