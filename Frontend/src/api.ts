@@ -195,7 +195,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     if (sessionToken && (response.status === 401 || response.status === 403)) {
       clearSessionToken();
     }
-    const detail = typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2);
+    const detail = typeof parsed === "string" ? parsed : parsed === null ? "" : JSON.stringify(parsed, null, 2);
     throw new Error(detail || `HTTP ${response.status}`);
   }
 

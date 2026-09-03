@@ -77,7 +77,6 @@ export default function LoginPage({ theme, onToggleTheme }: LoginPageProps) {
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) {
       setLoadingScript(false);
-      setError("Configura VITE_GOOGLE_CLIENT_ID para habilitar el login con Google.");
       return;
     }
 
@@ -164,7 +163,7 @@ export default function LoginPage({ theme, onToggleTheme }: LoginPageProps) {
 
   const submitPasswordLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (busy || loadingScript) {
+    if (busy) {
       return;
     }
 
@@ -251,7 +250,7 @@ export default function LoginPage({ theme, onToggleTheme }: LoginPageProps) {
 
             <button
               className="primary-btn login-password-btn"
-              disabled={busy || loadingScript || !email.trim() || !password.trim()}
+              disabled={busy || !email.trim() || !password.trim()}
               type="submit"
             >
               {busy ? "Validando..." : "Entrar con correo y contraseña"}
@@ -269,7 +268,7 @@ export default function LoginPage({ theme, onToggleTheme }: LoginPageProps) {
 
           <p className="login-note">Si ya tienes cuenta, usa el correo registrado. Google sigue disponible como opción.</p>
 
-          {clientMessage && <p className="error-line">{clientMessage}</p>}
+          {clientMessage && <p className="muted">{clientMessage} El acceso con correo y contraseña sigue disponible.</p>}
           {error && <p className="error-line">{error}</p>}
           {!error && <p className="status-line">{loadingScript ? "Preparando login seguro..." : "Listo para autenticar."}</p>}
         </div>
