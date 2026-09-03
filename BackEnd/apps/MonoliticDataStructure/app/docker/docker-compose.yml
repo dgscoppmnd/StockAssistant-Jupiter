@@ -1,41 +1,94 @@
-version: '3.8'
+version: "3.8"
 
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: supply_chain_db
+    container_name: proyecto_jupiter_db
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin123
-      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin123}
+      POSTGRES_DB: ${POSTGRES_DB:-supply_chain}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      #- ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
       - ./postgres/01_create_db.sql:/docker-entrypoint-initdb.d/01_create_db.sql
       - ./postgres/02_create_tables.sql:/docker-entrypoint-initdb.d/02_create_tables.sql
       - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf
       - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf
-      - ./postgres/logs:/var/log/postgresql  # Monta un volumen local para logs
-      - ./init-scripts:/docker-entrypoint-initdb.d  # Scripts de inicialización
+      - ./init-scripts:/docker-entrypoint-initdb.d/jupiter-init
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
-    networks:
-      - supply_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d supply_chain"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-supply_chain}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 8
+    networks:
+      - jupiter_network
+
+  backend:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: proyecto_jupiter_api
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-admin}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-admin123}
+      DB_NAME: ${POSTGRES_DB:-supply_chain}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-supply_chain}
+      POSTGRES_DB_NAME: ${POSTGRES_DB:-supply_chain}
+      POSTGRES_USER_NAME: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD_VALUE: ${POSTGRES_PASSWORD:-admin123}
+      KITIA_API_KEYS: ${KITIA_API_KEYS:-dev-jupiter-key}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      KITIA_SESSION_SECRET: ${KITIA_SESSION_SECRET:-proyecto-jupiter-dev-secret}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434/api/generate}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SERPAPI_API_KEY: ${SERPAPI_API_KEY:-}
+    volumes:
+      - ../src:/app/src
+      - ../data:/app/data
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - jupiter_network
+
+  frontend:
+    image: node:20-alpine
+    container_name: proyecto_jupiter_frontend
+    working_dir: /frontend
+    environment:
+      VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+      VITE_KITIA_API_KEY: ${VITE_KITIA_API_KEY:-dev-jupiter-key}
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ../../../../../Frontend:/frontend
+    command: sh -c "npm install --legacy-peer-deps && npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - jupiter_network
 
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: supply_chain_pgadmin
+    container_name: proyecto_jupiter_pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@supplychain.com
-      PGADMIN_DEFAULT_PASSWORD: admin123
-      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@jupiter.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
       - "5050:80"
     volumes:
@@ -45,12 +98,12 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - supply_network
+      - jupiter_network
 
 volumes:
   postgres_data:
   pgadmin_data:
 
 networks:
-  supply_network:
+  jupiter_network:
     driver: bridge

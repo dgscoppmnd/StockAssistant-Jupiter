@@ -1,23 +1,32 @@
-"""Aplicación principal FastAPI"""
+"""Aplicación principal FastAPI de Proyecto Jupiter."""
 
-from fastapi import FastAPI, Depends
+import logging
+from pathlib import Path
+from datetime import datetime
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime, date, timedelta
+from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from .config import settings
 from .database import engine, Base
 from .routes import (
     products, inventory, sales, suppliers, 
     logistics, metrics, analytics
 )
+from endpoints.endpoints import public_router, router as kitia_router
+from DataBaseManagement.dbConectionPostgres import init_db, init_products_db
 
 # Crear tablas
 Base.metadata.create_all(bind=engine)
+LOGGER = logging.getLogger("src.api.main")
 
 # Inicializar app
 app = FastAPI(
-    title=settings.API_TITLE,
-    version=settings.API_VERSION,
-    description=settings.API_DESCRIPTION,
+    title="Proyecto Jupiter API",
+    version="2.0.0",
+    description="Integración del backend local con las capacidades operativas de Kitia",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -31,6 +40,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+uploads_root = Path("/app/data/uploads")
+uploads_root.mkdir(parents=True, exist_ok=True)
+app.mount("/media", StaticFiles(directory=str(uploads_root)), name="media")
+
 # =============================================
 # RUTAS PRINCIPALES
 # =============================================
@@ -39,8 +52,8 @@ app.add_middleware(
 async def root():
     """Endpoint raíz"""
     return {
-        "message": "Supply Chain Management API",
-        "version": settings.API_VERSION,
+        "message": "Proyecto Jupiter API",
+        "version": "2.0.0",
         "docs": "/docs",
         "redoc": "/redoc"
     }
@@ -49,6 +62,22 @@ async def root():
 async def health_check():
     """Health check"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+
+@app.on_event("startup")
+def on_startup_init_db() -> None:
+    LOGGER.info("event=startup_init_db")
+    init_db()
+    init_products_db()
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(_request, exc: RequestValidationError):
+    LOGGER.warning("event=request_validation_error errors=%s", exc.errors())
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Bad Request on json body", "errors": exc.errors()},
+    )
 
 # =============================================
 # REGISTRAR ROUTERS
@@ -61,6 +90,8 @@ app.include_router(suppliers.router, prefix="/api/v1/suppliers", tags=["Supplier
 app.include_router(logistics.router, prefix="/api/v1/logistics", tags=["Logistics"])
 app.include_router(metrics.router, prefix="/api/v1/metrics", tags=["Metrics"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"])
+app.include_router(public_router, prefix="/api", tags=["Auth"])
+app.include_router(kitia_router, prefix="/api", tags=["Proyecto Jupiter"])
 
 if __name__ == "__main__":
     import uvicorn
