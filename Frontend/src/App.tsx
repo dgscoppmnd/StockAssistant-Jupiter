@@ -1,7 +1,7 @@
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useAuth } from "./auth";
-import KitiaPage from "./pages/KitiaPage";
+import StockAssistantPage from "./pages/StockAssistantPage";
 import ConfigPage from "./pages/ConfigPage";
 import UsersPage from "./pages/UsersPage";
 import InventoryPage from "./pages/InventoryPage";
@@ -57,7 +57,7 @@ const groups: MenuGroup[] = [
     ),
     children: [
       { to: "/configuracion", label: "Estado de integraciones" },
-      { to: "/setup", label: "Setup de kitia" }
+      { to: "/setup", label: "Configuracion de StockAssistant" }
     ]
   }
 ];
@@ -171,7 +171,7 @@ function PortalShell({
         <section className="page-area">
           <Routes>
             <Route path="/" element={<Navigate replace to="/jupiter" />} />
-            <Route path="/jupiter" element={<KitiaPage />} />
+            <Route path="/jupiter" element={<StockAssistantPage />} />
             <Route path="/agentes" element={<AgentsOperationsPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/productlist" element={<ProductlistPage />} />
@@ -190,13 +190,13 @@ export default function App() {
   const [openMenu, setOpenMenu] = useState<string>("jupiter");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(() => {
-    const stored = window.localStorage.getItem("kitia-theme");
+    const stored = window.localStorage.getItem("stockassistant-theme");
     return stored === "day" ? "day" : "night";
   });
 
   useEffect(() => {
     document.body.setAttribute("data-theme", theme);
-    window.localStorage.setItem("kitia-theme", theme);
+    window.localStorage.setItem("stockassistant-theme", theme);
   }, [theme]);
 
   if (loading) {

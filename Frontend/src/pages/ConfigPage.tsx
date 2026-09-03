@@ -50,7 +50,7 @@ export default function ConfigPage() {
         <li><strong>Frontend:</strong> React + TypeScript en `D:\MasterPontiaIA\ProyectoupiterV3\Frontend`</li>
         <li><strong>API:</strong> FastAPI detras de /api</li>
         <li><strong>Base de datos:</strong> `supply_chain` ampliada con entidades operativas de Proyecto Jupiter</li>
-        <li><strong>IA principal:</strong> OpenAI por el agente `/api/agents/kitia/chat`</li>
+        <li><strong>IA principal:</strong> OpenAI por el agente `/api/agents/stockassistant/chat`</li>
         <li><strong>IA secundaria:</strong> Ollama local se muestra tambien cuando esta disponible</li>
       </ul>
 

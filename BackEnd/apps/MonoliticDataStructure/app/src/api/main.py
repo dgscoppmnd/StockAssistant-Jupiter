@@ -15,7 +15,7 @@ from .routes import (
     products, inventory, sales, suppliers, 
     logistics, metrics, analytics
 )
-from endpoints.endpoints import public_router, router as kitia_router
+from endpoints.endpoints import public_router, router as stockassistant_router
 from DataBaseManagement.dbConectionPostgres import init_db, init_products_db
 
 # Crear tablas
@@ -26,7 +26,7 @@ LOGGER = logging.getLogger("src.api.main")
 app = FastAPI(
     title="Proyecto Jupiter API",
     version="2.0.0",
-    description="Integración del backend local con las capacidades operativas de Kitia",
+    description="Integración del backend local con las capacidades operativas de StockAssistant",
     docs_url="/docs",
     redoc_url="/redoc"
 )
@@ -91,7 +91,7 @@ app.include_router(logistics.router, prefix="/api/v1/logistics", tags=["Logistic
 app.include_router(metrics.router, prefix="/api/v1/metrics", tags=["Metrics"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"])
 app.include_router(public_router, prefix="/api", tags=["Auth"])
-app.include_router(kitia_router, prefix="/api", tags=["Proyecto Jupiter"])
+app.include_router(stockassistant_router, prefix="/api", tags=["Proyecto Jupiter"])
 
 if __name__ == "__main__":
     import uvicorn

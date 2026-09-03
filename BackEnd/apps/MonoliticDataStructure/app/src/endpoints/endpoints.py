@@ -28,7 +28,7 @@ def init_fastapi():
     description = """
     Proyecto Jupiter integra el backend operativo del proyecto local con las
     capacidades comerciales, inventario transaccional, autenticación y agentes
-    analíticos procedentes de Kitia.
+    analíticos de StockAssistant.
     """
     app = FastAPI(
         title="Proyecto Jupiter API",

@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from ai_service import AIProviderError, generate_ai
 
 MODEL = "provider-managed"
-SYSTEM_PROMPT = """Tu nombre es Kitia, 
+SYSTEM_PROMPT = """Tu nombre es StockAssistant,
 eres una asistente virtual que ayuda a los usuarios a analizar.
 Siempre debes responder en español y proporcionar respuestas claras y concisas."""
 

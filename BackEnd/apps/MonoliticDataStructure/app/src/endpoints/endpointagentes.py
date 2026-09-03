@@ -69,8 +69,8 @@ def _primary_provider_response(provider: str, prompt: str, system_prompt: str) -
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
 
-@router.post("/kitia/chat")
-def kitia_chat(
+@router.post("/stockassistant/chat")
+def stockassistant_chat(
     request: AgentChatRequest,
     _api_key: str = Depends(require_api_key),
     db_products=Depends(get_db_products),
@@ -115,7 +115,7 @@ def kitia_chat(
     )
 
     logger.info(
-        "event=agent_kitia_chat use_web=%s use_tools=%s web_count=%s tool_keys=%s",
+        "event=agent_stockassistant_chat use_web=%s use_tools=%s web_count=%s tool_keys=%s",
         request.use_web,
         request.use_tools,
         len(web_results),
@@ -129,7 +129,7 @@ def kitia_chat(
     secondary_result = _safe_provider_response(secondary_provider, context_prompt, system_prompt)
 
     return {
-        "agent": "kitia",
+        "agent": "stockassistant",
         "response": model_result.get("response", ""),
         "provider": model_result.get("provider"),
         "model": model_result.get("model"),

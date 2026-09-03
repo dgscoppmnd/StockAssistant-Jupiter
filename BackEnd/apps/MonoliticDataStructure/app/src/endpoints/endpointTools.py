@@ -135,14 +135,14 @@ def tool_upgrade_libraries(packages: list[str]) -> dict[str, Any]:
 
 
 def tool_send_email(payload: ToolEmailPayload) -> dict[str, Any]:
-    smtp_host = os.getenv("KITIA_SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(os.getenv("KITIA_SMTP_PORT", "587"))
-    smtp_user = os.getenv("KITIA_SMTP_USER")
-    smtp_password = os.getenv("KITIA_SMTP_PASSWORD")
+    smtp_host = os.getenv("STOCKASSISTANT_SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("STOCKASSISTANT_SMTP_PORT", "587"))
+    smtp_user = os.getenv("STOCKASSISTANT_SMTP_USER")
+    smtp_password = os.getenv("STOCKASSISTANT_SMTP_PASSWORD")
 
     if not smtp_user or not smtp_password:
         raise ValueError(
-            "Configura KITIA_SMTP_USER y KITIA_SMTP_PASSWORD para enviar correo desde soporte@kitrobotic.com"
+            "Configura STOCKASSISTANT_SMTP_USER y STOCKASSISTANT_SMTP_PASSWORD para enviar correo desde soporte@stockassistant.com"
         )
 
     message = EmailMessage()

@@ -33,7 +33,7 @@ def _normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
-def _is_kitrobotic_domain(email: str, hosted_domain: str | None) -> bool:
+def _is_authorized_google_identity(email: str, hosted_domain: str | None) -> bool:
     if hosted_domain:
         return True
     return "@" in _normalize_email(email)
@@ -98,7 +98,7 @@ def sync_google_user(profile: dict[str, Any], connection: Any = None) -> dict[st
     if existing is None:
         existing = get_user_by_email(email, connection=connection)
 
-    if existing is None and not _is_kitrobotic_domain(email, hosted_domain):
+    if existing is None and not _is_authorized_google_identity(email, hosted_domain):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Solo se permiten cuentas verificadas por Google o usuarios ya registrados",

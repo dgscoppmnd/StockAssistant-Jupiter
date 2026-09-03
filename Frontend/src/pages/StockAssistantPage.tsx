@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { analyzeWithKitiaAgent } from "../api";
+import { analyzeWithStockAssistantAgent } from "../api";
 import type { AgentChatResponse } from "../types";
 
 const quickPrompts = ["hola", "resume este texto", "analiza este producto"]; 
@@ -73,7 +73,7 @@ function normalizeAiText(payload: AgentChatResponse): string {
   return sections.filter(Boolean).join("\n\n").trim() || "Sin respuesta del modelo.";
 }
 
-export default function KitiaPage() {
+export default function StockAssistantPage() {
   const [prompt, setPrompt] = useState("hola");
   const [status, setStatus] = useState("Listo para consultar");
   const [isLoading, setIsLoading] = useState(false);
@@ -91,12 +91,12 @@ export default function KitiaPage() {
     }
 
     setIsLoading(true);
-    setStatus("Consultando a Proyecto Jupiter con agente en /api/agents/kitia/chat ...");
+    setStatus("Consultando a StockAssistant en /api/agents/stockassistant/chat ...");
     setOutput("Cargando respuesta...");
     setSources([]);
 
     try {
-      const response: AgentChatResponse = await analyzeWithKitiaAgent({
+      const response: AgentChatResponse = await analyzeWithStockAssistantAgent({
         prompt: safePrompt,
         provider,
         use_web: useWeb,

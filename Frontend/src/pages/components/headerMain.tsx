@@ -22,10 +22,10 @@ export default function HeaderMain({
 	sessionRemainingSeconds,
 	onLogout,
 }: HeaderMainProps) {
-	const [collapsed, setCollapsed] = useState<boolean>(() => window.localStorage.getItem("kitia-header-collapsed") === "1");
+	const [collapsed, setCollapsed] = useState<boolean>(() => window.localStorage.getItem("stockassistant-header-collapsed") === "1");
 
 	useEffect(() => {
-		window.localStorage.setItem("kitia-header-collapsed", collapsed ? "1" : "0");
+		window.localStorage.setItem("stockassistant-header-collapsed", collapsed ? "1" : "0");
 	}, [collapsed]);
 
 	return (

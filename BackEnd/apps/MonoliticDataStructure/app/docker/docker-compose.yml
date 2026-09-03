@@ -44,9 +44,9 @@ services:
       POSTGRES_DB_NAME: ${POSTGRES_DB:-supply_chain}
       POSTGRES_USER_NAME: ${POSTGRES_USER:-admin}
       POSTGRES_PASSWORD_VALUE: ${POSTGRES_PASSWORD:-admin123}
-      KITIA_API_KEYS: ${KITIA_API_KEYS:-dev-jupiter-key}
+      STOCKASSISTANT_API_KEYS: ${STOCKASSISTANT_API_KEYS:-dev-jupiter-key}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      KITIA_SESSION_SECRET: ${KITIA_SESSION_SECRET:-proyecto-jupiter-dev-secret}
+      STOCKASSISTANT_SESSION_SECRET: ${STOCKASSISTANT_SESSION_SECRET:-proyecto-jupiter-dev-secret}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434/api/generate}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       SERPAPI_API_KEY: ${SERPAPI_API_KEY:-}
@@ -70,7 +70,7 @@ services:
     working_dir: /frontend
     environment:
       VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
-      VITE_KITIA_API_KEY: ${VITE_KITIA_API_KEY:-dev-jupiter-key}
+      VITE_STOCKASSISTANT_API_KEY: ${VITE_STOCKASSISTANT_API_KEY:-dev-jupiter-key}
       CHOKIDAR_USEPOLLING: "true"
     volumes:
       - ../../../../../Frontend:/frontend

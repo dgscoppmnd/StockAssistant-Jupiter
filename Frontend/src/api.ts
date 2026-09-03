@@ -36,11 +36,11 @@ import type {
 } from "./types";
 
 const API_BASE = "/api";
-const API_KEY_STORAGE_KEY = "kitia-api-key";
-const SESSION_STORAGE_KEY = "kitia-session-token";
+const API_KEY_STORAGE_KEY = "stockassistant-api-key";
+const SESSION_STORAGE_KEY = "stockassistant-session-token";
 const ENV_API_KEY =
-  (import.meta.env as Record<string, string | undefined>).VITE_KITIA_API_KEY?.trim() ||
-  (import.meta.env as Record<string, string | undefined>).KITIA_API_KEYS?.trim() ||
+  (import.meta.env as Record<string, string | undefined>).VITE_STOCKASSISTANT_API_KEY?.trim() ||
+  (import.meta.env as Record<string, string | undefined>).STOCKASSISTANT_API_KEYS?.trim() ||
   "";
 
 type BackendTask = Omit<Task, "fecha_completada"> & { datetaskcompleted?: string | null };
@@ -207,8 +207,8 @@ export async function analyzeWithSystemPrompt(prompt: string): Promise<AnalyzeRe
   return request<AnalyzeResponse>(url, { method: "POST", headers: { "Content-Type": "application/json" } });
 }
 
-export async function analyzeWithKitiaAgent(payload: AgentChatRequest): Promise<AgentChatResponse> {
-  return request<AgentChatResponse>(`${API_BASE}/agents/kitia/chat`, {
+export async function analyzeWithStockAssistantAgent(payload: AgentChatRequest): Promise<AgentChatResponse> {
+  return request<AgentChatResponse>(`${API_BASE}/agents/stockassistant/chat`, {
     method: "POST",
     body: JSON.stringify(payload)
   });

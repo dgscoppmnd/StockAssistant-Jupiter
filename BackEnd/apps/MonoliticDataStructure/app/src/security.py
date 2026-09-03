@@ -11,9 +11,9 @@ from typing import Any, Final
 from fastapi import Header, HTTPException, status
 
 LOGGER = logging.getLogger("api.security")
-API_KEYS_ENV: Final[str] = "KITIA_API_KEYS"
-SESSION_SECRET_ENV: Final[str] = "KITIA_SESSION_SECRET"
-SESSION_TTL_ENV: Final[str] = "KITIA_SESSION_TTL_MINUTES"
+API_KEYS_ENV: Final[str] = "STOCKASSISTANT_API_KEYS"
+SESSION_SECRET_ENV: Final[str] = "STOCKASSISTANT_SESSION_SECRET"
+SESSION_TTL_ENV: Final[str] = "STOCKASSISTANT_SESSION_TTL_MINUTES"
 _REVOKED_SESSION_JTI: dict[str, int] = {}
 
 
@@ -50,7 +50,7 @@ def _session_secret() -> str:
         return api_keys[0]
 
     LOGGER.warning("event=session_secret_fallback source=dev-default")
-    return "kitia-dev-session-secret"
+    return "stockassistant-dev-session-secret"
 
 
 def _base64url_encode(data: bytes) -> str:
@@ -88,7 +88,7 @@ def create_session_token(claims: dict[str, Any]) -> str:
         **claims,
         "iat": issued_at,
         "exp": issued_at + ttl_seconds,
-        "iss": "kitia-api",
+        "iss": "stockassistant-api",
         "jti": claims.get("jti") or secrets.token_urlsafe(12),
     }
     header = {"alg": "HS256", "typ": "JWT"}
@@ -133,7 +133,7 @@ def verify_session_token(token: str) -> dict[str, Any] | None:
     if not isinstance(expires_at, int) or expires_at < now_ts:
         return None
 
-    if payload.get("iss") != "kitia-api":
+    if payload.get("iss") != "stockassistant-api":
         return None
 
     if _is_revoked_session_jti(payload.get("jti"), now_ts=now_ts):

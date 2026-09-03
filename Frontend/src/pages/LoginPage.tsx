@@ -39,8 +39,8 @@ type GoogleNamespace = {
 declare global {
   interface Window {
     google?: GoogleNamespace;
-    __kitiaGoogleInitialized?: boolean;
-    __kitiaGoogleCredentialHandler?: (response: GoogleCredentialResponse) => void | Promise<void>;
+    __stockassistantGoogleInitialized?: boolean;
+    __stockassistantGoogleCredentialHandler?: (response: GoogleCredentialResponse) => void | Promise<void>;
   }
 }
 
@@ -96,7 +96,7 @@ export default function LoginPage({ theme, onToggleTheme }: LoginPageProps) {
         return;
       }
 
-      window.__kitiaGoogleCredentialHandler = async (response) => {
+      window.__stockassistantGoogleCredentialHandler = async (response) => {
         if (!response?.credential) {
           setBusy(false);
           setError("Google no devolvio credencial. Intenta de nuevo.");
@@ -115,16 +115,16 @@ export default function LoginPage({ theme, onToggleTheme }: LoginPageProps) {
         }
       };
 
-      if (!window.__kitiaGoogleInitialized) {
+      if (!window.__stockassistantGoogleInitialized) {
         client.initialize({
           client_id: GOOGLE_CLIENT_ID,
           callback: (response) => {
-            void window.__kitiaGoogleCredentialHandler?.(response);
+            void window.__stockassistantGoogleCredentialHandler?.(response);
           },
           auto_select: false,
           cancel_on_tap_outside: true,
         });
-        window.__kitiaGoogleInitialized = true;
+        window.__stockassistantGoogleInitialized = true;
       }
 
       setGoogleReady(true);

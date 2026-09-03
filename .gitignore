@@ -68,4 +68,3 @@ html_nginx/web/dist/
 
 # No cargar la carpeta Docs
 docs/
-dockerFilesKitia/n8n_data/crash.journal
