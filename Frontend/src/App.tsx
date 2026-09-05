@@ -6,6 +6,9 @@ import ConfigPage from "./pages/ConfigPage";
 import UsersPage from "./pages/UsersPage";
 import InventoryPage from "./pages/InventoryPage";
 import AgentsOperationsPage from "./pages/AgentsOperationsPage";
+import ExecutivePage from "./pages/ExecutivePage";
+import ExecutiveDashboardPage from "./pages/ExecutiveDashboardPage";
+import MasterDataPage from "./pages/MasterDataPage";
 import ProductlistPage from "./pages/productlistPage";
 import LoginPage from "./pages/LoginPage";
 import HeaderMain from "./pages/components/headerMain";
@@ -21,6 +24,16 @@ type MenuGroup = {
 
 const groups: MenuGroup[] = [
   {
+    key: "dashboard",
+    label: "Resumen",
+    icon: <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10h3v10H4Zm6 0V4h4v16h-4Zm7 0v-7h3v7h-3Z" fill="currentColor" /></svg>,
+    children: [
+      { to: "/dashboard", label: "Resumen ejecutivo" },
+      { to: "/agentes", label: "Alertas y análisis" },
+      { to: "/ejecutivo", label: "Compras y automatizaciones" },
+    ]
+  },
+  {
     key: "jupiter",
     label: "Proyecto Jupiter",
     icon: (
@@ -29,8 +42,10 @@ const groups: MenuGroup[] = [
       </svg>
     ),
     children: [
-      { to: "/jupiter", label: "Asistente IA" },
+      { to: "/dashboard", label: "Dashboard ejecutivo" },
+      { to: "/jupiter", label: "Chat OpenAI + Ollama" },
       { to: "/agentes", label: "Agentes de compras y stock" },
+      { to: "/ejecutivo", label: "Centro Ejecutivo y automatizaciones" },
       { to: "/users", label: "Usuarios" }
     ]
   },
@@ -57,7 +72,13 @@ const groups: MenuGroup[] = [
     ),
     children: [
       { to: "/configuracion", label: "Estado de integraciones" },
-      { to: "/setup", label: "Configuracion de StockAssistant" }
+      { to: "/maestros/unidades", label: "Unidades de medida" },
+      { to: "/maestros/monedas", label: "Monedas" },
+      { to: "/maestros/bodegas", label: "Bodegas" },
+      { to: "/maestros/proveedores", label: "Proveedores" },
+      { to: "/maestros/conversiones", label: "Conversiones de unidad" },
+      { to: "/maestros/conocimiento", label: "Base de conocimiento" },
+      { to: "/setup", label: "Configuracion de stockassistant" }
     ]
   }
 ];
@@ -89,7 +110,7 @@ function PortalShell({
       <aside className="sidebar">
         <div className="brand-block">
           <div>
-            <p className="brand-kicker">Master Pontia IA</p>
+            <p className="brand-kicker">stockassistant S.L.</p>
             <h1>Proyecto Jupiter</h1>
           </div>
           <button
@@ -170,14 +191,23 @@ function PortalShell({
 
         <section className="page-area">
           <Routes>
-            <Route path="/" element={<Navigate replace to="/jupiter" />} />
+            <Route path="/" element={<Navigate replace to="/dashboard" />} />
+            <Route path="/dashboard" element={<ExecutiveDashboardPage />} />
             <Route path="/jupiter" element={<StockAssistantPage />} />
             <Route path="/agentes" element={<AgentsOperationsPage />} />
+            <Route path="/ejecutivo" element={<ExecutivePage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/productlist" element={<ProductlistPage />} />
             <Route path="/inventario" element={<InventoryPage />} />
             <Route path="/configuracion" element={<ConfigPage />} />
-            <Route path="*" element={<Navigate replace to="/jupiter" />} />
+            <Route path="/setup" element={<ConfigPage />} />
+            <Route path="/maestros/unidades" element={<MasterDataPage resource="units" />} />
+            <Route path="/maestros/monedas" element={<MasterDataPage resource="currencies" />} />
+            <Route path="/maestros/bodegas" element={<MasterDataPage resource="warehouses" />} />
+            <Route path="/maestros/proveedores" element={<MasterDataPage resource="suppliers" />} />
+            <Route path="/maestros/conversiones" element={<MasterDataPage resource="unit-conversions" />} />
+            <Route path="/maestros/conocimiento" element={<MasterDataPage resource="knowledge-documents" />} />
+            <Route path="*" element={<Navigate replace to="/dashboard" />} />
           </Routes>
         </section>
       </main>
@@ -187,7 +217,7 @@ function PortalShell({
 
 export default function App() {
   const { user, loading } = useAuth();
-  const [openMenu, setOpenMenu] = useState<string>("jupiter");
+  const [openMenu, setOpenMenu] = useState<string>("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(() => {
     const stored = window.localStorage.getItem("stockassistant-theme");
@@ -204,7 +234,7 @@ export default function App() {
       <main className="login-page">
         <section className="login-panel card">
           <div className="login-copy">
-            <p className="brand-kicker">Master Pontia IA</p>
+            <p className="brand-kicker">stockassistant S.L.</p>
             <h1>Verificando sesión</h1>
             <p className="login-lead">Estamos comprobando tu sesión antes de abrir el portal.</p>
           </div>

@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: proyecto_jupiter_db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin123}
@@ -11,12 +12,9 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgres/01_create_db.sql:/docker-entrypoint-initdb.d/01_create_db.sql
-      - ./postgres/02_create_tables.sql:/docker-entrypoint-initdb.d/02_create_tables.sql
       - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf
       - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf
-      - ./init-scripts:/docker-entrypoint-initdb.d/jupiter-init
-      - ./init-scripts/init.sql:/docker-entrypoint-initdb.d/03_seed_initial_user.sql:ro
+      - ./init-scripts/init.sql:/docker-entrypoint-initdb.d/01_proyecto_jupiter.sql:ro
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-supply_chain}"]
@@ -31,6 +29,7 @@ services:
       context: ..
       dockerfile: Dockerfile
     container_name: proyecto_jupiter_api
+    restart: unless-stopped
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -49,6 +48,14 @@ services:
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434/api/generate}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       SERPAPI_API_KEY: ${SERPAPI_API_KEY:-}
+      STOCKASSISTANT_SESSION_TTL_MINUTES: ${STOCKASSISTANT_SESSION_TTL_MINUTES:-120}
+      SERPAPI_TIMEOUT_SECONDS: ${SERPAPI_TIMEOUT_SECONDS:-20}
+      SERPAPI_MAX_RETRIES: ${SERPAPI_MAX_RETRIES:-2}
+      SERPAPI_COOLDOWN_SECONDS: ${SERPAPI_COOLDOWN_SECONDS:-60}
+      SERPAPI_MIN_INTERVAL_SECONDS: ${SERPAPI_MIN_INTERVAL_SECONDS:-1}
+      AUTOMATION_WORKER_ENABLED: ${AUTOMATION_WORKER_ENABLED:-true}
+      AUTOMATION_WORKER_POLL_SECONDS: ${AUTOMATION_WORKER_POLL_SECONDS:-60}
+      TZ: ${TZ:-Europe/Madrid}
       PYTHONPATH: /app/src
     volumes:
       - ../src:/app/src
@@ -68,6 +75,7 @@ services:
     image: node:20-alpine
     container_name: proyecto_jupiter_frontend
     working_dir: /frontend
+    restart: unless-stopped
     environment:
       VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
       VITE_STOCKASSISTANT_API_KEY: ${VITE_STOCKASSISTANT_API_KEY:-dev-jupiter-key}
@@ -75,6 +83,7 @@ services:
       CHOKIDAR_USEPOLLING: "true"
     volumes:
       - ../../../../../Frontend:/frontend
+      - frontend_node_modules:/frontend/node_modules
     command: sh -c "npm install --legacy-peer-deps && npm run dev -- --host 0.0.0.0 --port 5173"
     ports:
       - "5173:5173"
@@ -83,9 +92,24 @@ services:
     networks:
       - jupiter_network
 
+  nginx:
+    build:
+      context: ../../../../../Frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    depends_on:
+      - backend
+    networks:
+      - jupiter_network
+
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: proyecto_jupiter_pgadmin
+    restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@jupiter.example.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin123}
@@ -102,6 +126,7 @@ services:
       - jupiter_network
 
 volumes:
+  frontend_node_modules:
   postgres_data:
   pgadmin_data:
 
