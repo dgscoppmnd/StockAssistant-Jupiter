@@ -373,6 +373,157 @@ class InventoryService:
         summary["stock_snapshot"] = self.list_stock()
         return summary
 
+    def get_executive_dashboard(self, period_days: int = 30) -> dict[str, Any]:
+        """Return auditable operational indicators without fabricating unavailable supplier data."""
+        service_level = self._fetchone(
+            """
+            SELECT CASE WHEN COALESCE(SUM(requested_qty), 0) > 0
+                THEN ROUND((SUM(dispatched_qty) / SUM(requested_qty)) * 100, 2)
+            END AS value
+            FROM public.sales_order_lines sol
+            JOIN public.sales_orders so ON so.id = sol.sales_order_id
+            WHERE so.created_at >= CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
+            """,
+            (period_days,),
+        ) or {}
+        turnover = self._fetchone(
+            """
+            SELECT CASE WHEN stock.total_stock > 0
+                THEN ROUND(COALESCE(dispatches.dispatched_units, 0) / stock.total_stock, 4)
+            END AS value
+            FROM (SELECT COALESCE(SUM(physical_qty), 0) AS total_stock FROM public.inventory_stock_levels) stock
+            CROSS JOIN (
+                SELECT COALESCE(SUM(ABS(quantity_signed)), 0) AS dispatched_units
+                FROM public.inventory_movements
+                WHERE movement_type = 'dispatch'
+                  AND created_at >= CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
+            ) dispatches
+            """,
+            (period_days,),
+        ) or {}
+        excess = self._fetchone(
+            """
+            SELECT COALESCE(SUM(GREATEST((s.physical_qty - s.reserved_qty) - (c.reorder_point + c.reorder_quantity), 0)), 0) AS units,
+                   COUNT(*) FILTER (WHERE (s.physical_qty - s.reserved_qty) > (c.reorder_point + c.reorder_quantity)) AS items
+            FROM public.inventory_stock_levels s
+            JOIN public.product_inventory_config c ON c.product_id = s.product_id
+            """
+        ) or {}
+        priorities = self._fetchall(
+            """
+            SELECT s.product_id, p.name_product AS product_name, w.name AS warehouse_name,
+                   s.physical_qty, s.reserved_qty, (s.physical_qty - s.reserved_qty) AS available_qty,
+                   c.reorder_point, c.reorder_quantity, u.code AS base_unit_code
+            FROM public.inventory_stock_levels s
+            JOIN public.productos p ON p.pk_product = s.product_id
+            JOIN public.inventory_warehouses w ON w.id = s.warehouse_id
+            JOIN public.product_inventory_config c ON c.product_id = s.product_id
+            JOIN public.inventory_units u ON u.id = c.base_unit_id
+            WHERE (s.physical_qty - s.reserved_qty) <= c.reorder_point
+            ORDER BY ((s.physical_qty - s.reserved_qty) - c.reorder_point) ASC, p.name_product ASC
+            LIMIT 12
+            """
+        )
+        for row in priorities:
+            row["priority"] = "critica" if row["available_qty"] <= 0 else "alta"
+            row["category"] = "Sin categoría registrada"
+            row["recommended_action"] = "Crear propuesta de compra"
+            row["estimated_impact"] = row["reorder_quantity"]
+
+        alerts = self._fetchall(
+            """
+            SELECT s.product_id, p.name_product AS product_name, w.name AS warehouse_name,
+                   (s.physical_qty - s.reserved_qty) AS available_qty, c.reorder_point, c.reorder_quantity,
+                   u.code AS base_unit_code
+            FROM public.inventory_stock_levels s
+            JOIN public.productos p ON p.pk_product = s.product_id
+            JOIN public.inventory_warehouses w ON w.id = s.warehouse_id
+            JOIN public.product_inventory_config c ON c.product_id = s.product_id
+            JOIN public.inventory_units u ON u.id = c.base_unit_id
+            WHERE (s.physical_qty - s.reserved_qty) <= c.reorder_point
+               OR (s.physical_qty - s.reserved_qty) > (c.reorder_point + c.reorder_quantity)
+            ORDER BY (s.physical_qty - s.reserved_qty) ASC
+            LIMIT 16
+            """
+        )
+        for row in alerts:
+            is_stockout = row["available_qty"] <= row["reorder_point"]
+            row["kind"] = "riesgo_rotura" if is_stockout else "sobrestock"
+            row["severity"] = "alta" if row["available_qty"] <= 0 else ("media" if is_stockout else "baja")
+            row["message"] = (
+                f"Disponible {row['available_qty']} {row['base_unit_code']} frente a punto de reposición {row['reorder_point']}"
+                if is_stockout else f"Disponible {row['available_qty']} {row['base_unit_code']} por encima del nivel objetivo"
+            )
+
+        evolution = self._fetchall(
+            """
+            SELECT DATE(created_at) AS day,
+                   COALESCE(SUM(CASE WHEN quantity_signed > 0 THEN quantity_signed ELSE 0 END), 0) AS entries,
+                   COALESCE(SUM(CASE WHEN quantity_signed < 0 THEN ABS(quantity_signed) ELSE 0 END), 0) AS consumption
+            FROM public.inventory_movements
+            WHERE created_at >= CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
+            GROUP BY DATE(created_at)
+            ORDER BY day
+            """,
+            (period_days,),
+        )
+        forecast = self._fetchall(
+            """
+            WITH stock AS (
+                SELECT product_id, SUM(physical_qty - reserved_qty) AS available_qty
+                FROM public.inventory_stock_levels
+                GROUP BY product_id
+            ), demand AS (
+                SELECT sol.product_id, SUM(sol.dispatched_qty) AS dispatched_qty
+                FROM public.sales_order_lines sol
+                JOIN public.sales_orders so ON so.id = sol.sales_order_id
+                WHERE so.created_at >= CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
+                GROUP BY sol.product_id
+            )
+            SELECT stock.product_id, p.name_product AS product_name, stock.available_qty,
+                   COALESCE(demand.dispatched_qty, 0) AS dispatched_qty
+            FROM stock
+            JOIN public.productos p ON p.pk_product = stock.product_id
+            LEFT JOIN demand ON demand.product_id = stock.product_id
+            ORDER BY COALESCE(demand.dispatched_qty, 0) DESC, p.name_product
+            LIMIT 8
+            """,
+            (period_days,),
+        )
+        # The schema has supplier identities but not promised delivery dates or cost history.
+        supplier_comparison = self._fetchall(
+            """
+            SELECT supplier_code, name, NULL::numeric AS average_cost, NULL::numeric AS compliance_pct,
+                   NULL::numeric AS lead_time_days, 0 AS orders
+            FROM public.inventory_suppliers
+            ORDER BY name
+            LIMIT 8
+            """
+        )
+        risk_distribution = [
+            {"label": "Riesgo de rotura", "value": sum(1 for row in alerts if row["kind"] == "riesgo_rotura")},
+            {"label": "Sobrestock", "value": sum(1 for row in alerts if row["kind"] == "sobrestock")},
+            {"label": "Sin alerta", "value": max(0, len(self.list_stock()) - len(alerts))},
+        ]
+        return {
+            "period_days": period_days,
+            "generated_at": datetime.now(timezone.utc),
+            "metrics": {
+                "service_level_pct": service_level.get("value"),
+                "turnover": turnover.get("value"),
+                "excess_units": excess.get("units", 0),
+                "excess_items": excess.get("items", 0),
+                "potential_savings": None,
+                "potential_savings_note": "No hay histórico de costes homogéneo para estimar ahorro con rigor.",
+            },
+            "priority_purchases": priorities,
+            "alerts": alerts,
+            "stock_evolution": evolution,
+            "forecast_vs_available": forecast,
+            "risk_distribution": risk_distribution,
+            "supplier_comparison": supplier_comparison,
+        }
+
     def confirm_receipt(self, payload: dict[str, Any]) -> dict[str, Any]:
         operation_key = payload.get("operation_key") or f"receipt-{uuid4().hex}"
         existing = self._fetchone("SELECT * FROM public.goods_receipts WHERE operation_key = %s", (operation_key,))

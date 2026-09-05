@@ -2332,361 +2332,6 @@ body[data-theme="day"] .inventory-table-row {
   background: rgba(255, 255, 255, 0.86);
 }
 
-/* -- WORKSHEET REGISTER ---------------------------------------- */
-.worksheet-page {
-  display: grid;
-  gap: 14px;
-}
-
-.worksheet-toolbar {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.worksheet-toolbar-field {
-  display: grid;
-  gap: 6px;
-  font-size: 0.76rem;
-  color: var(--text-soft);
-}
-
-.worksheet-toolbar-field select {
-  min-width: 170px;
-}
-
-.worksheet-calendar-shell {
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  overflow: hidden;
-  background: var(--surface);
-  backdrop-filter: blur(10px);
-  box-shadow:
-    inset 0 1px 0 rgba(123, 198, 255, 0.1),
-    0 0 0 1px rgba(4, 11, 24, 0.7),
-    0 14px 34px rgba(1, 6, 16, 0.5);
-}
-
-body[data-theme="day"] .worksheet-calendar-shell {
-  box-shadow:
-    inset 0 1px 0 rgba(0, 123, 208, 0.1),
-    0 0 0 1px rgba(150, 204, 236, 0.4),
-    0 14px 34px rgba(138, 189, 224, 0.18);
-}
-
-.worksheet-weekday-row {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  border-bottom: 1px solid var(--line);
-  background: rgba(8, 22, 44, 0.88);
-}
-
-body[data-theme="day"] .worksheet-weekday-row {
-  background: rgba(214, 238, 255, 0.9);
-}
-
-.worksheet-weekday-cell {
-  min-height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--cyan);
-  font-size: 0.75rem;
-  font-family: "IBM Plex Mono", monospace;
-  border-right: 1px solid var(--line);
-}
-
-.worksheet-weekday-cell:last-child {
-  border-right: none;
-}
-
-.worksheet-calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  grid-auto-rows: minmax(130px, 1fr);
-}
-
-.worksheet-day-cell {
-  border-right: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 8px;
-  min-height: 130px;
-  background: rgba(7, 19, 37, 0.52);
-}
-
-body[data-theme="day"] .worksheet-day-cell {
-  background: rgba(248, 253, 255, 0.8);
-}
-
-.worksheet-day-cell-empty {
-  background: rgba(4, 12, 24, 0.45);
-}
-
-body[data-theme="day"] .worksheet-day-cell-empty {
-  background: rgba(230, 245, 255, 0.65);
-}
-
-.worksheet-day-cell-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-
-.worksheet-day-label {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.75rem;
-  color: var(--cyan);
-}
-
-.worksheet-add-btn {
-  border: 1px solid var(--line-strong);
-  background: rgba(6, 20, 39, 0.82);
-  color: var(--text-main);
-  border-radius: 999px;
-  width: 24px;
-  height: 24px;
-  cursor: pointer;
-  opacity: 0;
-  transform: translateY(-2px);
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-
-.worksheet-day-cell:hover .worksheet-add-btn,
-.worksheet-add-btn:focus-visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.worksheet-day-list {
-  display: grid;
-  gap: 6px;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.worksheet-empty-day {
-  margin: 0;
-  color: var(--text-soft);
-  font-size: 0.72rem;
-}
-
-.worksheet-entry-btn {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: rgba(6, 20, 39, 0.72);
-  color: var(--text-main);
-  text-align: left;
-  display: grid;
-  gap: 2px;
-  padding: 6px 8px;
-  cursor: pointer;
-}
-
-body[data-theme="day"] .worksheet-entry-btn {
-  background: rgba(255, 255, 255, 0.86);
-}
-
-.worksheet-entry-btn:hover {
-  border-color: var(--line-strong);
-  box-shadow: inset 0 0 0 1px rgba(80, 227, 255, 0.18);
-}
-
-.worksheet-entry-topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.worksheet-entry-time {
-  font-size: 0.64rem;
-  color: var(--text-soft);
-  font-family: "IBM Plex Mono", monospace;
-}
-
-.worksheet-entry-client {
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.worksheet-entry-task {
-  font-size: 0.71rem;
-  color: var(--text-soft);
-}
-
-.worksheet-entry-duration {
-  font-size: 0.7rem;
-  color: var(--amber);
-  font-family: "IBM Plex Mono", monospace;
-  margin-left: auto;
-}
-
-.worksheet-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(2, 8, 18, 0.76);
-  backdrop-filter: blur(6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 220;
-  animation: fadeIn 0.18s ease;
-}
-
-body[data-theme="day"] .worksheet-modal-overlay {
-  background: rgba(10, 40, 80, 0.38);
-}
-
-.worksheet-modal {
-  background: var(--bg-1);
-  border: 1px solid var(--line-strong);
-  border-radius: 20px;
-  padding: 22px;
-  width: min(860px, 94vw);
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow:
-    0 0 0 1px rgba(80, 227, 255, 0.1),
-    0 28px 60px rgba(1, 6, 18, 0.72);
-  animation: riseIn 0.22s ease;
-}
-
-body[data-theme="day"] .worksheet-modal {
-  background: #eef8ff;
-  box-shadow:
-    0 0 0 1px rgba(0, 123, 208, 0.2),
-    0 28px 60px rgba(40, 100, 160, 0.2);
-}
-
-.worksheet-modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.worksheet-modal-header h3 {
-  margin: 0;
-}
-
-.worksheet-modal-close {
-  border: none;
-  background: transparent;
-  color: var(--text-soft);
-  font-size: 1rem;
-  cursor: pointer;
-  padding: 5px 9px;
-  border-radius: 8px;
-  transition: color 0.15s ease, background 0.15s ease;
-}
-
-.worksheet-modal-close:hover {
-  color: var(--danger);
-  background: rgba(255, 111, 143, 0.12);
-}
-
-.worksheet-form {
-  /* display: grid; */
-  gap: 10px;
-}
-
-.worksheet-statistic-shell {
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface);
-  backdrop-filter: blur(10px);
-  box-shadow:
-    inset 0 1px 0 rgba(123, 198, 255, 0.1),
-    0 0 0 1px rgba(4, 11, 24, 0.7),
-    0 14px 34px rgba(1, 6, 16, 0.32);
-  padding: 16px;
-  display: grid;
-  gap: 14px;
-}
-
-body[data-theme="day"] .worksheet-statistic-shell {
-  box-shadow:
-    inset 0 1px 0 rgba(0, 123, 208, 0.1),
-    0 0 0 1px rgba(150, 204, 236, 0.4),
-    0 14px 34px rgba(138, 189, 224, 0.14);
-}
-
-.worksheet-statistic-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.worksheet-statistic-header h3 {
-  margin: 4px 0 0;
-}
-
-.worksheet-statistic-meta {
-  margin: 0;
-  color: var(--text-soft);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.8rem;
-}
-
-.worksheet-statistic-table-wrap {
-  overflow-x: auto;
-}
-
-.worksheet-statistic-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 560px;
-}
-
-.worksheet-statistic-table th,
-.worksheet-statistic-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
-}
-
-.worksheet-statistic-table thead th {
-  color: var(--cyan);
-  font-size: 0.78rem;
-  font-family: "IBM Plex Mono", monospace;
-  background: rgba(8, 22, 44, 0.72);
-}
-
-body[data-theme="day"] .worksheet-statistic-table thead th {
-  background: rgba(214, 238, 255, 0.9);
-}
-
-.worksheet-statistic-table tbody td:nth-child(3),
-.worksheet-statistic-table tbody td:nth-child(4),
-.worksheet-statistic-table tfoot th:nth-child(2),
-.worksheet-statistic-table tfoot th:nth-child(3) {
-  font-family: "IBM Plex Mono", monospace;
-}
-
-.worksheet-statistic-table tfoot th {
-  padding: 12px;
-  border-top: 1px solid var(--line-strong);
-  border-bottom: none;
-  color: var(--amber);
-  background: rgba(6, 20, 39, 0.72);
-}
-
-body[data-theme="day"] .worksheet-statistic-table tfoot th {
-  background: rgba(235, 246, 255, 0.92);
-}
-
-.worksheet-statistic-empty {
-  color: var(--text-soft);
-  text-align: center;
-}
-
 .agent-operations .card { color: var(--text-main); }
 .agent-hero {
   background: linear-gradient(125deg, rgba(9, 40, 62, 0.92), rgba(16, 73, 69, 0.72));
@@ -2706,6 +2351,104 @@ body[data-theme="day"] .agent-result { background: rgba(230, 246, 255, 0.72); }
 .source-live { color: var(--lime); }
 .source-offline { color: var(--amber); }
 .inventory-list-item small { grid-column: 1 / -1; color: var(--text-soft); }
+
+.inventory-crud-card {
+  display: grid;
+  gap: 16px;
+}
+
+.inventory-crud-header {
+  display: grid;
+  gap: 6px;
+}
+
+.inventory-crud-description {
+  margin: 0;
+}
+
+.inventory-crud-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.inventory-crud-grid-full {
+  grid-column: 1 / -1;
+}
+
+.inventory-crud-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+
+.inventory-crud-checkbox input {
+  width: auto;
+  accent-color: var(--cyan-strong);
+}
+
+.inventory-crud-table {
+  overflow-x: auto;
+}
+
+.inventory-bootstrap-table {
+  min-width: 100%;
+}
+
+.executive-hero {
+  background: linear-gradient(125deg, rgba(9, 40, 62, 0.92), rgba(16, 73, 69, 0.72));
+  color: #eaf8ff;
+}
+.executive-hero .section-label { color: var(--cyan); }
+.executive-hero h3 { color: #eaf8ff; }
+.executive-hero .status-line { color: var(--lime); }
+body[data-theme="day"] .executive-hero {
+  background: linear-gradient(125deg, rgba(200, 235, 255, 0.95), rgba(200, 245, 230, 0.85));
+  color: var(--text-main);
+}
+body[data-theme="day"] .executive-hero h3 { color: var(--text-main); }
+.executive-rule span:last-child { display: flex; gap: 8px; justify-content: flex-end; }
+.executive-rule small { display: block; margin-top: 4px; color: var(--text-soft); }
+
+.master-table { display: grid; gap: 10px; }
+.master-row { display: flex; justify-content: space-between; gap: 18px; padding: 14px; border: 1px solid var(--line); background: var(--surface-soft); border-radius: 12px; }
+.master-row > div:first-child { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.master-row p { margin: 0; display: grid; gap: 2px; max-width: 360px; }
+.master-row small { color: var(--text-soft); font-family: "IBM Plex Mono", monospace; font-size: 0.72rem; }
+.master-row span { overflow-wrap: anywhere; }
+.master-modal { max-width: 640px; }
+.master-editor-field { display: grid; gap: 6px; }
+.master-checkbox { display: inline-flex; align-items: center; gap: 8px; color: var(--text-main); cursor: pointer; }
+.master-checkbox input { width: auto; accent-color: var(--cyan-strong); }
+.master-table-wrapper { overflow-x: auto; }
+.master-data-table { min-width: 760px; }
+.master-table-actions { margin: 0; flex-wrap: nowrap; }
+@media (max-width: 700px) { .master-row { flex-direction: column; } .master-row > div:first-child { display: grid; } }
+
+.executive-dashboard { display: grid; gap: 18px; animation: riseIn .35s ease both; }
+.dashboard-topbar, .dashboard-topbar-actions, .dashboard-profile, .dashboard-section-head { display: flex; align-items: center; gap: 12px; }
+.dashboard-topbar { justify-content: space-between; padding: 18px 20px; border: 1px solid var(--line); border-radius: 16px; background: linear-gradient(115deg, rgba(8, 40, 62, .82), rgba(22, 77, 71, .55)); }
+.dashboard-topbar h2 { margin: 0; font-family: "Orbitron", sans-serif; color: var(--text-main); }
+.dashboard-topbar p { margin: 5px 0 0; }
+.dashboard-topbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+.dashboard-topbar-actions label { display: grid; gap: 3px; color: var(--text-soft); font-size: .75rem; }
+.dashboard-topbar-actions select { min-width: 135px; }
+.dashboard-profile { padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: .8rem; color: var(--text-soft); }
+.dashboard-profile::first-letter { color: var(--cyan); }
+.dashboard-notifications { position: relative; border: 1px solid var(--line-strong); border-radius: 10px; padding: 9px 12px; color: var(--text-main); background: rgba(6, 23, 42, .54); cursor: pointer; }
+.dashboard-notifications b { display: inline-grid; place-items: center; min-width: 19px; height: 19px; margin-left: 5px; border-radius: 50%; color: #06111f; background: var(--amber); }
+.dashboard-alert-drawer, .dashboard-error { padding: 12px 16px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface-soft); }
+.dashboard-alert-drawer p { margin: 5px 0; }.dashboard-error { border-color: var(--danger); color: var(--danger); }
+.dashboard-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, .36fr); gap: 18px; align-items: start; }.dashboard-main, .dashboard-side { display: grid; gap: 18px; }
+.dashboard-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }.dashboard-kpi { display: grid; gap: 8px; min-height: 138px; padding: 17px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }.dashboard-kpi span, .dashboard-kpi small { color: var(--text-soft); }.dashboard-kpi strong { color: var(--lime); font: 700 1.65rem "IBM Plex Mono", monospace; }.dashboard-kpi.warning strong { color: var(--amber); }.dashboard-kpi.muted-kpi strong { color: var(--cyan); font-size: 1.3rem; }
+.dashboard-section-head { justify-content: space-between; }.dashboard-section-head h3, .dashboard-purchases h3, .dashboard-charts-grid h3, .dashboard-alerts h3, .stock-assistant h3 { margin: 3px 0 0; }.dashboard-section-head > span { color: var(--cyan); font: .75rem "IBM Plex Mono", monospace; }
+.section-heading-icon { display: inline-flex; width: 1.05em; height: 1.05em; margin-right: .42em; vertical-align: -.13em; color: var(--cyan); }.section-heading-icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.dashboard-table-wrap { overflow-x: auto; margin-top: 14px; }.dashboard-purchases table { width: 100%; min-width: 760px; border-collapse: collapse; }.dashboard-purchases th, .dashboard-purchases td { padding: 11px 9px; text-align: left; border-bottom: 1px solid var(--line); }.dashboard-purchases th { color: var(--cyan); font: .71rem "IBM Plex Mono", monospace; text-transform: uppercase; }.priority-pill { display: inline-block; padding: 3px 7px; border-radius: 999px; font: .68rem "IBM Plex Mono", monospace; text-transform: uppercase; }.priority-pill.critica { color: #fff; background: var(--danger); }.priority-pill.alta { color: #1c1200; background: var(--amber); }
+.dashboard-charts-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }.dashboard-chart { display: grid; gap: 8px; min-height: 200px; padding-top: 12px; }.dashboard-chart-bars { display: flex; align-items: end; gap: 7px; height: 154px; border-bottom: 1px solid var(--line-strong); }.dashboard-chart-column { display: flex; flex: 1; align-items: end; justify-content: center; gap: 2px; height: 100%; min-width: 6px; }.chart-bar { width: 42%; border-radius: 4px 4px 0 0; }.chart-bar-primary { background: var(--cyan); }.chart-bar-secondary { background: var(--lime); }.chart-axis-labels { display: flex; justify-content: space-between; gap: 4px; overflow: hidden; color: var(--text-soft); font: .62rem "IBM Plex Mono", monospace; }.chart-axis-labels span { overflow: hidden; text-overflow: ellipsis; }.chart-legend { display: flex; align-items: center; gap: 8px; margin: 2px 0 0; font-size: .75rem; color: var(--text-soft); }.chart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }.dashboard-chart-empty { display: grid; place-content: center; gap: 8px; min-height: 200px; color: var(--text-soft); text-align: center; border: 1px dashed var(--line-strong); border-radius: 10px; }.supplier-list { display: grid; gap: 9px; margin-top: 16px; }.supplier-list div { display: grid; gap: 3px; padding: 10px; border-left: 3px solid var(--amber); background: var(--surface-soft); }.supplier-list span { color: var(--text-soft); font-size: .8rem; }
+.dashboard-ai-cta { display: flex; align-items: center; justify-content: space-between; gap: 22px; padding: 22px; border: 1px solid rgba(102, 246, 191, .45); border-radius: 16px; background: linear-gradient(115deg, rgba(15, 73, 68, .76), rgba(10, 31, 52, .92)); }.dashboard-ai-cta h3 { margin: 3px 0 5px; }.dashboard-ai-cta p { margin: 0; color: var(--text-soft); }
+.dashboard-alerts, .stock-assistant { display: grid; gap: 11px; }.alert-item { display: grid; gap: 4px; padding: 10px; border-left: 3px solid var(--amber); background: var(--surface-soft); }.alert-item.alta { border-left-color: var(--danger); }.alert-item span { color: var(--amber); font: .68rem "IBM Plex Mono", monospace; text-transform: uppercase; }.alert-item.alta span { color: var(--danger); }.alert-item p { margin: 0; font-size: .8rem; color: var(--text-soft); }.assistant-history { display: grid; gap: 8px; max-height: 330px; overflow-y: auto; }.assistant-message { padding: 9px; border-radius: 9px; background: var(--surface-soft); }.assistant-message.user { border-right: 3px solid var(--cyan); }.assistant-message.assistant { border-left: 3px solid var(--lime); }.assistant-message strong { font-size: .75rem; color: var(--cyan); }.assistant-message p { margin: 3px 0 0; white-space: pre-wrap; font-size: .8rem; }.stock-assistant form { display: grid; gap: 8px; }.stock-assistant textarea { min-height: 74px; resize: vertical; }.stock-assistant small { color: var(--text-soft); }.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+body[data-theme="day"] .dashboard-topbar, body[data-theme="day"] .dashboard-ai-cta { background: linear-gradient(115deg, rgba(211, 244, 255, .94), rgba(209, 247, 232, .88)); }
 
 @keyframes riseIn {
   from {
@@ -2754,6 +2497,10 @@ body[data-theme="day"] .agent-result { background: rgba(230, 246, 255, 0.72); }
     grid-template-columns: 1fr;
   }
 
+  .dashboard-layout { grid-template-columns: 1fr; }
+  .dashboard-side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
   .stock-order-meta {
     grid-template-columns: 1fr 1fr;
   }
@@ -2780,4 +2527,18 @@ body[data-theme="day"] .agent-result { background: rgba(230, 246, 255, 0.72); }
   .stock-order-line {
     grid-template-columns: 1fr;
   }
+
+  .inventory-crud-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-crud-grid-full {
+    grid-column: auto;
+  }
+
+  .dashboard-topbar, .dashboard-ai-cta { align-items: stretch; flex-direction: column; }
+  .dashboard-topbar-actions { justify-content: flex-start; }
+  .dashboard-profile { width: fit-content; }
+  .dashboard-kpis, .dashboard-charts-grid, .dashboard-side { grid-template-columns: 1fr; }
+  .dashboard-topbar-actions label { width: 100%; }.dashboard-topbar-actions select { width: 100%; }
 }

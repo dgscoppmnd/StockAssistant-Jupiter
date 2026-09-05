@@ -5,6 +5,7 @@ import type {
   AgentChatResponse,
   AnalyzeResponse,
   InventoryDashboard,
+  ExecutiveDashboard,
   InventoryLinePayload,
   InventoryOperationResponse,
   InventoryProductConfigPayload,
@@ -16,23 +17,21 @@ import type {
   CustomerSupportAnswer,
   FinancialSummary,
   SalesForecast,
+  AutomationRule,
+  AutomationRun,
+  ExecutiveResult,
+  PurchaseProposal,
+  MasterRecord,
   Product,
   ProductCreatePayload,
   ProductImage,
   ProductImageUploadResponse,
   ProductUpdatePayload,
-  Task,
-  TaskImageUploadResponse,
-  TaskChildrenStatusCount,
-  TaskCreatePayload,
-  TaskUpdatePayload,
   GoogleLoginPayload,
   PasswordLoginPayload,
   User,
   UserCreatePayload,
   UserUpdatePayload,
-  WorksheetRegister,
-  WorksheetRegisterPayload,
 } from "./types";
 
 const API_BASE = "/api";
@@ -42,26 +41,6 @@ const ENV_API_KEY =
   (import.meta.env as Record<string, string | undefined>).VITE_STOCKASSISTANT_API_KEY?.trim() ||
   (import.meta.env as Record<string, string | undefined>).STOCKASSISTANT_API_KEYS?.trim() ||
   "";
-
-type BackendTask = Omit<Task, "fecha_completada"> & { datetaskcompleted?: string | null };
-
-function fromBackendTask(task: BackendTask): Task {
-  const { datetaskcompleted, ...rest } = task;
-  return {
-    ...rest,
-    fecha_completada: datetaskcompleted ?? null
-  };
-}
-
-function toBackendTaskPayload<T extends { fecha_completada?: string | null }>(payload: T): Omit<T, "fecha_completada"> & {
-  datetaskcompleted?: string | null;
-} {
-  const { fecha_completada, ...rest } = payload;
-  return {
-    ...rest,
-    datetaskcompleted: fecha_completada ?? null
-  };
-}
 
 export function getApiKey(): string {
   if (typeof window === "undefined") {
@@ -163,22 +142,12 @@ export function getSessionExpiryEpoch(token: string): number | null {
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const sessionToken = getSessionToken();
   const apiKey = sessionToken ? "" : getApiKey();
-  const authHeaders = sessionToken
-    ? { Authorization: `Bearer ${sessionToken}` }
-    : apiKey
-      ? { "X-API-Key": apiKey }
-      : {};
-  const isFormData = options?.body instanceof FormData;
-
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      ...(isFormData ? {} : { "Content-Type": "application/json" }),
-      ...authHeaders,
-      ...(options?.headers ?? {})
-    },
-    ...options
-  });
+  const headers = new Headers(options?.headers);
+  headers.set("Accept", "application/json");
+  if (!(options?.body instanceof FormData)) headers.set("Content-Type", "application/json");
+  if (sessionToken) headers.set("Authorization", `Bearer ${sessionToken}`);
+  else if (apiKey) headers.set("X-API-Key", apiKey);
+  const response = await fetch(url, { ...options, headers });
 
   const raw = await response.text();
   let parsed: unknown = null;
@@ -216,6 +185,10 @@ export async function analyzeWithStockAssistantAgent(payload: AgentChatRequest):
 
 export async function fetchInventoryDashboard(): Promise<InventoryDashboard> {
   return request<InventoryDashboard>(`${API_BASE}/inventory/dashboard`, { method: "GET" });
+}
+
+export async function fetchExecutiveDashboard(periodDays: number): Promise<ExecutiveDashboard> {
+  return request<ExecutiveDashboard>(`${API_BASE}/inventory/executive-dashboard?period_days=${periodDays}`, { method: "GET" });
 }
 
 export async function fetchInventoryWarehouses(): Promise<InventoryWarehouse[]> {
@@ -295,93 +268,6 @@ export async function logoutSession(): Promise<void> {
   }
 }
 
-// Task API endpoints
-export async function fetchTasksForGantt(filters?: {
-  userIds?: number[];
-  dateFrom?: string;
-  dateTo?: string;
-  dateField?: "inicio" | "fin" | "completada";
-}): Promise<Task[]> {
-  const params = new URLSearchParams();
-  if (filters?.userIds?.length) {
-    for (const userId of filters.userIds) {
-      params.append("user_ids", String(userId));
-    }
-  }
-  if (filters?.dateFrom) {
-    params.append("date_from", filters.dateFrom);
-  }
-  if (filters?.dateTo) {
-    params.append("date_to", filters.dateTo);
-  }
-  if (filters?.dateField) {
-    params.append("date_field", filters.dateField);
-  }
-  const query = params.toString();
-  const url = query ? `${API_BASE}/tasks/gantt?${query}` : `${API_BASE}/tasks/gantt`;
-  const tasks = await request<BackendTask[]>(url, { method: "GET" });
-  return tasks.map(fromBackendTask);
-}
-
-export async function fetchTaskChildrenStatusCount(taskId: number): Promise<TaskChildrenStatusCount> {
-  return request<TaskChildrenStatusCount>(`${API_BASE}/tasks/${taskId}/children/status/count`, {
-    method: "GET"
-  });
-}
-
-export async function createTask(payload: TaskCreatePayload): Promise<Task> {
-  const created = await request<BackendTask>(`${API_BASE}/tasks/`, {
-    method: "POST",
-    body: JSON.stringify(toBackendTaskPayload(payload))
-  });
-  return fromBackendTask(created);
-}
-
-export async function updateTask(taskId: number, payload: TaskUpdatePayload): Promise<Task> {
-  const updated = await request<BackendTask>(`${API_BASE}/tasks/${taskId}`, {
-    method: "PUT",
-    body: JSON.stringify(toBackendTaskPayload(payload))
-  });
-  return fromBackendTask(updated);
-}
-
-export async function deleteTask(taskId: number): Promise<void> {
-  await request<void>(`${API_BASE}/tasks/${taskId}`, { method: "DELETE" });
-}
-
-export async function moveTask(taskId: number, idPadre: number | null): Promise<Task> {
-  return request<Task>(`${API_BASE}/tasks/${taskId}/move`, {
-    method: "PATCH",
-    body: JSON.stringify({ id_padre: idPadre })
-  });
-}
-
-export async function importTasksCsv(file: File): Promise<{
-  imported_tasks: number;
-  created_users: number;
-  skipped_rows: number;
-  unresolved_relations: string[];
-}> {
-  const formData = new FormData();
-  formData.append("file", file);
-
-  return request(`${API_BASE}/tasks/import/csv`, {
-    method: "POST",
-    body: formData
-  });
-}
-
-export async function uploadTaskImage(file: File, taskId?: number | null): Promise<TaskImageUploadResponse> {
-  const formData = new FormData();
-  formData.append("file", file);
-
-  const query = typeof taskId === "number" ? `?task_id=${encodeURIComponent(String(taskId))}` : "";
-  return request<TaskImageUploadResponse>(`${API_BASE}/tasks/images/upload${query}`, {
-    method: "POST",
-    body: formData,
-  });
-}
-
 // User API endpoints
 export async function fetchUsers(): Promise<User[]> {
   return request<User[]>(`${API_BASE}/users/`, { method: "GET" });
@@ -459,46 +345,6 @@ export async function deleteProductImage(productId: number, imageId: number): Pr
   });
 }
 
-// Worksheet register API endpoints
-export async function fetchWorksheetRegisters(filters: {
-  year: number;
-  month: number;
-  user_id?: number;
-}): Promise<WorksheetRegister[]> {
-  const params = new URLSearchParams({
-    year: String(filters.year),
-    month: String(filters.month),
-  });
-  if (filters.user_id !== undefined) {
-    params.append("user_id", String(filters.user_id));
-  }
-
-  return request<WorksheetRegister[]>(`${API_BASE}/worksheetregister/?${params.toString()}`, {
-    method: "GET",
-  });
-}
-
-export async function createWorksheetRegister(payload: WorksheetRegisterPayload): Promise<WorksheetRegister> {
-  return request<WorksheetRegister>(`${API_BASE}/worksheetregister/`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function updateWorksheetRegister(
-  registerId: number,
-  payload: WorksheetRegisterPayload
-): Promise<WorksheetRegister> {
-  return request<WorksheetRegister>(`${API_BASE}/worksheetregister/${registerId}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function deleteWorksheetRegister(registerId: number): Promise<void> {
-  await request<void>(`${API_BASE}/worksheetregister/${registerId}`, { method: "DELETE" });
-}
-
 export async function fetchExternalSourceStatuses(): Promise<ExternalSourceStatus[]> {
   const result = await request<{ sources: ExternalSourceStatus[] }>(`${API_BASE}/agents/sources/status`, { method: "GET" });
   return result.sources;
@@ -543,4 +389,44 @@ export async function askCustomerSupport(question: string, productId?: number): 
 
 export async function fetchRisks(): Promise<{ alerts: Array<{ type: string; product_name: string; return_rate: number }> }> {
   return request(`${API_BASE}/agents/risks`, { method: "GET" });
+}
+
+export async function askExecutive(payload: { question: string; product_id?: number; agent?: string }): Promise<ExecutiveResult> {
+  return request<ExecutiveResult>(`${API_BASE}/executive/query`, { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function fetchAutomationRules(): Promise<AutomationRule[]> {
+  return request<AutomationRule[]>(`${API_BASE}/executive/automations`, { method: "GET" });
+}
+
+export async function updateAutomationRule(ruleId: number, isActive: boolean): Promise<AutomationRule> {
+  return request<AutomationRule>(`${API_BASE}/executive/automations/${ruleId}`, { method: "PUT", body: JSON.stringify({ is_active: isActive }) });
+}
+
+export async function runAutomationRule(ruleId: number): Promise<void> {
+  await request(`${API_BASE}/executive/automations/${ruleId}/run`, { method: "POST" });
+}
+
+export async function fetchAutomationRuns(): Promise<AutomationRun[]> {
+  return request<AutomationRun[]>(`${API_BASE}/executive/automations/runs`, { method: "GET" });
+}
+
+export async function fetchPurchaseProposals(): Promise<PurchaseProposal[]> {
+  return request<PurchaseProposal[]>(`${API_BASE}/executive/purchase-proposals`, { method: "GET" });
+}
+
+export async function fetchMasterRecords(resource: string): Promise<MasterRecord[]> {
+  return request<MasterRecord[]>(`${API_BASE}/master-data/${encodeURIComponent(resource)}`, { method: "GET" });
+}
+
+export async function createMasterRecord(resource: string, values: Record<string, unknown>): Promise<MasterRecord> {
+  return request<MasterRecord>(`${API_BASE}/master-data/${encodeURIComponent(resource)}`, { method: "POST", body: JSON.stringify({ values }) });
+}
+
+export async function updateMasterRecord(resource: string, recordId: number, values: Record<string, unknown>): Promise<MasterRecord> {
+  return request<MasterRecord>(`${API_BASE}/master-data/${encodeURIComponent(resource)}/${recordId}`, { method: "PUT", body: JSON.stringify({ values }) });
+}
+
+export async function deleteMasterRecord(resource: string, recordId: number): Promise<void> {
+  await request<void>(`${API_BASE}/master-data/${encodeURIComponent(resource)}/${recordId}`, { method: "DELETE" });
 }

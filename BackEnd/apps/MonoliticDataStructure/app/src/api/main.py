@@ -16,7 +16,8 @@ from .routes import (
     logistics, metrics, analytics
 )
 from endpoints.endpoints import public_router, router as stockassistant_router
-from DataBaseManagement.dbConectionPostgres import init_db, init_products_db
+from DataBaseManagement.dbConectionPostgres import init_db, init_products_db, _get_postgres_connection_server
+from executive_service import start_automation_worker, stop_automation_worker
 
 # Crear tablas
 Base.metadata.create_all(bind=engine)
@@ -69,6 +70,12 @@ def on_startup_init_db() -> None:
     LOGGER.info("event=startup_init_db")
     init_db()
     init_products_db()
+    start_automation_worker(_get_postgres_connection_server)
+
+
+@app.on_event("shutdown")
+def on_shutdown() -> None:
+    stop_automation_worker()
 
 
 @app.exception_handler(RequestValidationError)

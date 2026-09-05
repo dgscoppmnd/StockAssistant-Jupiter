@@ -6,6 +6,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      "/media": {
+        target: process.env.API_PROXY_TARGET || "http://localhost:8000",
+        changeOrigin: true,
+      },
       "/api": {
         target: process.env.API_PROXY_TARGET || "http://localhost:8000",
         changeOrigin: true,
@@ -18,7 +22,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: "../dist",
+    outDir: "dist",
     emptyOutDir: true,
     sourcemap: false
   }
