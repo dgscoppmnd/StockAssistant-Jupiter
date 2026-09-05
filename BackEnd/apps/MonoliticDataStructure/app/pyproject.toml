@@ -1,7 +1,7 @@
 [project]
-name = "StockAssistant-Jupiter"
+name = "proyecto-jupiter"
 version = "0.1.0"
-description = "Asistente de stock y supply chain para TFM"
+description = "Proyecto Jupiter: stockassistant, inventario y agentes ejecutivos"
 authors = [{name = "Tu Nombre", email = "tu@email.com"}]
 requires-python = ">=3.10"
 

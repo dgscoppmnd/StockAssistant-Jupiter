@@ -1,0 +1,7 @@
+services:
+  nginx:
+    ports:
+      - "443:443"
+    volumes:
+      - ../../../../../Frontend/nginx.tls.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${TLS_CERTS_DIR:?Define TLS_CERTS_DIR con cert.crt y private.key}:/etc/certs:ro

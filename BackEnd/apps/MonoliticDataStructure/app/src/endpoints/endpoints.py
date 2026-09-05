@@ -11,6 +11,9 @@ from .endpointsInventory import router as inventory_router
 from .endpointsAgentsIntelligence import router as intelligence_agents_router
 from .endpointsCommercialAgents import router as commercial_agents_router
     
+from .endpointsExecutive import router as executive_router
+from .endpointsMasterData import router as master_data_router
+
 router = APIRouter(dependencies=[Depends(require_api_key)])
 public_router = APIRouter()
 public_router.include_router(auth_router)
@@ -23,6 +26,8 @@ router.include_router(agents_router)
 router.include_router(inventory_router)
 router.include_router(intelligence_agents_router)
 router.include_router(commercial_agents_router)
+router.include_router(executive_router)
+router.include_router(master_data_router)
 
 def init_fastapi():
     description = """

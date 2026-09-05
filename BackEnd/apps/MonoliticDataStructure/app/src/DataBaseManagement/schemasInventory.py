@@ -52,6 +52,18 @@ class DashboardResponse(BaseModel):
     stock_snapshot: list[StockView]
 
 
+class ExecutiveDashboardResponse(BaseModel):
+    period_days: int
+    generated_at: datetime
+    metrics: dict
+    priority_purchases: list[dict]
+    alerts: list[dict]
+    stock_evolution: list[dict]
+    forecast_vs_available: list[dict]
+    risk_distribution: list[dict]
+    supplier_comparison: list[dict]
+
+
 class ProductInventoryConfigRequest(BaseModel):
     product_id: int
     base_unit_code: str = Field(min_length=1, max_length=20)

@@ -1,4 +1,8 @@
-# StockAssistant-Jupiter
+# Proyecto Jupiter
+
+Portal local: http://localhost:8080.
+
+[Integración, esquema, arranque y verificaciones](Documentación/Integracion-Proyecto-Jupiter.md).
 
 
 ```

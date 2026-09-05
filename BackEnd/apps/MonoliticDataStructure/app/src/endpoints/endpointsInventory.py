@@ -6,6 +6,7 @@ from DataBaseManagement.dbConectionPostgres import get_db_products
 from DataBaseManagement.schemasInventory import (
     CancelSalesOrderRequest,
     DashboardResponse,
+    ExecutiveDashboardResponse,
     DispatchRequest,
     InventoryMovementResponse,
     InventoryOperationResponse,
@@ -32,6 +33,14 @@ def _service(db=Depends(get_db_products)) -> InventoryService:
 @router.get("/dashboard", response_model=DashboardResponse)
 def inventory_dashboard(service: InventoryService = Depends(_service)):
     return service.get_dashboard()
+
+
+@router.get("/executive-dashboard", response_model=ExecutiveDashboardResponse)
+def executive_inventory_dashboard(
+    period_days: int = Query(default=30, ge=7, le=365),
+    service: InventoryService = Depends(_service),
+):
+    return service.get_executive_dashboard(period_days=period_days)
 
 
 @router.get("/warehouses", response_model=list[WarehouseResponse])

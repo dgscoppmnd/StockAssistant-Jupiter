@@ -60,78 +60,12 @@ export type AgentChatResponse = {
   };
 };
 
-export type Task = {
-  id: number;
-  id_padre?: number | null;
-  id_user?: number | null;
-  titulo: string;
-  contenido: string;
-  startline?: string | null;
-  deadline: string;
-  fecha_completada?: string | null;
-  completada: boolean;
-  created_at: string;
-  updated_at: string;
-};
 
-export type TaskChildrenStatusCount = {
-  count_subtasks: number;
-  completed_subtasks: number;
-  pending_subtasks: number;
-};
 
-export type TaskCreatePayload = {
-  titulo: string;
-  contenido: string;
-  startline?: string | null;
-  deadline: string;
-  fecha_completada?: string | null;
-  id_padre?: number | null;
-  id_user?: number | null;
-};
 
-export type TaskUpdatePayload = {
-  titulo: string;
-  contenido: string;
-  startline?: string | null;
-  deadline: string;
-  fecha_completada?: string | null;
-  completada: boolean;
-  id_padre?: number | null;
-  id_user?: number | null;
-};
 
-export type TaskImageUploadResponse = {
-  id: number;
-  task_id?: number | null;
-  url: string;
-  mime_type: string;
-  file_size: number;
-  original_filename?: string | null;
-  created_at: string;
-};
 
-export type WorksheetRegister = {
-  id: number;
-  user_id: number;
-  client: string;
-  related_task_id?: number | null;
-  start_datetime: string;
-  end_datetime: string;
-  description?: string | null;
-  minutes_spent: number;
-  created_at: string;
-  updated_at: string;
-};
 
-export type WorksheetRegisterPayload = {
-  user_id: number;
-  client: string;
-  related_task_id?: number | null;
-  start_datetime: string;
-  end_datetime: string;
-  description?: string;
-};
 
 export type User = {
   id: number;
@@ -140,7 +74,6 @@ export type User = {
   email: string;
   descripcion: string;
   password: string;
-  costohora?: number;
   status: number;
   startline: string | null;
   deadline: string | null;
@@ -306,6 +239,25 @@ export type InventoryDashboard = {
   stock_snapshot: InventoryStockItem[];
 };
 
+export type ExecutiveDashboard = {
+  period_days: number;
+  generated_at: string;
+  metrics: {
+    service_level_pct: number | null;
+    turnover: number | null;
+    excess_units: number;
+    excess_items: number;
+    potential_savings: number | null;
+    potential_savings_note: string;
+  };
+  priority_purchases: Array<Record<string, string | number | null>>;
+  alerts: Array<Record<string, string | number | null>>;
+  stock_evolution: Array<{ day: string; entries: number; consumption: number }>;
+  forecast_vs_available: Array<{ product_id: number; product_name: string; available_qty: number; dispatched_qty: number }>;
+  risk_distribution: Array<{ label: string; value: number }>;
+  supplier_comparison: Array<{ supplier_code: string | null; name: string; average_cost: number | null; compliance_pct: number | null; lead_time_days: number | null; orders: number }>;
+};
+
 export type InventoryWarehousePayload = {
   code: string;
   name: string;
@@ -373,3 +325,11 @@ export type PurchaseRecommendation = {
 export type SalesForecast = { product_id: number; product_name: string; forecast_qty: number; daily_average: number; horizon_days: number; trend: string };
 export type FinancialSummary = { revenue: number; cost: number; margin: number; margin_percent: number; currency_basis: string };
 export type CustomerSupportAnswer = { answer: string; sources: Array<{ title: string; source: string; expires_at?: string | null }>; stock: Array<{ warehouse: string; available_qty: number; unit: string }> };
+
+export type AutomationRule = { id: number; code: string; name: string; description: string; is_active: boolean; interval_minutes: number; last_run_at?: string | null };
+export type AutomationRun = { id: number; rule_code: string; initiated_by: string; status: string; started_at: string; completed_at?: string | null };
+export type PurchaseProposal = { id: number; product_name: string; warehouse_name: string; suggested_qty: number; base_unit_code: string; status: string; justification: string; created_at: string };
+export type ExecutiveResult = { decision_id: number; routed_agent: string; tool: string; execution_policy: string; result: Record<string, unknown> };
+
+export type MasterRecord = { id: number; created_at?: string; updated_at?: string; [key: string]: unknown };
+export type MasterField = { key: string; label: string; type?: "text" | "number" | "decimal" | "textarea" | "checkbox"; required?: boolean; placeholder?: string };

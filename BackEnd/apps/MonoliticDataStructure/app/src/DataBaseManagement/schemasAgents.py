@@ -44,3 +44,13 @@ class CommercialContentRequest(BaseModel):
 class CustomerSupportRequest(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
     product_id: Optional[int] = None
+
+
+class ExecutiveRequest(BaseModel):
+    question: str = Field(min_length=2, max_length=2000)
+    product_id: Optional[int] = None
+    agent: Optional[str] = Field(default="auto", max_length=50)
+
+
+class AutomationStateRequest(BaseModel):
+    is_active: bool
