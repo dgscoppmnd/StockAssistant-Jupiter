@@ -11,6 +11,8 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 DROP TABLE IF EXISTS products CASCADE;
 CREATE TABLE products (
     product_id VARCHAR(20) PRIMARY KEY,
+    product_name VARCHAR(150) NOT NULL,
+    description VARCHAR(500) NOT NULL,
     product_category VARCHAR(50) NOT NULL,
     brand VARCHAR(50),
     sku VARCHAR(50) UNIQUE NOT NULL,
