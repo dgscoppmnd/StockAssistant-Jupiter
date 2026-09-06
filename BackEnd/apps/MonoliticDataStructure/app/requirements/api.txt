@@ -1,16 +1,16 @@
 # Core
-fastapi==0.104.1
+fastapi==0.141.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
 # Database
 sqlalchemy==2.0.22
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.12
 alembic==1.12.1
 
 # Data Validation
-pydantic==2.4.2
-pydantic-settings==2.0.3
+pydantic==2.13.5
+pydantic-settings==2.15.0
 
 # CORS y utilidades
 python-dotenv==1.0.0
@@ -19,3 +19,7 @@ passlib[bcrypt]==1.7.4
 
 # Documentación
 markdown==3.4.3
+
+# Vector search
+qdrant-client==1.15.1
+sentence-transformers==5.1.0
