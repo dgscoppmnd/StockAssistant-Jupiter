@@ -11,6 +11,8 @@ class Product(Base):
     __tablename__ = "products"
     
     product_id = Column(String(20), primary_key=True)
+    product_name = Column(String(150), nullable=False)
+    description = Column(String(500), nullable=False)
     product_category = Column(String(50), nullable=False)
     brand = Column(String(50))
     sku = Column(String(50), unique=True, nullable=False)

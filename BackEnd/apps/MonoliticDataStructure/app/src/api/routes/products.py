@@ -37,6 +37,8 @@ async def get_products(
         query = query.filter(
             or_(
                 Product.product_id.ilike(f"%{search}%"),
+                Product.product_name.ilike(f"%{search}%"),
+                Product.description.ilike(f"%{search}%"),
                 Product.sku.ilike(f"%{search}%"),
                 Product.brand.ilike(f"%{search}%")
             )
@@ -49,6 +51,8 @@ async def get_products(
     result["items"] = [
         {
             "product_id": item["product_id"],
+            "product_name": item["product_name"],
+            "description": item["description"],
             "product_category": item["product_category"],
             "brand": item["brand"],
             "sku": item["sku"],
@@ -71,6 +75,8 @@ async def get_product(product_id: str, db: Session = Depends(get_db)):
     
     return {
         "product_id": product.product_id,
+        "product_name": product.product_name,
+        "description": product.description,
         "product_category": product.product_category,
         "brand": product.brand,
         "sku": product.sku,
@@ -89,6 +95,8 @@ async def get_product_by_sku(sku: str, db: Session = Depends(get_db)):
     
     return {
         "product_id": product.product_id,
+        "product_name": product.product_name,
+        "description": product.description,
         "product_category": product.product_category,
         "brand": product.brand,
         "sku": product.sku,
