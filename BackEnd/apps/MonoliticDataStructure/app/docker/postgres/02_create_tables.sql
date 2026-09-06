@@ -1,5 +1,4 @@
 -- Conectar a la base de datos
-\c supply_chain;
 
 -- Habilitar extensiones útiles
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -8,8 +7,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- =============================================
 -- 1. TABLA: PRODUCTS
 -- =============================================
-DROP TABLE IF EXISTS products CASCADE;
-CREATE TABLE products (
+CREATE TABLE IF NOT EXISTS products (
     product_id VARCHAR(20) PRIMARY KEY,
     product_category VARCHAR(50) NOT NULL,
     brand VARCHAR(50),
@@ -21,14 +19,13 @@ CREATE TABLE products (
 );
 
 -- Índices para búsquedas frecuentes
-CREATE INDEX idx_products_category ON products(product_category);
-CREATE INDEX idx_products_brand ON products(brand);
+CREATE INDEX IF NOT EXISTS idx_products_category ON products(product_category);
+CREATE INDEX IF NOT EXISTS idx_products_brand ON products(brand);
 
 -- =============================================
 -- 2. TABLA: SUPPLIERS
 -- =============================================
-DROP TABLE IF EXISTS suppliers CASCADE;
-CREATE TABLE suppliers (
+CREATE TABLE IF NOT EXISTS suppliers (
     supplier_id VARCHAR(20) PRIMARY KEY,
     supplier_rating DECIMAL(3,2) CHECK (supplier_rating >= 0 AND supplier_rating <= 5),
     lead_time_days INTEGER CHECK (lead_time_days >= 0),
@@ -41,8 +38,7 @@ CREATE TABLE suppliers (
 -- =============================================
 -- 3. TABLA: WAREHOUSES
 -- =============================================
-DROP TABLE IF EXISTS warehouses CASCADE;
-CREATE TABLE warehouses (
+CREATE TABLE IF NOT EXISTS warehouses (
     warehouse_id VARCHAR(20) PRIMARY KEY,
     warehouse_location VARCHAR(50) NOT NULL,
     storage_capacity INTEGER CHECK (storage_capacity >= 0),
@@ -51,13 +47,12 @@ CREATE TABLE warehouses (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_warehouses_location ON warehouses(warehouse_location);
+CREATE INDEX IF NOT EXISTS idx_warehouses_location ON warehouses(warehouse_location);
 
 -- =============================================
 -- 4. TABLA: INVENTORY
 -- =============================================
-DROP TABLE IF EXISTS inventory CASCADE;
-CREATE TABLE inventory (
+CREATE TABLE IF NOT EXISTS inventory (
     inventory_id SERIAL PRIMARY KEY,
     product_id VARCHAR(20) NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
     warehouse_id VARCHAR(20) NOT NULL REFERENCES warehouses(warehouse_id) ON DELETE CASCADE,
@@ -75,15 +70,14 @@ CREATE TABLE inventory (
 );
 
 -- Índices para consultas de inventario
-CREATE INDEX idx_inventory_product ON inventory(product_id);
-CREATE INDEX idx_inventory_warehouse ON inventory(warehouse_id);
-CREATE INDEX idx_inventory_stock ON inventory(current_stock);
+CREATE INDEX IF NOT EXISTS idx_inventory_product ON inventory(product_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_warehouse ON inventory(warehouse_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_stock ON inventory(current_stock);
 
 -- =============================================
 -- 5. TABLA: SALES
 -- =============================================
-DROP TABLE IF EXISTS sales CASCADE;
-CREATE TABLE sales (
+CREATE TABLE IF NOT EXISTS sales (
     sales_id SERIAL PRIMARY KEY,
     product_id VARCHAR(20) NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
     date DATE NOT NULL,
@@ -102,16 +96,15 @@ CREATE TABLE sales (
 );
 
 -- Índices para análisis de ventas
-CREATE INDEX idx_sales_product ON sales(product_id);
-CREATE INDEX idx_sales_date ON sales(date);
-CREATE INDEX idx_sales_year_month ON sales(year, month);
-CREATE INDEX idx_sales_quarter ON sales(year, quarter);
+CREATE INDEX IF NOT EXISTS idx_sales_product ON sales(product_id);
+CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(date);
+CREATE INDEX IF NOT EXISTS idx_sales_year_month ON sales(year, month);
+CREATE INDEX IF NOT EXISTS idx_sales_quarter ON sales(year, quarter);
 
 -- =============================================
 -- 6. TABLA: LOGISTICS
 -- =============================================
-DROP TABLE IF EXISTS logistics CASCADE;
-CREATE TABLE logistics (
+CREATE TABLE IF NOT EXISTS logistics (
     logistics_id SERIAL PRIMARY KEY,
     product_id VARCHAR(20) NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
     supplier_id VARCHAR(20) NOT NULL REFERENCES suppliers(supplier_id) ON DELETE CASCADE,
@@ -128,15 +121,14 @@ CREATE TABLE logistics (
 );
 
 -- Índices para logística
-CREATE INDEX idx_logistics_product ON logistics(product_id);
-CREATE INDEX idx_logistics_supplier ON logistics(supplier_id);
-CREATE INDEX idx_logistics_warehouse ON logistics(warehouse_id);
+CREATE INDEX IF NOT EXISTS idx_logistics_product ON logistics(product_id);
+CREATE INDEX IF NOT EXISTS idx_logistics_supplier ON logistics(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_logistics_warehouse ON logistics(warehouse_id);
 
 -- =============================================
 -- 7. TABLA: SUPPLY_CHAIN_METRICS
 -- =============================================
-DROP TABLE IF EXISTS supply_chain_metrics CASCADE;
-CREATE TABLE supply_chain_metrics (
+CREATE TABLE IF NOT EXISTS supply_chain_metrics (
     metric_id SERIAL PRIMARY KEY,
     product_id VARCHAR(20) NOT NULL REFERENCES products(product_id) ON DELETE CASCADE,
     date DATE NOT NULL,
@@ -149,8 +141,8 @@ CREATE TABLE supply_chain_metrics (
 );
 
 -- Índices para métricas
-CREATE INDEX idx_metrics_product ON supply_chain_metrics(product_id);
-CREATE INDEX idx_metrics_date ON supply_chain_metrics(date);
+CREATE INDEX IF NOT EXISTS idx_metrics_product ON supply_chain_metrics(product_id);
+CREATE INDEX IF NOT EXISTS idx_metrics_date ON supply_chain_metrics(date);
 
 -- =============================================
 -- VISTAS ÚTILES PARA ANÁLISIS
@@ -158,7 +150,7 @@ CREATE INDEX idx_metrics_date ON supply_chain_metrics(date);
 
 -- Vista 1: Stock crítico (productos con stock bajo el punto de reorden)
 CREATE OR REPLACE VIEW v_critical_stock AS
-SELECT 
+SELECT
     p.product_id,
     p.product_category,
     p.brand,
@@ -176,7 +168,7 @@ ORDER BY stock_gap ASC;
 
 -- Vista 2: Rendimiento de productos por categoría
 CREATE OR REPLACE VIEW v_product_performance AS
-SELECT 
+SELECT
     p.product_id,
     p.product_category,
     p.brand,
@@ -194,7 +186,7 @@ GROUP BY p.product_id, p.product_category, p.brand;
 
 -- Vista 3: Eficiencia de proveedores
 CREATE OR REPLACE VIEW v_supplier_efficiency AS
-SELECT 
+SELECT
     s.supplier_id,
     s.supplier_rating,
     s.supplier_performance_score,
@@ -220,19 +212,19 @@ END;
 $$ language 'plpgsql';
 
 -- Aplicar trigger a tablas con updated_at
-CREATE TRIGGER update_products_updated_at BEFORE UPDATE ON products
+CREATE OR REPLACE TRIGGER update_products_updated_at BEFORE UPDATE ON products
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_suppliers_updated_at BEFORE UPDATE ON suppliers
+CREATE OR REPLACE TRIGGER update_suppliers_updated_at BEFORE UPDATE ON suppliers
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_warehouses_updated_at BEFORE UPDATE ON warehouses
+CREATE OR REPLACE TRIGGER update_warehouses_updated_at BEFORE UPDATE ON warehouses
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_inventory_updated_at BEFORE UPDATE ON inventory
+CREATE OR REPLACE TRIGGER update_inventory_updated_at BEFORE UPDATE ON inventory
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_logistics_updated_at BEFORE UPDATE ON logistics
+CREATE OR REPLACE TRIGGER update_logistics_updated_at BEFORE UPDATE ON logistics
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- =============================================
