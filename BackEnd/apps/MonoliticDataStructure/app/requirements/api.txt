@@ -16,10 +16,15 @@ pydantic-settings==2.15.0
 python-dotenv==1.0.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+requests==2.32.3
+beautifulsoup4==4.12.3
 
 # Documentación
 markdown==3.4.3
+<<<<<<< HEAD
 
 # Vector search
 qdrant-client==1.15.1
 sentence-transformers==5.1.0
+=======
+>>>>>>> develop
