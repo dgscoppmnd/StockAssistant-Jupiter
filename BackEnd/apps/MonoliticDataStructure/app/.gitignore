@@ -10,3 +10,75 @@ __pycache__/
 .idea/
 *.db
 *.sqlite
+
+
+#Ignore los archivos log
+*.log
+
+#Ignora directorio pycache
+pycache/
+
+#Ignorar los achivos de cache 
+__pycache__/
+*.pyc
+
+#Ignorar los achivos ambiente virtual python si es intalado en windows 
+venv/
+
+#Ignorar los achivos ambiente virtual python si es intalado en linux o mac
+.venv/
+
+#Ignorar los archivos de configuración de vscode
+.vscode/
+
+#Ignorar los archivos de configuración 
+.cache/
+.copilot/
+.docker/
+.dotnet/
+.local/
+.ollama/
+.ssh/
+.vscode-server/
+
+#Ignorar los archivos de historial y configuración de shell
+.bash_history
+.bash_logout
+.bashrc
+.profile
+.sudo_as_admin_successful
+.wget-hsts
+.zsh_history
+.bash_profile
+.bash_login
+
+
+# Variables de entorno (IMPORTANTE: no subir contraseñas)
+.env
+*.env
+dockerfiles/.env.production
+dockerfiles/.env.development
+dockerfiles/.env.local
+dockerfiles/.env.*.local
+!dockerfiles/.env.production.example
+!dockerfiles/.env.development.example
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Docker volumes locales
+data/
+volumes/
+
+# Node dependencies
+node_modules/
+**/node_modules/
+
+# Build de React/Vite
+html_nginx/web/react-app/dist/
+html_nginx/web/dist/
+**/dist/
+
+# No cargar la carpeta Docs
+docs/
