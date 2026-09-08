@@ -42,3 +42,32 @@ APIs externas
 | Riesgos | Detección de anomalías + `qwen3:8b` | Detecta señales numéricas y sintetiza causas, impacto y recomendaciones. |
 | Inteligencia de mercado | `qwen3:14b` | Analiza tendencias y fuentes externas, y propone oportunidades con evidencia. |
 | Ejecutivo / Manager IA | `qwen3:14b` | Decide qué herramientas o agentes consultar y resume resultados. No debería aprobar ni ejecutar compras por sí solo. |
+
+
+## Igntegracion a 8 septiembre de 2026
+
+El resumen de la ultima integracion esta en Documentación\Integracion-Proyecto-Jupiter.md
+
+## Resumen de Arranque
+
+Desde la raíz del repositorio, en PowerShell:
+
+```powershell
+$compose = 'BackEnd/apps/MonoliticDataStructure/app/docker/docker-compose.yml'
+docker compose -f $compose up -d --build
+```
+
+- Portal compilado en Nginx: <http://localhost:8080>.
+- Desarrollo Vite: <http://localhost:5173>.
+- API y documentación: <http://localhost:8000/docs>.
+- PostgreSQL: puerto local 5433; pgAdmin: <http://localhost:5050>.
+
+Nginx conserva el prefijo `/api` del backend integrado y sirve `/media`; Vite también reenvía ambos. Compose incorpora reinicio automático, opciones de sesión y conectores, zona horaria y control del trabajador de automatizaciones. Las reglas nacen pausadas.
+
+Para una base existente en otra instalación, los scripts de Docker no se ejecutan automáticamente sobre un volumen inicializado. Aplicar explícitamente la migración, después de respaldar esa base:
+
+```powershell
+docker cp BackEnd/apps/MonoliticDataStructure/app/docker/init-scripts/init.sql proyecto_jupiter_db:/tmp/jupiter-init.sql
+docker exec proyecto_jupiter_db psql -U admin -d supply_chain -v ON_ERROR_STOP=1 -f /tmp/jupiter-init.sql
+
+usuario local de desarrollo frontend: admin@stockassistant.app y Contraseña: Jupiter!2026Stock

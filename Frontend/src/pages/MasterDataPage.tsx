@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import BootstrapTable from "react-bootstrap-table-next";
 import paginationFactory from "react-bootstrap-table2-paginator";
 import { createMasterRecord, deleteMasterRecord, fetchMasterRecords, updateMasterRecord } from "../api";
@@ -14,6 +15,9 @@ const resources: Record<string, ResourceConfig> = {
   suppliers: { title: "Proveedores", description: "Contrapartes para las órdenes y recepciones de compra.", fields: [{ key: "supplier_code", label: "Código" }, { key: "name", label: "Nombre", required: true }, { key: "email", label: "Email" }, { key: "phone", label: "Teléfono" }] },
   "unit-conversions": { title: "Conversiones de unidad", description: "Factores explícitos hacia la unidad base del producto.", fields: [{ key: "product_id", label: "ID de producto (vacío = global)", type: "number" }, { key: "from_unit_id", label: "ID unidad origen", type: "number", required: true }, { key: "to_unit_id", label: "ID unidad destino", type: "number", required: true }, { key: "factor", label: "Factor", type: "decimal", required: true, placeholder: "1" }] },
   "knowledge-documents": { title: "Base de conocimiento", description: "Documentos vigentes utilizados por el asistente RAG.", fields: [{ key: "title", label: "Título", required: true }, { key: "content", label: "Contenido", type: "textarea", required: true }, { key: "source", label: "Fuente", required: true, placeholder: "política interna" }, { key: "expires_at", label: "Caducidad ISO (opcional)", placeholder: "2026-12-31T23:59:59Z" }, { key: "is_active", label: "Activo", type: "checkbox" }] },
+  "client-types": { title: "Tipos de cliente", description: "Estados y clasificación usados para clientes propios, prospectos y cuentas activas.", fields: [{ key: "name", label: "Nombre", required: true, placeholder: "Activo" }] },
+  clients: { title: "Clientes", description: "Contrapartes comerciales asociadas a un tipo de cliente existente.", fields: [{ key: "client_code", label: "Código de cliente" }, { key: "name", label: "Nombre", required: true, placeholder: "Cliente ejemplo" }, { key: "description", label: "Descripción" }, { key: "fk_type_client", label: "ID tipo de cliente", type: "number", required: true, placeholder: "1 = Propio" }] },
+  "global-addresses": { title: "Direcciones globales", description: "Direcciones reutilizables que pueden vincularse a clientes y otras entidades.", fields: [{ key: "address_line_1", label: "Dirección", required: true }, { key: "address_line_2", label: "Complemento" }, { key: "city", label: "Ciudad", required: true }, { key: "state_province", label: "Provincia / estado" }, { key: "postal_code", label: "Código postal" }, { key: "country_code", label: "Código país", required: true, placeholder: "ES" }, { key: "country_name", label: "País" }, { key: "contact_name", label: "Contacto" }, { key: "contact_phone", label: "Teléfono" }, { key: "contact_email", label: "Email" }, { key: "notes", label: "Notas", type: "textarea" }] },
 };
 
 function initialValues(config: ResourceConfig): Record<string, unknown> {
@@ -21,6 +25,7 @@ function initialValues(config: ResourceConfig): Record<string, unknown> {
 }
 
 export default function MasterDataPage({ resource }: { resource: string }) {
+  const navigate = useNavigate();
   const config = resources[resource];
   const [records, setRecords] = useState<MasterRecord[]>([]);
   const [editor, setEditor] = useState<MasterRecord | null>(null);
@@ -47,7 +52,7 @@ export default function MasterDataPage({ resource }: { resource: string }) {
       dataField: "actions",
       text: "Acciones",
       isDummyField: true,
-      formatter: (_value: unknown, record: MasterRecord) => <div className="actions-row master-table-actions"><button className="chip-btn" onClick={() => openEdit(record)} type="button">Editar</button><button className="danger-btn" onClick={() => void remove(record)} type="button">Eliminar</button></div>,
+      formatter: (_value: unknown, record: MasterRecord) => <div className="actions-row master-table-actions">{resource === "clients" && <button className="chip-btn" onClick={() => navigate(`/maestros/clientes/${record.id}`)} type="button">Direcciones</button>}<button className="chip-btn" onClick={() => openEdit(record)} type="button">Editar</button><button className="danger-btn" onClick={() => void remove(record)} type="button">Eliminar</button></div>,
       headerStyle: { width: "190px" },
     },
   ];

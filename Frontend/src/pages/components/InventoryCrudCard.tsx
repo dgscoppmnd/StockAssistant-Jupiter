@@ -7,6 +7,7 @@ type InventoryCrudCardProps<T extends Record<string, unknown>> = {
   title: string;
   titleIcon?: ReactNode;
   description?: string;
+  headerAction?: ReactNode;
   className?: string;
   formClassName?: string;
   children?: ReactNode;
@@ -27,6 +28,7 @@ export default function InventoryCrudCard<T extends Record<string, unknown>>({
   title,
   titleIcon,
   description,
+  headerAction,
   className = "",
   formClassName = "stack",
   children,
@@ -37,9 +39,12 @@ export default function InventoryCrudCard<T extends Record<string, unknown>>({
   return (
     <article className={`card inventory-crud-card ${className}`.trim()}>
       <div className="inventory-crud-header">
-        <p className="section-label">{sectionLabel}</p>
-        <h3>{titleIcon}{title}</h3>
-        {description ? <p className="muted inventory-crud-description">{description}</p> : null}
+        <div className="inventory-crud-header-main">
+          <p className="section-label">{sectionLabel}</p>
+          <h3>{titleIcon}{title}</h3>
+          {description ? <p className="muted inventory-crud-description">{description}</p> : null}
+        </div>
+        {headerAction ? <div className="inventory-crud-action">{headerAction}</div> : null}
       </div>
 
       {table ? (
