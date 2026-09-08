@@ -13,6 +13,8 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- =============================================
 CREATE TABLE IF NOT EXISTS products (
     product_id VARCHAR(20) PRIMARY KEY,
+    product_name VARCHAR(150) NOT NULL,
+    description VARCHAR(500) NOT NULL,
     product_category VARCHAR(50) NOT NULL,
     brand VARCHAR(50),
     sku VARCHAR(50) UNIQUE NOT NULL,
@@ -21,6 +23,13 @@ CREATE TABLE IF NOT EXISTS products (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Compatibilidad con tablas anteriores a la incorporacion del contenido semantico.
+-- Los productos existentes quedan sin contenido hasta completar sus datos.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS product_name VARCHAR(150) NOT NULL DEFAULT '';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS description VARCHAR(500) NOT NULL DEFAULT '';
+ALTER TABLE products ALTER COLUMN product_name DROP DEFAULT;
+ALTER TABLE products ALTER COLUMN description DROP DEFAULT;
 
 -- Índices para búsquedas frecuentes
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(product_category);
