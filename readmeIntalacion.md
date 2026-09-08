@@ -9,7 +9,7 @@ Para conocer los módulos y la estructura, consulta [Contenido del proyecto](rea
 1. Instala Docker Desktop con soporte para contenedores Linux y WSL 2, y abre Docker Desktop.
 2. Instala Git si vas a obtener el código mediante clonación; también puedes utilizar una copia del proyecto ya descargada.
 3. Necesitas conexión a Internet en el primer arranque para descargar imágenes y dependencias.
-4. Comprueba que los puertos `8080`, `5173`, `8000`, `5433` y `5050` estén disponibles.
+4. Comprueba que los puertos `8080`, `5173`, `8000`, `5433`, `5050`, `6333` y `6334` estén disponibles.
 
 Verifica Docker en PowerShell:
 
@@ -75,7 +75,7 @@ docker compose -f $compose up -d --build
 docker compose -f $compose ps
 ```
 
-El primer arranque puede tardar varios minutos. Compose crea PostgreSQL y espera a que esté saludable; después inicia la API y, cuando esta responde, los frontends. También inicia pgAdmin.
+El primer arranque puede tardar varios minutos. Compose crea PostgreSQL y espera a que esté saludable; después inicia la API y, cuando esta responde, los frontends. También inicia pgAdmin y Qdrant. La imagen de la API instala PyTorch `2.8.0` para CPU, por lo que no necesita GPU. La descarga del modelo de embeddings se realiza al primer uso vectorial, no al iniciar sesión.
 
 En un volumen nuevo, PostgreSQL ejecuta automáticamente `docker/init-scripts/init.sql` para crear el esquema y la cuenta inicial. No es necesario ejecutar generadores ni cargadores para entrar al portal.
 
@@ -97,6 +97,7 @@ La API debe devolver `status: healthy`. Confirma además que PostgreSQL y el bac
 | API ReDoc | [http://localhost:8000/redoc](http://localhost:8000/redoc) | Documentación alternativa. |
 | pgAdmin | [http://localhost:5050](http://localhost:5050) | Administración de PostgreSQL. |
 | PostgreSQL | `localhost:5433` | Conexión desde clientes del equipo. |
+| Qdrant | [http://localhost:6333/dashboard](http://localhost:6333/dashboard) | Colecciones vectoriales; HTTP en 6333 y gRPC en 6334. |
 
 Si cambias `HTTP_PORT`, adapta la dirección del portal Nginx.
 
@@ -164,7 +165,7 @@ Para volver a crearlos:
 docker compose -f $compose up -d
 ```
 
-PostgreSQL y pgAdmin guardan sus datos en volúmenes Docker. Los archivos de la aplicación se guardan en `BackEnd/apps/MonoliticDataStructure/app/data`, montado como `/app/data` en el backend. No añadas `-v` a `down` si quieres conservar los volúmenes y la base de datos.
+PostgreSQL, pgAdmin y Qdrant guardan sus datos en volúmenes Docker; los vectores utilizan `qdrant_data`. Los archivos de la aplicación se guardan en `BackEnd/apps/MonoliticDataStructure/app/data`, montado como `/app/data` en el backend. No añadas `-v` a `down` si quieres conservar los volúmenes y la base de datos. La caché del modelo de embeddings está dentro del contenedor de la API: recrearlo puede requerir descargar el modelo de nuevo.
 
 ## 9. Actualizar una instalación existente
 
@@ -187,6 +188,36 @@ docker compose -f $compose up -d --build
 ```
 
 Reaplicar `init.sql` restablece las credenciales y el estado activo del administrador inicial. Consulta las [notas de integración](Documentación/Integracion-Proyecto-Jupiter.md) antes de migrar datos existentes.
+
+### Actualizar solo las columnas del catálogo analítico
+
+Si el esquema operativo ya está actualizado y únicamente faltan los campos del merge `45e825b`, después del respaldo ejecuta esta ampliación específica. Conserva las filas y añade cadenas vacías a los productos anteriores; completa después su nombre y descripción con datos reales.
+
+```powershell
+@'
+BEGIN;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS product_name VARCHAR(150) NOT NULL DEFAULT '';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS description VARCHAR(500) NOT NULL DEFAULT '';
+ALTER TABLE products ALTER COLUMN product_name DROP DEFAULT;
+ALTER TABLE products ALTER COLUMN description DROP DEFAULT;
+COMMIT;
+'@ | docker compose -f $compose exec -T postgres psql -U admin -d supply_chain -v ON_ERROR_STOP=1
+```
+
+### Actualizar las dependencias vectoriales
+
+La recarga automática del código no instala paquetes Python nuevos. Tras los cambios de `requirements/api.txt` o del Dockerfile, reconstruye y recrea el backend. Actualiza también Qdrant y refresca el proxy si cambia la dirección interna de la API:
+
+```powershell
+docker compose -f $compose build backend
+docker compose -f $compose up -d --no-deps backend qdrant
+docker compose -f $compose ps
+Invoke-RestMethod 'http://localhost:8000/health'
+docker compose -f $compose exec -T nginx nginx -s reload
+docker compose -f $compose exec -T backend python -m pip check
+```
+
+Espera a que la API responda antes de probar el portal. La configuración validada fija Qdrant `1.19.1`, `qdrant-client==1.19.0`, `numpy==1.26.4` y `pandas==2.1.0`. No sustituyas la imagen Qdrant por `latest` sin comprobar la compatibilidad de su cliente.
 
 ## 10. Desarrollo del frontend fuera de Docker, opcional
 
@@ -211,6 +242,51 @@ npm run build
 
 La compilación local genera `Frontend/dist`. Para actualizar el portal Nginx de Docker, vuelve a la raíz y ejecuta `docker compose -f $compose up -d --build nginx`. La API también monta su código fuente y utiliza recarga automática en el Compose incluido.
 
+## 11. Indexar y consultar productos en Qdrant
+
+La instalación no incluye un catálogo vectorial precargado. Prepara un CSV UTF-8 con estas columnas obligatorias:
+
+```csv
+product_id,product_name,description,product_category,brand,sku
+DEMO-001,Ordenador portátil,Ordenador con pantalla y teclado para trabajar,Electronics,Demo,DEMO-SKU-001
+```
+
+Guárdalo en `BackEnd/apps/MonoliticDataStructure/app/data/generated/products.csv`, creando las carpetas si no existen. Usa tus datos para indexar el catálogo real. El fichero queda disponible en `/app/data/generated/products.csv` dentro del backend.
+
+```powershell
+docker compose -f $compose exec -T backend python -m src.vector_store.product_indexer --csv /app/data/generated/products.csv --batch-size 128
+Invoke-RestMethod 'http://localhost:8080/api/v1/products/semantic-search?q=ordenador&limit=5&category=Electronics'
+```
+
+La primera indexación descarga desde Hugging Face el modelo `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`. Produce vectores normalizados de 384 dimensiones y utiliza similitud coseno. El comando vuelve a escribir los mismos identificadores sin duplicarlos; no elimina puntos de productos que hayas retirado del CSV.
+
+`pyproject.toml` declara también el comando `index-products`, disponible cuando el proyecto se instala como paquete Python. La imagen Docker actual permite usar directamente el módulo mostrado arriba.
+
+| Ajuste | Valor actual |
+| --- | --- |
+| `QDRANT_URL` | `http://qdrant:6333` en Compose; `http://localhost:6333` por defecto fuera de Docker. |
+| `QDRANT_COLLECTION` | `products`. |
+| `EMBEDDING_DIMENSION` | `384`. |
+| `VECTOR_SEARCH_LIMIT` | `10`; la ruta HTTP admite `limit` de 1 a 50. |
+
+Estos ajustes están definidos en `src/api/config.py`. Compose transmite explícitamente `QDRANT_URL`; para configurar los demás de forma persistente debes declararlos en `environment` del backend. Cambiar el modelo o la dimensión requiere un índice compatible; no reutilices vectores de otro modelo.
+
+La consulta necesita `q` de al menos dos caracteres. `category` es un filtro exacto y opcional. La respuesta contiene `query` e `items`; sin colección devuelve `items: []`. Indexar este CSV no carga PostgreSQL ni actualiza los productos operativos del frontend.
+
+## 12. Repetir las comprobaciones
+
+Desde la raíz, copia las pruebas al contenedor: el Dockerfile solo incorpora `src`.
+
+```powershell
+docker compose -f $compose cp BackEnd/apps/MonoliticDataStructure/app/tests backend:/app/tests
+docker compose -f $compose exec -T backend python -m unittest discover -s /app/tests -p 'test_*rules.py' -v
+docker compose -f $compose exec -T -e RUN_VECTOR_INTEGRATION=1 backend python -m unittest discover -s /app/tests -p test_vector_store.py -v
+```
+
+La prueba vectorial usa embeddings reales, dos productos ficticios y una colección temporal que elimina al terminar. Comprueba colección inexistente, indexación por lotes, reindexación sin duplicados, ranking, categoría, límite y validación HTTP. Requiere Qdrant disponible y acceso al modelo o su caché. No ejecutes la suite HTTP/SQL completa contra la base de trabajo: `test_jupiter_integration.py` requiere una base desechable terminada en `_test`.
+
+En la validación local del 8 de septiembre de 2026 pasaron las 14 pruebas de reglas y la prueba vectorial. El frontend compiló correctamente; login, sesión, productos, inventario y búsqueda semántica respondieron HTTP 200 a través de Nginx. El catálogo real permaneció sin indexar. Estas comprobaciones no incluyen los proveedores externos de IA ni el acceso Google.
+
 ## Problemas habituales
 
 | Problema | Comprobación o solución |
@@ -219,6 +295,12 @@ La compilación local genera `Frontend/dist`. Para actualizar el portal Nginx de
 | Puerto ocupado | Detén el proceso que lo usa; para Nginx puedes cambiar `HTTP_PORT` en `.env`. Los demás puertos están definidos directamente en Compose. |
 | Vite todavía no abre | Revisa `docker compose -f $compose logs --tail 80 frontend`; en el primer inicio debe instalar dependencias. |
 | API no saludable o error 502 | Revisa los logs de `backend` y `postgres`, su estado y las credenciales. |
+| Login tarda minutos y termina en 504 | Nginx tiene un tiempo de espera de respuesta de 300 segundos. Comprueba primero `/health` y los logs de la API; un proceso de recarga activo no garantiza que el backend haya arrancado. |
+| `No module named qdrant_client` | Reconstruye y recrea `backend`; reiniciarlo o recargar el código no instala las dependencias. |
+| `numpy.dtype size changed` | Usa las versiones de NumPy y pandas fijadas en `requirements/api.txt` y reconstruye la imagen. `pip check` no detecta por sí solo esta incompatibilidad binaria. |
+| API funciona en 8000, pero 8080 devuelve 502 tras recrearla | Ejecuta `docker compose -f $compose exec -T nginx nginx -s reload` para resolver de nuevo la dirección interna del backend. |
+| Búsqueda semántica vacía | Comprueba que has indexado un CSV en la colección configurada y que la categoría coincide exactamente. Crear productos en el portal no los indexa. |
+| Primera búsqueda o indexación lenta | El primer uso descarga y carga el modelo. Comprueba la conexión a Hugging Face; la caché puede perderse al recrear el contenedor. |
 | El usuario inicial no puede entrar | Comprueba si estás usando un volumen anterior sin la inicialización correspondiente. Sigue el apartado de actualización con respaldo antes de aplicar SQL. |
 | Error 401 al consumir rutas protegidas | Inicia sesión de nuevo o revisa la clave API configurada. La clave local predeterminada es `dev-jupiter-key`. |
 | No aparecen cambios en el portal 8080 | Reconstruye `nginx`; el puerto 5173 corresponde al frontend con recarga de desarrollo. |
