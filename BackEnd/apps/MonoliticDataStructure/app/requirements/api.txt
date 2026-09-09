@@ -21,10 +21,8 @@ beautifulsoup4==4.12.3
 
 # Documentación
 markdown==3.4.3
-<<<<<<< HEAD
 
 # Vector search
+pandas==2.2.3
 qdrant-client==1.15.1
 sentence-transformers==5.1.0
-=======
->>>>>>> develop
