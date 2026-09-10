@@ -160,3 +160,6 @@ volumes:
 networks:
   jupiter_network:
     driver: bridge
+  supply_network:
+    driver: bridge
+  
