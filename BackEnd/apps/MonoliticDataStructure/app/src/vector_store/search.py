@@ -17,6 +17,9 @@ def search_products(
 ) -> List[Dict[str, Any]]:
     """Busca productos similares y devuelve su payload junto a la puntuación."""
     client: QdrantClient = get_client()
+    if not client.collection_exists(settings.QDRANT_COLLECTION):
+        client.close()
+        return []
     query_filter = None
     if category:
         query_filter = Filter(

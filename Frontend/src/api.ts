@@ -430,3 +430,12 @@ export async function updateMasterRecord(resource: string, recordId: number, val
 export async function deleteMasterRecord(resource: string, recordId: number): Promise<void> {
   await request<void>(`${API_BASE}/master-data/${encodeURIComponent(resource)}/${recordId}`, { method: "DELETE" });
 }
+
+export async function fetchClientAddresses(clientId: number): Promise<import("./types").ClientAddress[]> { return request(`${API_BASE}/master-data/clients/${clientId}/addresses`, { method: "GET" }); }
+export async function addClientAddress(clientId: number, globalAddressId: number, addressType: string): Promise<void> { await request(`${API_BASE}/master-data/clients/${clientId}/addresses`, { method: "POST", body: JSON.stringify({ global_address_id: globalAddressId, address_type: addressType }) }); }
+export async function updateClientAddress(clientId: number, addressId: number, addressType: string): Promise<void> { await request(`${API_BASE}/master-data/clients/${clientId}/addresses/${addressId}`, { method: "PUT", body: JSON.stringify({ global_address_id: 0, address_type: addressType }) }); }
+export async function deleteClientAddress(clientId: number, addressId: number): Promise<void> { await request<void>(`${API_BASE}/master-data/clients/${clientId}/addresses/${addressId}`, { method: "DELETE" }); }
+export async function fetchSupplierAddresses(supplierId: number): Promise<import("./types").ClientAddress[]> { return request(`${API_BASE}/master-data/suppliers/${supplierId}/addresses`, { method: "GET" }); }
+export async function addSupplierAddress(supplierId: number, globalAddressId: number, addressType: string): Promise<void> { await request(`${API_BASE}/master-data/suppliers/${supplierId}/addresses`, { method: "POST", body: JSON.stringify({ global_address_id: globalAddressId, address_type: addressType }) }); }
+export async function updateSupplierAddress(supplierId: number, addressId: number, addressType: string): Promise<void> { await request(`${API_BASE}/master-data/suppliers/${supplierId}/addresses/${addressId}`, { method: "PUT", body: JSON.stringify({ global_address_id: 0, address_type: addressType }) }); }
+export async function deleteSupplierAddress(supplierId: number, addressId: number): Promise<void> { await request<void>(`${API_BASE}/master-data/suppliers/${supplierId}/addresses/${addressId}`, { method: "DELETE" }); }

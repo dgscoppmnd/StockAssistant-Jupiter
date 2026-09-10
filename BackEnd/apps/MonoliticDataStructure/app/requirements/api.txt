@@ -23,6 +23,8 @@ beautifulsoup4==4.12.3
 markdown==3.4.3
 
 # Vector search
+# pandas 2.1 usa la ABI de NumPy 1.x.
+numpy==1.26.4
 pandas==2.2.3
-qdrant-client==1.15.1
+qdrant-client==1.19.1
 sentence-transformers==5.1.0
