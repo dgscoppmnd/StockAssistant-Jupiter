@@ -1625,3 +1625,15 @@ body[data-theme="day"] .dashboard-topbar, body[data-theme="day"] .dashboard-ai-c
   .dashboard-kpis, .dashboard-charts-grid, .dashboard-side { grid-template-columns: 1fr; }
   .dashboard-topbar-actions label { width: 100%; }.dashboard-topbar-actions select { width: 100%; }
 }
+
+/* Portal-based pickers remain visible outside cards and dialogs. */
+.combobox-floating-popup {
+  position: fixed;
+  z-index: 10000;
+  right: auto;
+  display: flex;
+  flex-direction: column;
+  color: var(--text-main);
+}
+.combobox-floating-popup ul { min-height: 0; flex: 0 1 auto; }
+.combobox-floating-popup p { flex-shrink: 0; }
