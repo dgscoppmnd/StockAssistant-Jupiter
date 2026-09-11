@@ -76,6 +76,17 @@ class ProductPageResponse(BaseModel):
 	page_size: int
 
 
+class ProductOptionResponse(BaseModel):
+	pk_product: int
+	cdgo_producto_externo: Optional[str] = None
+	name_product: str
+
+
+class ProductOptionsResponse(BaseModel):
+	items: list[ProductOptionResponse]
+	next_cursor: Optional[int] = None
+
+
 class ProductImageResponse(BaseModel):
 	id: int
 	product_id: Optional[int] = None

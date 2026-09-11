@@ -3,6 +3,7 @@ from contextlib import nullcontext
 from typing import Any
 from psycopg2.extras import RealDictCursor
 from DataBaseManagement.dbConectionPostgres import db_context
+from .product_search import SEARCH_EXPRESSION, search_pattern
 
 from DataBaseManagement.dbManagement import (
 	count_rows_by_condition_Generic,
@@ -80,6 +81,31 @@ def get_products_page(page: int, page_size: int, connection: Any = None) -> dict
 				ORDER BY p.pk_product ASC
 			""", (page_size, (page - 1) * page_size))
 			return {"items": [dict(row) for row in cursor.fetchall()], "total": total, "page": page, "page_size": page_size}
+
+
+def search_product_options(query: str, after: int, limit: int, connection: Any) -> dict[str, Any]:
+	if not 1 <= limit <= 50 or after < 0 or len(query) > 200:
+		raise ValueError("Parámetros de búsqueda no válidos.")
+	where = "pk_product > %s"
+	params = [after]
+	if query.strip():
+		where += f" AND {SEARCH_EXPRESSION} LIKE %s"
+		params.append(search_pattern(query))
+	with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+		cursor.execute(
+			f"SELECT pk_product, cdgo_producto_externo, name_product FROM public.productos WHERE {where} ORDER BY pk_product LIMIT %s",
+			[*params, limit + 1],
+		)
+		rows = [dict(row) for row in cursor.fetchall()]
+	items = rows[:limit]
+	return {"items": items, "next_cursor": items[-1]["pk_product"] if len(rows) > limit else None}
+
+
+def get_product_option(product_id: int, connection: Any) -> dict[str, Any] | None:
+	with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+		cursor.execute("SELECT pk_product, cdgo_producto_externo, name_product FROM public.productos WHERE pk_product = %s", (product_id,))
+		row = cursor.fetchone()
+		return dict(row) if row else None
 
 
 def get_disabled_products(connection: Any = None) -> list[dict[str, Any]]:

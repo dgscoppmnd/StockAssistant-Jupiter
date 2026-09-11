@@ -19,12 +19,15 @@ from DataBaseManagement.dbManagementProductImages import (
 	set_default_product_image,
 )
 from DataBaseManagement.dbservicesProducts import ProductServicesManager
+from DataBaseManagement.dbManagementProducts import search_product_options, get_product_option
 from DataBaseManagement.schemasProducts import (
 	ProductCreate,
 	ProductImageResponse,
 	ProductImageUploadResponse,
 	ProductResponse,
 	ProductPageResponse,
+	ProductOptionsResponse,
+	ProductOptionResponse,
 	ProductUpdate,
 )
 
@@ -347,6 +350,24 @@ def listar_productos_paginados(
 	db=Depends(get_db_products),
 ):
 	return ProductServicesManager(db).get_Products_page(page, page_size)
+
+
+@router.get("/products/options", response_model=ProductOptionsResponse)
+def buscar_opciones_productos(
+	q: str = Query(default="", max_length=200),
+	after: int = Query(default=0, ge=0),
+	limit: int = Query(default=25, ge=1, le=50),
+	db=Depends(get_db_products),
+):
+	return search_product_options(q, after, limit, db)
+
+
+@router.get("/products/options/{product_id}", response_model=ProductOptionResponse)
+def obtener_opcion_producto(product_id: int, db=Depends(get_db_products)):
+	product = get_product_option(product_id, db)
+	if product is None:
+		raise HTTPException(status_code=404, detail="Producto no encontrado")
+	return product
 
 
 @router.get("/products/{product_id}", response_model=ProductResponse)

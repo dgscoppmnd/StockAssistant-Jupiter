@@ -24,6 +24,8 @@ import type {
   MasterRecord,
   Product,
   ProductPage,
+  ProductOption,
+  ProductOptions,
   ProductCreatePayload,
   ProductImage,
   ProductImageUploadResponse,
@@ -315,6 +317,15 @@ export async function fetchProducts(): Promise<Product[]> {
 
 export async function fetchProductsPage(page: number, pageSize: number, signal?: AbortSignal): Promise<ProductPage> {
   return request<ProductPage>(`${API_BASE}/products/page?page=${page}&page_size=${pageSize}`, { method: "GET", signal });
+}
+
+export async function searchProductOptions(query: string, after = 0, signal?: AbortSignal): Promise<ProductOptions> {
+  const params = new URLSearchParams({ q: query, after: String(after), limit: "25" });
+  return request<ProductOptions>(`${API_BASE}/products/options?${params}`, { method: "GET", signal });
+}
+
+export async function fetchProductOption(id: number, signal?: AbortSignal): Promise<ProductOption> {
+  return request<ProductOption>(`${API_BASE}/products/options/${id}`, { method: "GET", signal });
 }
 
 export async function createProduct(payload: ProductCreatePayload): Promise<Product> {
