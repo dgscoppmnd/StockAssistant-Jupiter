@@ -1,3 +1,4 @@
+import ComboboxPopup from "./ComboboxPopup";
 import { useEffect, useRef, useState } from "react";
 import type { MasterRecord } from "../../types";
 
@@ -69,7 +70,7 @@ export default function SupplierCombobox({ suppliers, selectedId, creating, disa
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => { input.current?.focus(); setOpen(true); setQuery(""); setActive(0); }}>▾</button>
     </div>
-    {expanded && <div className="inventory-picker-popup">
+    {expanded && <ComboboxPopup anchor={input}>
       <ul ref={list} id="stock-order-supplier-options" role="listbox" aria-label="Proveedores" aria-busy={loading}>
         {options.map((option, index) => <li key={option.supplier?.id ?? "create"}
           id={`stock-order-supplier-option-${index}`} role="option"
@@ -80,6 +81,6 @@ export default function SupplierCombobox({ suppliers, selectedId, creating, disa
         </li>)}
       </ul>
       <p className="muted" role="status">{loading ? "Cargando proveedores…" : matches.length ? `${matches.length} proveedores disponibles` : "No hay proveedores que coincidan."}</p>
-    </div>}
+    </ComboboxPopup>}
   </div>;
 }

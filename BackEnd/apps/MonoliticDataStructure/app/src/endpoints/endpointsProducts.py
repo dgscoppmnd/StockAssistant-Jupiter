@@ -1,11 +1,15 @@
 import logging
+import json
 import os
 import uuid
 from pathlib import Path
+from starlette.concurrency import run_in_threadpool
+from DataBaseManagement.product_csv_import import MAX_CSV_BYTES, import_product_csv, import_product_csv_events
+from fastapi.responses import StreamingResponse
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
-from DataBaseManagement.dbConectionPostgres import get_db_products
+from DataBaseManagement.dbConectionPostgres import db_context, get_db_products
 from DataBaseManagement.dbManagementProductImages import (
 	delete_product_image,
 	get_default_product_image_by_product_id,
@@ -15,11 +19,15 @@ from DataBaseManagement.dbManagementProductImages import (
 	set_default_product_image,
 )
 from DataBaseManagement.dbservicesProducts import ProductServicesManager
+from DataBaseManagement.dbManagementProducts import search_product_options, get_product_option
 from DataBaseManagement.schemasProducts import (
 	ProductCreate,
 	ProductImageResponse,
 	ProductImageUploadResponse,
 	ProductResponse,
+	ProductPageResponse,
+	ProductOptionsResponse,
+	ProductOptionResponse,
 	ProductUpdate,
 )
 
@@ -217,6 +225,55 @@ def borrar_imagen_producto(product_id: int, image_id: int, db=Depends(get_db_pro
 	return None
 
 
+@router.post("/products/import-csv")
+async def importar_productos_csv(file: UploadFile = File(...), progress: bool = Query(default=False)):
+	try:
+		if not (file.filename or "").lower().endswith(".csv"):
+			raise HTTPException(status_code=400, detail="Selecciona un archivo .csv.")
+		if file.size is not None and file.size > MAX_CSV_BYTES:
+			raise HTTPException(status_code=413, detail="El CSV supera el límite de 200 MB.")
+		if progress:
+			# Descriptor independiente: sigue abierto aunque FastAPI cierre UploadFile.
+			source = await run_in_threadpool(_duplicate_csv_file, file.file)
+			return StreamingResponse(
+				_stream_product_import(source), media_type="application/x-ndjson",
+				headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+			)
+		return await run_in_threadpool(_import_product_file, file.file)
+	except ValueError as exc:
+		raise HTTPException(status_code=400, detail=str(exc)) from exc
+	except HTTPException:
+		raise
+	except Exception as exc:
+		logger.exception("event=import_products_csv_failed")
+		raise HTTPException(status_code=500, detail="No se pudo importar el CSV. No se ha guardado ningún producto.") from exc
+	finally:
+		await file.close()
+
+
+def _duplicate_csv_file(source):
+	source.seek(0)
+	return os.fdopen(os.dup(source.fileno()), "rb")
+
+
+def _import_product_file(source):
+	with db_context() as db:
+		return import_product_csv(source, db)
+
+
+def _stream_product_import(source):
+	with source:
+		try:
+			with db_context() as db:
+				for event in import_product_csv_events(source, db):
+					yield json.dumps(event, ensure_ascii=False) + "\n"
+		except ValueError as exc:
+			yield json.dumps({"stage": "error", "detail": str(exc)}, ensure_ascii=False) + "\n"
+		except Exception:
+			logger.exception("event=import_products_csv_failed")
+			yield json.dumps({"stage": "error", "detail": "No se pudo importar el CSV. No se ha guardado ningún producto."}) + "\n"
+
+
 @router.post("/products/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
 def crear_producto(product: ProductCreate, db=Depends(get_db_products)):
 	logger.info("event=create_product_start name=%s", product.name_product)
@@ -284,6 +341,33 @@ def contar_deshabilitados(db=Depends(get_db_products)):
 	logger.info("event=count_disabled_products")
 	manager: ProductServicesManager = ProductServicesManager(db)
 	return {"disabled": manager.count_disabled_Products()}
+
+
+@router.get("/products/page", response_model=ProductPageResponse)
+def listar_productos_paginados(
+	page: int = Query(default=1, ge=1),
+	page_size: int = Query(default=10, ge=1, le=100),
+	db=Depends(get_db_products),
+):
+	return ProductServicesManager(db).get_Products_page(page, page_size)
+
+
+@router.get("/products/options", response_model=ProductOptionsResponse)
+def buscar_opciones_productos(
+	q: str = Query(default="", max_length=200),
+	after: int = Query(default=0, ge=0),
+	limit: int = Query(default=25, ge=1, le=50),
+	db=Depends(get_db_products),
+):
+	return search_product_options(q, after, limit, db)
+
+
+@router.get("/products/options/{product_id}", response_model=ProductOptionResponse)
+def obtener_opcion_producto(product_id: int, db=Depends(get_db_products)):
+	product = get_product_option(product_id, db)
+	if product is None:
+		raise HTTPException(status_code=404, detail="Producto no encontrado")
+	return product
 
 
 @router.get("/products/{product_id}", response_model=ProductResponse)

@@ -150,6 +150,16 @@ export type Product = {
   default_image_url?: string | null;
 };
 
+export type ProductPage = {
+  items: Product[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export type ProductOption = Pick<Product, "pk_product" | "cdgo_producto_externo" | "name_product">;
+export type ProductOptions = { items: ProductOption[]; next_cursor: number | null };
+
 export type ProductImage = {
   id: number;
   product_id?: number | null;

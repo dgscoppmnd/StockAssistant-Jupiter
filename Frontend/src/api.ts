@@ -23,6 +23,9 @@ import type {
   PurchaseProposal,
   MasterRecord,
   Product,
+  ProductPage,
+  ProductOption,
+  ProductOptions,
   ProductCreatePayload,
   ProductImage,
   ProductImageUploadResponse,
@@ -33,6 +36,8 @@ import type {
   UserCreatePayload,
   UserUpdatePayload,
 } from "./types";
+
+import { uploadProductCsv, type ProductImportProgress, type ProductImportResult } from "./utils/productCsvUpload";
 
 const API_BASE = "/api";
 const API_KEY_STORAGE_KEY = "stockassistant-api-key";
@@ -292,8 +297,35 @@ export async function deleteUser(userId: number): Promise<void> {
 }
 
 // Products API endpoints
+export async function importProductsCsv(file: File, onProgress?: (progress: ProductImportProgress) => void): Promise<ProductImportResult> {
+  if (onProgress) {
+    const token = getSessionToken();
+    const key = token ? "" : getApiKey();
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    else if (key) headers["X-API-Key"] = key;
+    return uploadProductCsv(file, headers, onProgress);
+  }
+  const formData = new FormData();
+  formData.append("file", file);
+  return request(`${API_BASE}/products/import-csv`, { method: "POST", body: formData });
+}
+
 export async function fetchProducts(): Promise<Product[]> {
   return request<Product[]>(`${API_BASE}/products/`, { method: "GET" });
+}
+
+export async function fetchProductsPage(page: number, pageSize: number, signal?: AbortSignal): Promise<ProductPage> {
+  return request<ProductPage>(`${API_BASE}/products/page?page=${page}&page_size=${pageSize}`, { method: "GET", signal });
+}
+
+export async function searchProductOptions(query: string, after = 0, signal?: AbortSignal): Promise<ProductOptions> {
+  const params = new URLSearchParams({ q: query, after: String(after), limit: "25" });
+  return request<ProductOptions>(`${API_BASE}/products/options?${params}`, { method: "GET", signal });
+}
+
+export async function fetchProductOption(id: number, signal?: AbortSignal): Promise<ProductOption> {
+  return request<ProductOption>(`${API_BASE}/products/options/${id}`, { method: "GET", signal });
 }
 
 export async function createProduct(payload: ProductCreatePayload): Promise<Product> {
