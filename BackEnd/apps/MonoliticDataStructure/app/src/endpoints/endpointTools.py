@@ -10,8 +10,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from DataBaseManagement.dbConectionPostgres import get_db_products
-from DataBaseManagement.dbManagementProducts import insert_product
+from src.DataBaseManagement.dbConectionPostgres import get_db_products
+from src.DataBaseManagement.dbManagementProducts import insert_product
 
 router = APIRouter(prefix="/tools", tags=["tools"])
 logger = logging.getLogger("api.endpointTools")

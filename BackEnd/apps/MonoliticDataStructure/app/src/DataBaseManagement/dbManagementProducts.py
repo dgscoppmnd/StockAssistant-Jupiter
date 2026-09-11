@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from DataBaseManagement.dbManagement import (
+from src.DataBaseManagement.dbManagement import (
 	count_rows_by_condition_Generic,
 	delete_record_Generic,
 	get_all_records_Generic,
