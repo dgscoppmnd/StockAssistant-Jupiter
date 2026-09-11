@@ -1,0 +1,4 @@
+product_id,product_name,description,product_category,brand,sku,product_cost_usd,selling_price_usd,created_at
+PRD0000001,Zapatillas BrandD negro,"Zapatillas BrandD negro de la categoría Fashion: talla S, tejido de algodón. Una opción de calidad para el día a día. SKU SKUD62371BB.",Fashion,BrandD,SKUD62371BB,703.03,3631.04,2026-05-25 10:08:16
+PRD0000002,Silla BrandB negro,Silla BrandB negro de la categoría Home: fabricado en metal reforzado y pensado para espacios multifuncionales. Una opción de calidad para el día a día. SKU SKU8BC310BD.,Home,BrandB,SKU8BC310BD,804.4,430.46,2024-02-25 01:18:07
+PRD0000003,Tablet BrandC gris,"Tablet BrandC gris de la categoría Electronics: 64 GB de RAM, procesador Ryzen 5 5600H y pantalla de 15 pulgadas. Una opción de calidad para el día a día. SKU SKU27D32AE5.",Electronics,BrandC,SKU27D32AE5,885.4,3570.2,2023-10-13 23:02:50

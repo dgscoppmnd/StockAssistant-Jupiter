@@ -115,3 +115,26 @@ No se importan cambios de propietario, conexiones a otras bases, n8n, TaskManage
 - Compose incorpora zona horaria de PostgreSQL y un healthcheck del backend; Nginx y Vite esperan a que esté saludable.
 
 Se mantienen los mismos puertos de acceso y las limitaciones de credenciales externas y certificados descritas arriba. La compilación sigue informando 14 vulnerabilidades heredadas de dependencias frontend; no se realizaron actualizaciones incompatibles dentro de esta integración. Los datos de prueba permanecen en una base separada.
+
+## Reintegración del 11 de septiembre de 2026
+
+Se compararon nuevamente las referencias de `docs` con el proyecto integrado. Las novedades permitidas de esta revisión corresponden al frontend:
+
+- Los agentes de compras y valoraciones seleccionan productos por código o nombre. Incluyen estados de carga, error y reintento; las acciones requieren una selección válida y quedan bloqueadas durante el procesamiento.
+- Cambiar el producto limpia los resultados anteriores del análisis comercial.
+- Productos y proveedores comparten `ComboboxPopup`: la lista se monta fuera de tarjetas y contenedores con recorte, se ajusta al ancho disponible y se abre hacia arriba cuando falta espacio inferior. Conserva búsqueda sin acentos, teclado y selección con ratón.
+
+El backend, `init.sql` y Compose ya incluían las características permitidas de la referencia. No se añadieron tablas duplicadas ni se sobrescribieron las correcciones locales de autenticación, direcciones, conversiones y automatizaciones. Las tablas de origen ausentes del SQL local pertenecen a tareas y registro de horas, expresamente excluidos. El bloque `schema_extensions.sql` sigue incluido íntegramente en `init.sql`.
+
+Se verificó la ausencia de n8n, TaskManager, registros de horas y la antigua marca en el código activo del frontend, backend y Docker. También se normalizaron las referencias textuales a Kit Robotic de la documentación de origen actualizada. `docs` se conserva como referencia excluida del despliegue.
+
+Validación realizada:
+
+- Respaldo de `supply_chain`: `BackEnd/apps/MonoliticDataStructure/app/data/backups/jupiter-before-reintegration-20260911.dump`.
+- SQL aplicado dos veces en `jupiter_20260911_test` y después en la base local respaldada, conservando los volúmenes existentes.
+- 23 pruebas unitarias y 6 pruebas HTTP/SQL de integración aprobadas.
+- TypeScript, compilación Vite, validación de Compose, construcción de la imagen Nginx y `nginx -t` correctos. Portal recompilado activo en <http://localhost:8080>.
+- Inicio de sesión real con `admin@stockassistant.app` y la contraseña solicitada. Catálogo operativo vacío: análisis y clasificación correctamente deshabilitados.
+- Prueba de selectores con datos sintéticos, sin escritura en la base: búsqueda «cafe 2» selecciona «Café 2» con Enter; selección de producto y proveedor con ratón; lista fuera del contenedor recortado y apertura del proveedor hacia arriba, dentro de la pantalla.
+
+La prueba visual reproducible está en `Frontend/tests/combobox-smoke.html`, accesible únicamente mediante Vite en <http://localhost:5173/tests/combobox-smoke.html>; no es una entrada de la compilación de producción. No se ejecutaron consultas reales a proveedores de IA o inteligencia comercial. Se mantienen las limitaciones de validación externa y dependencias descritas en las revisiones anteriores.

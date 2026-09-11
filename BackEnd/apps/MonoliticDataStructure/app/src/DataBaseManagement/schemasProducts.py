@@ -69,6 +69,13 @@ class ProductResponse(BaseModel):
 		from_attributes = True
 
 
+class ProductPageResponse(BaseModel):
+	items: list[ProductResponse]
+	total: int
+	page: int
+	page_size: int
+
+
 class ProductImageResponse(BaseModel):
 	id: int
 	product_id: Optional[int] = None

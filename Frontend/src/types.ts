@@ -150,6 +150,13 @@ export type Product = {
   default_image_url?: string | null;
 };
 
+export type ProductPage = {
+  items: Product[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
 export type ProductImage = {
   id: number;
   product_id?: number | null;
