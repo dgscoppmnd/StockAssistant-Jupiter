@@ -177,7 +177,7 @@ export default function StockAssistantPage() {
               style={{ marginRight: "8px" }}
               type="checkbox"
             />
-            Usar tools de productos y contexto operativo
+            Buscar artículos relacionados en catálogo y Qdrant
           </label>
 
           <button className="primary-btn" disabled={isLoading} type="submit">

@@ -9,7 +9,7 @@ from DataBaseManagement.dbConectionPostgres import get_db_products
 from ai_service import AIProviderError, AIService
 from ollama_service import get_system_prompt
 from security import require_api_key
-from .endpointTools import tool_search_products_db
+from .endpointTools import tool_search_products_db, tool_search_products_semantic
 from .endpointWebs import search_web_duckduckgo
 
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -29,7 +29,29 @@ class AgentChatRequest(BaseModel):
 def _infer_tools_from_prompt(prompt: str) -> dict[str, bool]:
     lowered = prompt.lower()
     return {
-        "products": any(token in lowered for token in ["producto", "productos", "electro", "tienda", "market"]),
+        "products": any(
+            token in lowered
+            for token in [
+                "producto",
+                "productos",
+                "articulo",
+                "artículos",
+                "auricular",
+                "telefono",
+                "teléfono",
+                "movil",
+                "móvil",
+                "ordenador",
+                "electro",
+                "tienda",
+                "market",
+                "busca",
+                "buscar",
+                "encuentra",
+                "recomienda",
+                "similar",
+            ]
+        ),
     }
 
 
@@ -69,6 +91,31 @@ def _primary_provider_response(provider: str, prompt: str, system_prompt: str) -
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
 
+def _semantic_fallback_response(tool_results: dict[str, Any]) -> dict[str, Any] | None:
+    """Construye una respuesta útil cuando no hay proveedor LLM disponible."""
+    products = tool_results.get("semantic_products")
+    if not isinstance(products, list) or not products:
+        return None
+
+    lines = ["He encontrado estos artículos relacionados en el catálogo:"]
+    for index, product in enumerate(products[:10], start=1):
+        if not isinstance(product, dict):
+            continue
+        name = product.get("product_name") or "Artículo sin nombre"
+        category = product.get("product_category") or "categoría no disponible"
+        brand = product.get("brand") or "marca no disponible"
+        score = product.get("score")
+        score_text = f" · similitud {float(score):.2f}" if isinstance(score, (int, float)) else ""
+        lines.append(f"{index}. {name} · {category} · {brand}{score_text}")
+
+    return {
+        "response": "\n".join(lines),
+        "provider": "qdrant",
+        "model": "semantic-search",
+        "used_fallback": True,
+    }
+
+
 @router.post("/stockassistant/chat")
 def stockassistant_chat(
     request: AgentChatRequest,
@@ -97,6 +144,25 @@ def stockassistant_chat(
                 query=prompt,
                 limit=min(request.max_tool_results, 20),
             )
+            try:
+                tool_results["semantic_products"] = tool_search_products_semantic(
+                    query=prompt,
+                    limit=min(request.max_tool_results, 20),
+                )
+            except Exception as exc:
+                logger.exception("event=semantic_product_search_failed")
+                tool_results["semantic_products"] = []
+
+    # La primera carga del modelo de embeddings puede fallar durante un reload;
+    # reintentar una vez evita que una consulta valida termine en un error del LLM.
+    if request.use_tools and inferred["products"] and not tool_results.get("semantic_products"):
+        try:
+            tool_results["semantic_products"] = tool_search_products_semantic(
+                query=prompt,
+                limit=min(request.max_tool_results, 20),
+            )
+        except Exception:
+            logger.exception("event=semantic_product_search_retry_failed")
 
     system_prompt = get_system_prompt() + (
         " Usa SOLO espanol. Explica con lenguaje sencillo y evita jerga innecesaria. "
@@ -122,7 +188,17 @@ def stockassistant_chat(
         list(tool_results.keys()),
     )
 
-    model_result = _primary_provider_response(request.provider, context_prompt, system_prompt)
+    if request.provider == "openai" and not ai_service.provider_status("openai")["configured"]:
+        model_result = _semantic_fallback_response(tool_results)
+        if model_result is None:
+            raise HTTPException(status_code=503, detail="OpenAI no está configurado y no hay resultados semánticos")
+    else:
+        try:
+            model_result = _primary_provider_response(request.provider, context_prompt, system_prompt)
+        except HTTPException:
+            model_result = _semantic_fallback_response(tool_results)
+            if model_result is None:
+                raise
     provider_status = ai_service.status()
     primary_provider = model_result.get("provider") or request.provider
     secondary_provider = "ollama" if primary_provider == "openai" else "openai"

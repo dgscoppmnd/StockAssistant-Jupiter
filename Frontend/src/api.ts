@@ -188,6 +188,24 @@ export async function analyzeWithStockAssistantAgent(payload: AgentChatRequest):
   });
 }
 
+export type SemanticProductResult = {
+  score: number;
+  product_id?: string;
+  product_name?: string;
+  product_category?: string;
+  brand?: string;
+  sku?: string;
+};
+
+export async function searchProductsSemantically(query: string, limit = 10): Promise<SemanticProductResult[]> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  const result = await request<{ query: string; items: SemanticProductResult[] }>(
+    `${API_BASE}/v1/products/semantic-search?${params.toString()}`,
+    { method: "GET" },
+  );
+  return result.items;
+}
+
 export async function fetchInventoryDashboard(): Promise<InventoryDashboard> {
   return request<InventoryDashboard>(`${API_BASE}/inventory/dashboard`, { method: "GET" });
 }
