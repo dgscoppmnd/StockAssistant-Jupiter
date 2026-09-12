@@ -1,0 +1,116 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2024 >>
+stream
+BT
+/F1 10 Tf
+50 750 Td
+12 TL
+(Proyecto Jupiter: base de conocimiento) Tj
+T*
+() Tj
+T*
+(Proposito) Tj
+T*
+() Tj
+T*
+(Proyecto Jupiter es una plataforma de apoyo para la gestion de inventario, productos,) Tj
+T*
+(proveedores, ventas, logistica y metricas. El producto central, StockAssistant, combina una) Tj
+T*
+(API FastAPI, una interfaz web y servicios de datos para ayudar a equipos operativos y) Tj
+T*
+(ejecutivos.) Tj
+T*
+() Tj
+T*
+(Componentes) Tj
+T*
+() Tj
+T*
+(La API principal expone rutas versionadas bajo /api/v1 para productos, inventario, ventas,) Tj
+T*
+(proveedores, logistica, metricas y analitica. El frontend se implementa con React y Vite.) Tj
+T*
+(PostgreSQL conserva los datos operativos y Qdrant se reserva para recuperacion semantica.) Tj
+T*
+() Tj
+T*
+(Regla de datos) Tj
+T*
+() Tj
+T*
+(El vector store no debe ser la fuente de verdad para precio, stock, ventas ni otros valores) Tj
+T*
+(que cambian. La recuperacion vectorial encuentra contexto o identificadores y la API debe) Tj
+T*
+(consultar PostgreSQL cuando necesita valores operativos actuales.) Tj
+T*
+() Tj
+T*
+(RAG documental) Tj
+T*
+() Tj
+T*
+(El RAG documental utiliza la coleccion jupiter_knowledge, distinta de la coleccion products.) Tj
+T*
+(Acepta PDF, Markdown y texto. Cada fragmento guarda fuente, tipo, pagina cuando aplica y) Tj
+T*
+(numero de fragmento. Las respuestas se deben generar solo a partir de fragmentos recuperados) Tj
+T*
+(y deben incluir sus citas.) Tj
+T*
+() Tj
+T*
+(Flujo de actualizacion) Tj
+T*
+() Tj
+T*
+(1. Depositar los documentos aprobados en data/knowledge.) Tj
+T*
+(2. Iniciar Qdrant.) Tj
+T*
+(3. Ejecutar el indexador documental.) Tj
+T*
+(4. Consultar /api/v1/knowledge/search para evaluar recuperacion.) Tj
+T*
+(5. Consultar /api/v1/knowledge/answer cuando haya un proveedor LLM configurado.) Tj
+T*
+() Tj
+T*
+(Limites) Tj
+T*
+() Tj
+T*
+(Si no hay evidencia suficiente, el asistente debe indicarlo claramente. El RAG no sustituye) Tj
+T*
+(autorizaciones, politicas internas ni una consulta en tiempo real al sistema transaccional.) Tj
+T*
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000185 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+2387
+%%EOF

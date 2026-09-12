@@ -10,6 +10,7 @@ generate-data = "src.generators.main_generator:run"
 load-data = "src.database.loader:run"
 start-api = "src.api.main:start"
 index-products = "src.vector_store.product_indexer:main"
+index-knowledge = "src.vector_store.knowledge:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]

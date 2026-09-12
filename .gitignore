@@ -55,6 +55,13 @@ Thumbs.db
 
 # Docker volumes locales
 data/
+!BackEnd/
+!BackEnd/apps/
+!BackEnd/apps/MonoliticDataStructure/
+!BackEnd/apps/MonoliticDataStructure/app/
+!BackEnd/apps/MonoliticDataStructure/app/data/
+!BackEnd/apps/MonoliticDataStructure/app/data/knowledge/
+!BackEnd/apps/MonoliticDataStructure/app/data/knowledge/**
 volumes/
 
 # Node dependencies
@@ -68,3 +75,9 @@ html_nginx/web/dist/
 
 # No cargar la carpeta Docs
 docs/
+!BackEnd/
+!BackEnd/apps/
+!BackEnd/apps/MonoliticDataStructure/
+!BackEnd/apps/MonoliticDataStructure/app/
+!BackEnd/apps/MonoliticDataStructure/app/docs/
+!BackEnd/apps/MonoliticDataStructure/app/docs/**

@@ -13,7 +13,7 @@ from .config import settings
 from .database import engine, Base
 from .routes import (
     products, inventory, sales, suppliers, 
-    logistics, metrics, analytics
+    logistics, metrics, analytics, knowledge
 )
 from endpoints.endpoints import public_router, router as stockassistant_router
 from DataBaseManagement.dbConectionPostgres import init_db, init_products_db, _get_postgres_connection_server
@@ -97,6 +97,7 @@ app.include_router(suppliers.router, prefix="/api/v1/suppliers", tags=["Supplier
 app.include_router(logistics.router, prefix="/api/v1/logistics", tags=["Logistics"])
 app.include_router(metrics.router, prefix="/api/v1/metrics", tags=["Metrics"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"])
+app.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["Knowledge RAG"])
 app.include_router(public_router, prefix="/api", tags=["Auth"])
 app.include_router(stockassistant_router, prefix="/api", tags=["Proyecto Jupiter"])
 
