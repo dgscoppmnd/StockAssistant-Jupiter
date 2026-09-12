@@ -23,6 +23,9 @@ import type {
   PurchaseProposal,
   MasterRecord,
   Product,
+  ProductPage,
+  ProductOption,
+  ProductOptions,
   ProductCreatePayload,
   ProductImage,
   ProductImageUploadResponse,
@@ -33,6 +36,8 @@ import type {
   UserCreatePayload,
   UserUpdatePayload,
 } from "./types";
+
+import { uploadProductCsv, type ProductImportProgress, type ProductImportResult } from "./utils/productCsvUpload";
 
 const API_BASE = "/api";
 const API_KEY_STORAGE_KEY = "stockassistant-api-key";
@@ -292,8 +297,35 @@ export async function deleteUser(userId: number): Promise<void> {
 }
 
 // Products API endpoints
+export async function importProductsCsv(file: File, onProgress?: (progress: ProductImportProgress) => void): Promise<ProductImportResult> {
+  if (onProgress) {
+    const token = getSessionToken();
+    const key = token ? "" : getApiKey();
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    else if (key) headers["X-API-Key"] = key;
+    return uploadProductCsv(file, headers, onProgress);
+  }
+  const formData = new FormData();
+  formData.append("file", file);
+  return request(`${API_BASE}/products/import-csv`, { method: "POST", body: formData });
+}
+
 export async function fetchProducts(): Promise<Product[]> {
   return request<Product[]>(`${API_BASE}/products/`, { method: "GET" });
+}
+
+export async function fetchProductsPage(page: number, pageSize: number, signal?: AbortSignal): Promise<ProductPage> {
+  return request<ProductPage>(`${API_BASE}/products/page?page=${page}&page_size=${pageSize}`, { method: "GET", signal });
+}
+
+export async function searchProductOptions(query: string, after = 0, signal?: AbortSignal): Promise<ProductOptions> {
+  const params = new URLSearchParams({ q: query, after: String(after), limit: "25" });
+  return request<ProductOptions>(`${API_BASE}/products/options?${params}`, { method: "GET", signal });
+}
+
+export async function fetchProductOption(id: number, signal?: AbortSignal): Promise<ProductOption> {
+  return request<ProductOption>(`${API_BASE}/products/options/${id}`, { method: "GET", signal });
 }
 
 export async function createProduct(payload: ProductCreatePayload): Promise<Product> {
@@ -430,3 +462,12 @@ export async function updateMasterRecord(resource: string, recordId: number, val
 export async function deleteMasterRecord(resource: string, recordId: number): Promise<void> {
   await request<void>(`${API_BASE}/master-data/${encodeURIComponent(resource)}/${recordId}`, { method: "DELETE" });
 }
+
+export async function fetchClientAddresses(clientId: number): Promise<import("./types").ClientAddress[]> { return request(`${API_BASE}/master-data/clients/${clientId}/addresses`, { method: "GET" }); }
+export async function addClientAddress(clientId: number, globalAddressId: number, addressType: string): Promise<void> { await request(`${API_BASE}/master-data/clients/${clientId}/addresses`, { method: "POST", body: JSON.stringify({ global_address_id: globalAddressId, address_type: addressType }) }); }
+export async function updateClientAddress(clientId: number, addressId: number, addressType: string): Promise<void> { await request(`${API_BASE}/master-data/clients/${clientId}/addresses/${addressId}`, { method: "PUT", body: JSON.stringify({ global_address_id: 0, address_type: addressType }) }); }
+export async function deleteClientAddress(clientId: number, addressId: number): Promise<void> { await request<void>(`${API_BASE}/master-data/clients/${clientId}/addresses/${addressId}`, { method: "DELETE" }); }
+export async function fetchSupplierAddresses(supplierId: number): Promise<import("./types").ClientAddress[]> { return request(`${API_BASE}/master-data/suppliers/${supplierId}/addresses`, { method: "GET" }); }
+export async function addSupplierAddress(supplierId: number, globalAddressId: number, addressType: string): Promise<void> { await request(`${API_BASE}/master-data/suppliers/${supplierId}/addresses`, { method: "POST", body: JSON.stringify({ global_address_id: globalAddressId, address_type: addressType }) }); }
+export async function updateSupplierAddress(supplierId: number, addressId: number, addressType: string): Promise<void> { await request(`${API_BASE}/master-data/suppliers/${supplierId}/addresses/${addressId}`, { method: "PUT", body: JSON.stringify({ global_address_id: 0, address_type: addressType }) }); }
+export async function deleteSupplierAddress(supplierId: number, addressId: number): Promise<void> { await request<void>(`${API_BASE}/master-data/suppliers/${supplierId}/addresses/${addressId}`, { method: "DELETE" }); }

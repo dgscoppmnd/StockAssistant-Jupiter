@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 import os
 import time
 from contextlib import contextmanager
 from typing import Any, Generator
 
 import psycopg2
+from .product_search import SEARCH_INDEX_SQL
 
 logger = logging.getLogger("api.db")
 
@@ -631,6 +633,9 @@ def init_products_db() -> None:
         CREATE INDEX IF NOT EXISTS ix_purchase_proposals_pending
             ON public.purchase_proposals (status, product_id, warehouse_id)
         """,
+        Path(__file__).with_name("schema_extensions.sql").read_text(encoding="utf-8"),
+        "CREATE EXTENSION IF NOT EXISTS pg_trgm",
+        SEARCH_INDEX_SQL,
     ]
 
     with db_context() as connection:

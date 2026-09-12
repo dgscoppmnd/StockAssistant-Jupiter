@@ -450,9 +450,11 @@ class InventoryService:
             is_stockout = row["available_qty"] <= row["reorder_point"]
             row["kind"] = "riesgo_rotura" if is_stockout else "sobrestock"
             row["severity"] = "alta" if row["available_qty"] <= 0 else ("media" if is_stockout else "baja")
+            available_qty_fmt = f"{row['available_qty']:,.0f}"
+            reorder_point_fmt = f"{row['reorder_point']:,.0f}"
             row["message"] = (
-                f"Disponible {row['available_qty']} {row['base_unit_code']} frente a punto de reposición {row['reorder_point']}"
-                if is_stockout else f"Disponible {row['available_qty']} {row['base_unit_code']} por encima del nivel objetivo"
+                f"Disponible {available_qty_fmt} {row['base_unit_code']} frente a punto de reposición {reorder_point_fmt}"
+                if is_stockout else f"Disponible {available_qty_fmt} {row['base_unit_code']} por encima del nivel objetivo"
             )
 
         evolution = self._fetchall(
