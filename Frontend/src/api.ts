@@ -489,3 +489,12 @@ export async function fetchSupplierAddresses(supplierId: number): Promise<import
 export async function addSupplierAddress(supplierId: number, globalAddressId: number, addressType: string): Promise<void> { await request(`${API_BASE}/master-data/suppliers/${supplierId}/addresses`, { method: "POST", body: JSON.stringify({ global_address_id: globalAddressId, address_type: addressType }) }); }
 export async function updateSupplierAddress(supplierId: number, addressId: number, addressType: string): Promise<void> { await request(`${API_BASE}/master-data/suppliers/${supplierId}/addresses/${addressId}`, { method: "PUT", body: JSON.stringify({ global_address_id: 0, address_type: addressType }) }); }
 export async function deleteSupplierAddress(supplierId: number, addressId: number): Promise<void> { await request<void>(`${API_BASE}/master-data/suppliers/${supplierId}/addresses/${addressId}`, { method: "DELETE" }); }
+
+export async function saveKnowledgeDocument(values: Record<string, unknown>, recordId?: number): Promise<MasterRecord> {
+  const { archivo, ...metadata } = values;
+  const form = new FormData();
+  form.append("values", JSON.stringify(metadata));
+  if (archivo instanceof File) form.append("file", archivo);
+  const path = recordId === undefined ? "knowledge-documents/with-file" : `knowledge-documents/${recordId}/with-file`;
+  return request<MasterRecord>(`${API_BASE}/master-data/${path}`, { method: recordId === undefined ? "POST" : "PUT", body: form });
+}
