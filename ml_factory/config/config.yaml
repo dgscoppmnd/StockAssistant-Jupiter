@@ -1,0 +1,34 @@
+database:
+  url: "postgresql+psycopg2://${POSTGRES_USER:admin}:${POSTGRES_PASSWORD:admin123}@${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DB:supply_chain}"
+  tables:
+    sales: sales
+    inventory: inventory
+    products: products
+    suppliers: suppliers
+    logistics: logistics
+    warehouse: warehouse
+
+model:
+  stockout:
+    name: stockout-predictor
+    type: classification
+  reorder:
+    name: reorder-forecaster
+    type: regression
+  params:
+    n_estimators: 300
+    max_depth: 6
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    random_state: 42
+    n_jobs: 4
+
+mlflow:
+  tracking_uri: "http://localhost:5000"
+  experiment_name: stockassistant-ml-factory
+  registered_model_stage: Production
+
+paths:
+  artifacts: artifacts
+  plots: artifacts/plots
