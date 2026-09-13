@@ -9,6 +9,7 @@ requires-python = ">=3.10"
 generate-data = "src.generators.main_generator:run"
 load-data = "src.database.loader:run"
 start-api = "src.api.main:start"
+index-products = "src.vector_store.product_indexer:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]

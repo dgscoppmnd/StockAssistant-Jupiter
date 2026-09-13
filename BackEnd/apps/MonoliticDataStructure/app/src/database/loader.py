@@ -36,7 +36,7 @@ LOAD_ORDER = [
         "table": "products",
         "file": DATA_DIR / "products.csv",
         "columns": [
-            "product_id", "product_category", "brand", "sku",
+            "product_id", "product_name", "description", "product_category", "brand", "sku",
             "product_cost_usd", "selling_price_usd", "created_at"
         ],
         "conflict": "ON CONFLICT (product_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP"

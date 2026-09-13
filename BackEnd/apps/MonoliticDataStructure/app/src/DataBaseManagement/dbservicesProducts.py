@@ -6,6 +6,7 @@ from .dbManagementProducts import (
 	count_disabled_products,
 	delete_product,
 	get_all_products,
+	get_products_page,
 	get_disabled_products,
 	get_product_by_id,
 	insert_product,
@@ -59,6 +60,9 @@ class ProductServicesManager:
 			result["fk_last_update_user"] = 1
 		if result.get("user_rating") is None:
 			result["user_rating"] = 0.0
+		# La consulta del listado ya incluye la imagen, incluso cuando es NULL.
+		if "default_image_url" in result:
+			return result
 
 		try:
 			default_image = get_default_product_image_by_product_id(result["pk_product"], connection=self.db)
@@ -104,6 +108,11 @@ class ProductServicesManager:
 	def get_all_Products(self) -> list[dict[str, Any]]:
 		rows = get_all_products(connection=self.db)
 		return [self._serialize_Product(row) for row in rows]
+
+	def get_Products_page(self, page: int, page_size: int) -> dict[str, Any]:
+		result = get_products_page(page, page_size, connection=self.db)
+		result["items"] = [self._serialize_Product(row) for row in result["items"]]
+		return result
 
 	def set_Product_status(self, product_id: int) -> dict[str, Any]:
 		updated = update_product(

@@ -1,9 +1,10 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BootstrapTable from "react-bootstrap-table-next";
 import paginationFactory from "react-bootstrap-table2-paginator";
-import { createProduct, deleteProduct, fetchProducts, updateProduct } from "../api";
+import { createProduct, deleteProduct, fetchProductsPage, importProductsCsv, updateProduct } from "../api";
 import type { Product, ProductCreatePayload, ProductUpdatePayload } from "../types";
 import ProductEditerForm, { type EditorState, emptyEditor } from "./components/productEditerForm";
+import type { ProductImportProgress } from "../utils/productCsvUpload";
 
 function toInputDate(raw?: string | null): string {
   if (!raw) return "";
@@ -66,27 +67,81 @@ function buildPayload(editor: EditorState): ProductCreatePayload {
 export default function ProductlistPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 10, total: 0 });
+  const requestedPage = useRef({ page: 1, pageSize: 10 });
+  const activeRequest = useRef<AbortController | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editor, setEditor] = useState<EditorState>(emptyEditor);
+  const [showImport, setShowImport] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const [importResult, setImportResult] = useState("");
+  const [importProgress, setImportProgress] = useState<ProductImportProgress | null>(null);
+  const progressLabels = {
+    uploading: "Subiendo archivo (1/3)",
+    validating: "Validando CSV (2/3)",
+    importing: "Importando productos (3/3)",
+    committing: "Confirmando el guardado",
+    complete: "Importación completada",
+  };
 
-  const loadProducts = useCallback(async () => {
+  const loadProducts = useCallback(async (page = requestedPage.current.page, pageSize = requestedPage.current.pageSize) => {
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    requestedPage.current = { page, pageSize };
     setLoading(true);
     setError("");
     try {
-      const data = await fetchProducts();
-      setProducts(data);
+      const data = await fetchProductsPage(page, pageSize, controller.signal);
+      if (controller.signal.aborted) return;
+      setProducts(data.items);
+      requestedPage.current = { page: data.page, pageSize: data.page_size };
+      setPagination({ page: data.page, pageSize: data.page_size, total: data.total });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudieron cargar los productos");
+      if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "No se pudieron cargar los productos");
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void loadProducts();
+    return () => activeRequest.current?.abort();
   }, [loadProducts]);
+
+  const onImport = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!csvFile || importing) return;
+    setImportError("");
+    setImportResult("");
+    setImportProgress(null);
+    if (!csvFile.name.toLowerCase().endsWith(".csv") || csvFile.size > 200 * 1024 * 1024) {
+      setImportError("Selecciona un archivo .csv de hasta 200 MB.");
+      return;
+    }
+    setImporting(true);
+    try {
+      const result = await importProductsCsv(csvFile, setImportProgress);
+      setImportResult(`Importación completada: ${result.imported} productos importados y ${result.skipped} omitidos por código existente, de ${result.total} productos.`);
+      setCsvFile(null);
+      setShowImport(false);
+      await loadProducts();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "No se pudo importar el CSV.";
+      try {
+        const parsed = JSON.parse(message) as { detail?: unknown };
+        setImportError(typeof parsed.detail === "string" ? parsed.detail : message);
+      } catch {
+        setImportError(message);
+      }
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const openCreate = () => {
     setEditor(emptyEditor);
@@ -94,7 +149,7 @@ export default function ProductlistPage() {
     setShowModal(true);
   };
 
-  const openEdit = (product: Product) => {
+  const openEdit = useCallback((product: Product) => {
     setEditor({
       pk_product: product.pk_product,
       cdgo_producto_externo: product.cdgo_producto_externo ?? "",
@@ -115,7 +170,7 @@ export default function ProductlistPage() {
     });
     setError("");
     setShowModal(true);
-  };
+  }, []);
 
   const closeModal = () => {
     setShowModal(false);
@@ -151,7 +206,7 @@ export default function ProductlistPage() {
     }
   };
 
-  const onDelete = async (pkProduct: number, name: string) => {
+  const onDelete = useCallback(async (pkProduct: number, name: string) => {
     if (!window.confirm(`¿Borrar el producto ${name}?`)) return;
     try {
       await deleteProduct(pkProduct);
@@ -159,7 +214,7 @@ export default function ProductlistPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo borrar el producto");
     }
-  };
+  }, [loadProducts]);
 
   const columns = useMemo<any[]>(
     () => [
@@ -217,13 +272,14 @@ export default function ProductlistPage() {
         style: { minWidth: "132px" },
         formatter: (_: unknown, product: Product): ReactNode => (
           <div className="actions-cell">
-            <button className="chip-btn" onClick={() => openEdit(product)} title="Editar" type="button">
+            <button className="chip-btn" onClick={() => openEdit(product)} title="Editar" type="button" disabled={loading}>
               ✏️
             </button>
             <button
               className="chip-btn danger"
               onClick={() => void onDelete(product.pk_product, product.name_product)}
               title="Borrar"
+              disabled={loading}
               type="button"
             >
               🗑️
@@ -232,7 +288,7 @@ export default function ProductlistPage() {
         )
       }
     ],
-    []
+    [openEdit, onDelete, loading]
   );
 
   return (
@@ -242,19 +298,48 @@ export default function ProductlistPage() {
         <button className="primary-btn" onClick={openCreate} type="button">
           + Nuevo producto
         </button>
-        {error && <p className="error-line" style={{ margin: 0 }}>{error}</p>}
+        <button className="primary-btn" onClick={() => { setShowImport(!showImport); setCsvFile(null); setImportError(""); setImportProgress(null); }} type="button" disabled={importing} aria-expanded={showImport} aria-controls="product-csv-import">
+          Importar CSV
+        </button>
+        {error && <p className="error-line" role="alert" style={{ margin: 0 }}>{error} <button type="button" className="chip-btn" disabled={loading} onClick={() => void loadProducts()}>Recargar lista</button></p>}
       </div>
 
-      {loading ? (
-        <p className="muted">Cargando productos...</p>
-      ) : (
-        <div className="users-table-wrapper">
-          {products.length === 0 ? (
+      {importResult && <p role="status">{importResult}</p>}
+      {importProgress && !importError && (
+        <div style={{ margin: "16px 0" }}>
+          <p id="product-import-progress-label" role="status" style={{ marginBottom: 6 }}>
+            {progressLabels[importProgress.stage]}
+            {importProgress.stage !== "committing" && `: ${importProgress.percent}%`}
+            {importProgress.stage === "importing" && ` · ${importProgress.processed?.toLocaleString("es-ES")} de ${importProgress.total?.toLocaleString("es-ES")} productos procesados`}
+          </p>
+          <progress aria-labelledby="product-import-progress-label" max={100} value={importProgress.stage === "committing" ? undefined : importProgress.percent} style={{ width: "100%", height: 22, accentColor: "#2563eb" }} />
+        </div>
+      )}
+      {showImport && (
+        <form id="product-csv-import" onSubmit={onImport} className="users-table-wrapper" style={{ padding: 20, marginBottom: 20 }} aria-busy={importing}>
+          <h2 style={{ fontSize: "1.2rem" }}>Importar productos desde CSV</h2>
+          <p>Usa el formato de formatoEjemploProductos.csv: UTF-8, separado por comas, hasta 200 MB. Los archivos grandes pueden tardar varios minutos en importarse.</p>
+          <p style={{ overflowWrap: "anywhere" }}><strong>Cabecera:</strong> product_id,product_name,description,product_category,brand,sku,product_cost_usd,selling_price_usd,created_at</p>
+          <p>El coste se guarda como precio base y el precio de venta como precio final en USD. Categoría, marca y SKU se añaden a la descripción. Fecha: AAAA-MM-DD HH:MM:SS (UTC).</p>
+          <p>Se omiten los códigos externos existentes. Los identificadores repetidos dentro del CSV o las filas inválidas impiden importar el archivo completo.</p>
+          <label htmlFor="product-csv-file">Archivo CSV</label>{" "}
+          <input id="product-csv-file" type="file" accept=".csv,text/csv" disabled={importing} required onChange={(event) => { setCsvFile(event.target.files?.[0] ?? null); setImportError(""); }} />
+          <div className="actions-cell" style={{ marginTop: 16 }}>
+            <button className="primary-btn" type="submit" disabled={!csvFile || importing}>{importing ? "Importando..." : "Importar productos"}</button>
+            <button className="chip-btn" type="button" disabled={importing} onClick={() => { setShowImport(false); setCsvFile(null); setImportError(""); }}>Cancelar</button>
+          </div>
+          {importError && <p className="error-line" role="alert">{importError}</p>}
+        </form>
+      )}
+
+      {loading && <p className="muted" role="status">Cargando productos...</p>}
+        <div className="users-table-wrapper" aria-busy={loading}>
+          {products.length === 0 && !loading && !error ? (
             <p className="muted" style={{ padding: "18px 14px" }}>
-              No hay productos. Crea uno con "+ Nuevo producto".
+              No hay productos. Crea uno con "+ Nuevo producto" o usa "Importar CSV".
             </p>
-          ) : (
-            <div style={{ minWidth: 1700 }}>
+          ) : products.length > 0 ? (
+            <div style={{ minWidth: 1700, opacity: loading ? 0.6 : 1, pointerEvents: loading ? "none" : "auto" }}>
               <BootstrapTable
                 keyField="pk_product"
                 data={products}
@@ -262,10 +347,17 @@ export default function ProductlistPage() {
                 classes="users-table"
                 headerClasses="users-table"
                 bordered={false}
+                remote={{ pagination: true }}
+                onTableChange={(type: string, state: { page: number; sizePerPage: number }) => {
+                  if (type !== "pagination" || loading) return;
+                  const nextPage = state.sizePerPage !== pagination.pageSize ? 1 : state.page;
+                  void loadProducts(nextPage, state.sizePerPage);
+                }}
                 pagination={paginationFactory({
-                  page: 1,
+                  page: pagination.page,
                   pageStartIndex: 1,
-                  sizePerPage: 10,
+                  sizePerPage: pagination.pageSize,
+                  totalSize: pagination.total,
                   sizePerPageList: [
                     { text: "10", value: 10 },
                     { text: "25", value: 25 },
@@ -276,9 +368,8 @@ export default function ProductlistPage() {
                 })}
               />
             </div>
-          )}
+          ) : null}
         </div>
-      )}
 
       {showModal && (
         <div

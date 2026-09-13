@@ -1,15 +1,25 @@
-import { FormEvent, useEffect, useState } from "react";
-import { askCustomerSupport, createPurchaseRecommendation, fetchCompetition, fetchExternalSourceStatuses, fetchFinancialSummary, fetchMarketIntelligence, fetchRisks, fetchSalesForecast, fetchStockAlerts, processReviewBatch } from "../api";
-import type { CustomerSupportAnswer, ExternalSourceStatus, FinancialSummary, PurchaseRecommendation, SalesForecast, StockAlert } from "../types";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { askCustomerSupport, createPurchaseRecommendation, fetchCompetition, fetchExternalSourceStatuses, fetchFinancialSummary, fetchMarketIntelligence, fetchProducts, fetchRisks, fetchSalesForecast, fetchStockAlerts, processReviewBatch } from "../api";
+import type { CustomerSupportAnswer, ExternalSourceStatus, FinancialSummary, Product, PurchaseRecommendation, SalesForecast, StockAlert } from "../types";
 import SectionIcon from "./components/SectionIcon";
+import ProductCombobox from "./components/ProductCombobox";
 
 export default function AgentsOperationsPage() {
   const [sources, setSources] = useState<ExternalSourceStatus[]>([]);
   const [alerts, setAlerts] = useState<StockAlert[]>([]);
   const [recommendation, setRecommendation] = useState<PurchaseRecommendation | null>(null);
   const [productId, setProductId] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const selectedProduct = products.find((product) => product.pk_product === Number(productId));
+  const canAnalyze = Boolean(selectedProduct) && !productsLoading && !productsError && !analyzing;
   const [reviewProductId, setReviewProductId] = useState("");
   const [reviews, setReviews] = useState("");
+  const [processingReviews, setProcessingReviews] = useState(false);
+  const selectedReviewProduct = products.find((product) => product.pk_product === Number(reviewProductId));
+  const canProcessReviews = Boolean(selectedReviewProduct) && Boolean(reviews.trim()) && !productsLoading && !productsError && !processingReviews;
   const [status, setStatus] = useState("Cargando agentes...");
   const [error, setError] = useState("");
   const [forecast, setForecast] = useState<SalesForecast | null>(null);
@@ -29,23 +39,45 @@ export default function AgentsOperationsPage() {
   };
   useEffect(() => { void load(); }, []);
 
+  const loadProducts = useCallback(async () => {
+    setProductsLoading(true);
+    setProductsError("");
+    try {
+      setProducts(await fetchProducts());
+    } catch (err) {
+      setProductsError(err instanceof Error ? err.message : "No se pudieron cargar los productos.");
+    } finally {
+      setProductsLoading(false);
+    }
+  }, []);
+  useEffect(() => { void loadProducts(); }, [loadProducts]);
+
   const recommend = async (event: FormEvent) => {
-    event.preventDefault(); setError("");
+    event.preventDefault();
+    if (!canAnalyze) return;
+    setError(""); setAnalyzing(true);
     try { setRecommendation(await createPurchaseRecommendation(Number(productId))); setStatus("Recomendacion calculada con evidencia disponible."); }
     catch (err) { setError(err instanceof Error ? err.message : "No se pudo crear la recomendacion"); }
+    finally { setAnalyzing(false); }
   };
   const submitReviews = async (event: FormEvent) => {
-    event.preventDefault(); setError("");
+    event.preventDefault();
+    if (!canProcessReviews) return;
+    setError(""); setProcessingReviews(true);
     const batch = reviews.split("\n").map((text) => text.trim()).filter(Boolean).map((text) => ({ text }));
     try { const result = await processReviewBatch({ product_id: Number(reviewProductId), source: "manual", reviews: batch }); setStatus(`Lote procesado: ${result.processed_reviews} valoraciones.`); setReviews(""); }
     catch (err) { setError(err instanceof Error ? err.message : "No se pudieron procesar las valoraciones"); }
+    finally { setProcessingReviews(false); }
   };
   const analyzeProduct = async () => {
+    if (!canAnalyze) return;
+    setAnalyzing(true);
     try {
       const id = Number(productId);
       const [nextForecast, nextFinancial, nextCompetition] = await Promise.all([fetchSalesForecast(id), fetchFinancialSummary(id), fetchCompetition(id)]);
       setForecast(nextForecast); setFinancial(nextFinancial); setCompetition(nextCompetition); setStatus("Prevision, margen y competencia calculados con evidencia."); setError("");
     } catch (err) { setError(err instanceof Error ? err.message : "No se pudo analizar el producto"); }
+    finally { setAnalyzing(false); }
   };
   const askSupport = async (event: FormEvent) => {
     event.preventDefault(); try { setSupport(await askCustomerSupport(question, productId ? Number(productId) : undefined)); setError(""); } catch (err) { setError(err instanceof Error ? err.message : "No se pudo consultar al asistente"); }
@@ -61,8 +93,40 @@ export default function AgentsOperationsPage() {
       <article className="card"><p className="section-label">Fuentes externas</p><h3><SectionIcon kind="source" />Disponibilidad y modo</h3><div className="inventory-list">{sources.map((source) => <div className="inventory-list-item" key={source.name}><strong>{source.name}</strong><span className={source.available ? "source-live" : "source-offline"}>{source.available ? "Disponible" : "No disponible"}</span><small>{source.detail}</small></div>)}</div></article>
     </section>
     <section className="grid two-columns">
-      <article className="card"><p className="section-label">Agente de compras</p><h3><SectionIcon kind="cart" />Recomendacion con evidencia</h3><form className="quick-row" onSubmit={recommend}><input required min="1" placeholder="ID de producto" type="number" value={productId} onChange={(event) => setProductId(event.target.value)} /><button className="primary-btn" type="submit">Analizar compra</button></form><button className="chip-btn" disabled={!productId} onClick={() => void analyzeProduct()} type="button">Analisis comercial</button>{recommendation && <div className="agent-result"><strong>{recommendation.product_name}</strong><p>Pedido sugerido: {recommendation.recommended_qty} {recommendation.base_unit_code}</p><p>Coste estimado: {recommendation.estimated_landed_cost ?? "Sin oferta"} {recommendation.currency}</p><p>{recommendation.explanation}</p><small>Ofertas comparables: {recommendation.offers.length}</small></div>}</article>
-      <article className="card"><p className="section-label">Agente de valoraciones</p><h3><SectionIcon kind="review" />Procesar lote</h3><form className="stack" onSubmit={submitReviews}><input required min="1" placeholder="ID de producto" type="number" value={reviewProductId} onChange={(event) => setReviewProductId(event.target.value)} /><textarea required placeholder="Una valoracion por linea" value={reviews} onChange={(event) => setReviews(event.target.value)} rows={5} /><button className="chip-btn" type="submit">Clasificar valoraciones</button></form></article>
+      <article className="card"><p className="section-label">Agente de compras</p>
+        <h3><SectionIcon kind="cart" />Recomendacion con evidencia</h3>
+        <form className="stack" onSubmit={recommend}>
+          <ProductCombobox products={products} selectedId={Number(productId)}
+            disabled={analyzing || Boolean(productsError)} loading={productsLoading}
+            onSelect={(product) => {
+              if (product.pk_product === Number(productId)) return;
+              setProductId(String(product.pk_product));
+              setRecommendation(null); setForecast(null); setFinancial(null); setCompetition(null);
+              setError("");
+            }} />
+          {productsError && <p className="error-line" role="alert">{productsError} <button className="chip-btn" type="button" onClick={() => void loadProducts()}>Reintentar</button></p>}
+          <button className="primary-btn" disabled={!canAnalyze} type="submit">Analizar compra</button>
+        </form>
+        <button className="chip-btn" disabled={!canAnalyze} onClick={() => void analyzeProduct()} type="button">Analisis comercial</button>
+        {recommendation && <div className="agent-result">
+          <strong>{recommendation.product_name}</strong>
+          <p>Pedido sugerido: {recommendation.recommended_qty} {recommendation.base_unit_code}</p>
+          <p>Coste estimado: {recommendation.estimated_landed_cost ?? "Sin oferta"} {recommendation.currency}</p>
+          <p>{recommendation.explanation}</p>
+          <small>Ofertas comparables: {recommendation.offers.length}</small>
+        </div>}
+      </article>
+      <article className="card"><p className="section-label">Agente de valoraciones</p>
+        <h3><SectionIcon kind="review" />Procesar lote</h3>
+        <form className="stack" onSubmit={submitReviews}>
+          <ProductCombobox products={products} selectedId={Number(reviewProductId)}
+            disabled={processingReviews || Boolean(productsError)} loading={productsLoading}
+            onSelect={(product) => { setReviewProductId(String(product.pk_product)); setError(""); }} />
+          {productsError && <p className="error-line" role="alert">{productsError} <button className="chip-btn" type="button" onClick={() => void loadProducts()}>Reintentar</button></p>}
+          <textarea required disabled={processingReviews} placeholder="Una valoracion por linea" value={reviews} onChange={(event) => setReviews(event.target.value)} rows={5} />
+          <button className="chip-btn" disabled={!canProcessReviews} type="submit">{processingReviews ? "Procesando…" : "Clasificar valoraciones"}</button>
+        </form>
+      </article>
     </section>
     <section className="grid two-columns">
       <article className="card"><p className="section-label">Ventas y finanzas</p><h3><SectionIcon kind="trend" />Prevision y margen</h3>{forecast ? <div className="agent-result"><strong>{forecast.product_name}</strong><p>Prevision: {forecast.forecast_qty} unidades en {forecast.horizon_days} dias.</p><p>Tendencia: {forecast.trend}. Media diaria: {forecast.daily_average}.</p></div> : <p className="muted">Selecciona un producto y ejecuta Analisis comercial.</p>}{financial && <div className="agent-result"><p>Ingresos: {financial.revenue}</p><p>Coste: {financial.cost}</p><strong>Margen: {financial.margin} ({financial.margin_percent}%)</strong></div>}</article>

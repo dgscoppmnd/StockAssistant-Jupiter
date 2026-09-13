@@ -8,6 +8,9 @@ import InventoryPage from "./pages/InventoryPage";
 import AgentsOperationsPage from "./pages/AgentsOperationsPage";
 import ExecutivePage from "./pages/ExecutivePage";
 import ExecutiveDashboardPage from "./pages/ExecutiveDashboardPage";
+import ClientsPage from "./pages/ClientsPage";
+import SuppliersPage from "./pages/SuppliersPage";
+import ClientDetailPage from "./pages/ClientDetailPage";
 import MasterDataPage from "./pages/MasterDataPage";
 import ProductlistPage from "./pages/productlistPage";
 import LoginPage from "./pages/LoginPage";
@@ -76,6 +79,9 @@ const groups: MenuGroup[] = [
       { to: "/maestros/monedas", label: "Monedas" },
       { to: "/maestros/bodegas", label: "Bodegas" },
       { to: "/maestros/proveedores", label: "Proveedores" },
+      { to: "/maestros/tipos-cliente", label: "Tipos de cliente" },
+      { to: "/maestros/clientes", label: "Clientes" },
+      { to: "/maestros/direcciones-globales", label: "Direcciones globales" },
       { to: "/maestros/conversiones", label: "Conversiones de unidad" },
       { to: "/maestros/conocimiento", label: "Base de conocimiento" },
       { to: "/setup", label: "Configuracion de stockassistant" }
@@ -204,7 +210,11 @@ function PortalShell({
             <Route path="/maestros/unidades" element={<MasterDataPage resource="units" />} />
             <Route path="/maestros/monedas" element={<MasterDataPage resource="currencies" />} />
             <Route path="/maestros/bodegas" element={<MasterDataPage resource="warehouses" />} />
-            <Route path="/maestros/proveedores" element={<MasterDataPage resource="suppliers" />} />
+            <Route path="/maestros/proveedores" element={<SuppliersPage />} />
+            <Route path="/maestros/clientes" element={<ClientsPage />} />
+            <Route path="/maestros/clientes/:clientId" element={<ClientDetailPage />} />
+            <Route path="/maestros/tipos-cliente" element={<MasterDataPage resource="client-types" />} />
+            <Route path="/maestros/direcciones-globales" element={<MasterDataPage resource="global-addresses" />} />
             <Route path="/maestros/conversiones" element={<MasterDataPage resource="unit-conversions" />} />
             <Route path="/maestros/conocimiento" element={<MasterDataPage resource="knowledge-documents" />} />
             <Route path="*" element={<Navigate replace to="/dashboard" />} />

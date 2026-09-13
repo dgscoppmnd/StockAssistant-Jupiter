@@ -11,6 +11,8 @@ from decimal import Decimal
 
 class ProductBase(BaseModel):
     product_id: str
+    product_name: str
+    description: str
     product_category: str
     brand: Optional[str] = None
     sku: str

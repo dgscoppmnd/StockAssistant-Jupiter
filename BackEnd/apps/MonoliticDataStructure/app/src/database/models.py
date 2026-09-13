@@ -9,6 +9,8 @@ class Product(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     product_id = Column(Integer)
+    product_name = Column(String)
+    description = Column(String)
     name = Column(String)
     category = Column(String)
 

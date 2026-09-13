@@ -37,6 +37,8 @@ async def get_products(
         query = query.filter(
             or_(
                 Product.product_id.ilike(f"%{search}%"),
+                Product.product_name.ilike(f"%{search}%"),
+                Product.description.ilike(f"%{search}%"),
                 Product.sku.ilike(f"%{search}%"),
                 Product.brand.ilike(f"%{search}%")
             )
@@ -49,6 +51,8 @@ async def get_products(
     result["items"] = [
         {
             "product_id": item["product_id"],
+            "product_name": item["product_name"],
+            "description": item["description"],
             "product_category": item["product_category"],
             "brand": item["brand"],
             "sku": item["sku"],
@@ -62,6 +66,21 @@ async def get_products(
     
     return result
 
+
+@router.get("/semantic-search")
+def semantic_search_products(
+    q: str = Query(..., min_length=2, description="Descripción del producto buscado"),
+    limit: int = Query(10, ge=1, le=50),
+    category: Optional[str] = None,
+):
+    """Busca productos por similitud semántica mediante Qdrant."""
+    from ...vector_store.search import search_products
+
+    return {
+        "query": q,
+        "items": search_products(q, limit=limit, category=category),
+    }
+
 @router.get("/{product_id}")
 async def get_product(product_id: str, db: Session = Depends(get_db)):
     """Obtener producto por ID"""
@@ -71,6 +90,8 @@ async def get_product(product_id: str, db: Session = Depends(get_db)):
     
     return {
         "product_id": product.product_id,
+        "product_name": product.product_name,
+        "description": product.description,
         "product_category": product.product_category,
         "brand": product.brand,
         "sku": product.sku,
@@ -89,6 +110,8 @@ async def get_product_by_sku(sku: str, db: Session = Depends(get_db)):
     
     return {
         "product_id": product.product_id,
+        "product_name": product.product_name,
+        "description": product.description,
         "product_category": product.product_category,
         "brand": product.brand,
         "sku": product.sku,
