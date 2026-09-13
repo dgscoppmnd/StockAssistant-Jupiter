@@ -5,7 +5,7 @@ from psycopg2.extras import RealDictCursor
 from DataBaseManagement.dbConectionPostgres import db_context
 from .product_search import SEARCH_EXPRESSION, search_pattern
 
-from DataBaseManagement.dbManagement import (
+from src.DataBaseManagement.dbManagement import (
 	count_rows_by_condition_Generic,
 	delete_record_Generic,
 	get_all_records_Generic,

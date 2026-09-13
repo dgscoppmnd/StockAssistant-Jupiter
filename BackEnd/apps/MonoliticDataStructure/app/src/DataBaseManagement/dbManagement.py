@@ -5,7 +5,7 @@ from typing import Any
 
 from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
-from DataBaseManagement.dbConectionPostgres import db_context
+from src.DataBaseManagement.dbConectionPostgres import db_context
 
 logger = logging.getLogger("api.db")
 

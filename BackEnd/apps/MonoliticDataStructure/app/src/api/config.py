@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     EMBEDDING_DIMENSION: int = 384
     VECTOR_SEARCH_LIMIT: int = 10
+
+    # RAG documental
+    KNOWLEDGE_COLLECTION: str = "jupiter_knowledge"
+    KNOWLEDGE_SEARCH_LIMIT: int = 5
+    KNOWLEDGE_SCORE_THRESHOLD: float = 0.35
     
     # API
     API_TITLE: str = "Supply Chain Management API"
