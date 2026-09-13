@@ -37,6 +37,11 @@ export default function MasterDataEditorModal({ title, fields, record, values, s
                 <label className="field-label" htmlFor={inputId}>{field.label}</label>
                 {field.type === "textarea" ? (
                   <textarea id={inputId} required={field.required} placeholder={field.placeholder} rows={4} value={String(values[field.key] ?? "")} onChange={(event) => onChange(field.key, event.target.value)} />
+                ) : field.type === "select" ? (
+                  <select id={inputId} required={field.required} value={String(values[field.key] ?? "")} onChange={(event) => onChange(field.key, event.target.value)}>
+                    {!field.required && <option value="">Selecciona una opción</option>}
+                    {field.options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
                 ) : field.type === "checkbox" ? (
                   <label className="master-checkbox" htmlFor={inputId}>
                     <input id={inputId} checked={Boolean(values[field.key])} type="checkbox" onChange={(event) => onChange(field.key, event.target.checked)} />

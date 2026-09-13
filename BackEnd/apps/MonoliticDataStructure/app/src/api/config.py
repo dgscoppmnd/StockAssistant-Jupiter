@@ -12,6 +12,18 @@ class Settings(BaseSettings):
     DB_USER: str = "admin"
     DB_PASSWORD: str = "admin123"
     DB_NAME: str = "supply_chain"
+
+    # Búsqueda vectorial
+    QDRANT_URL: str = "http://localhost:6333"
+    QDRANT_COLLECTION: str = "products"
+    EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    EMBEDDING_DIMENSION: int = 384
+    VECTOR_SEARCH_LIMIT: int = 10
+
+    # RAG documental
+    KNOWLEDGE_COLLECTION: str = "jupiter_knowledge"
+    KNOWLEDGE_SEARCH_LIMIT: int = 5
+    KNOWLEDGE_SCORE_THRESHOLD: float = 0.35
     
     # API
     API_TITLE: str = "Supply Chain Management API"

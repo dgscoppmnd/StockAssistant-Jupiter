@@ -26,6 +26,32 @@ class MasterDataRulesTests(unittest.TestCase):
         with self.assertRaises(MasterDataError):
             self.service._values(definition, {"from_unit_id": 1, "to_unit_id": 2, "factor": "0"}, creating=True)
 
+    def test_client_code_preserves_leading_zeros_and_trims_spaces(self):
+        values = self.service._values(RESOURCES["clients"], {
+            "client_code": " 001-ABC ", "name": "Cliente", "fk_type_client": 1,
+        }, creating=True)
+        self.assertEqual(values["client_code"], "001-ABC")
+
+    def test_client_can_still_be_created_without_code(self):
+        values = self.service._values(RESOURCES["clients"], {
+            "name": "Cliente", "fk_type_client": 1,
+        }, creating=True)
+        self.assertNotIn("client_code", values)
+
+    def test_client_code_can_be_cleared(self):
+        for code in ("", "   ", None):
+            with self.subTest(code=code):
+                values = self.service._values(RESOURCES["clients"], {
+                    "client_code": code,
+                }, creating=False)
+                self.assertIsNone(values["client_code"])
+
+    def test_partial_client_update_keeps_code_untouched(self):
+        values = self.service._values(RESOURCES["clients"], {
+            "fk_type_client": 2,
+        }, creating=False)
+        self.assertNotIn("client_code", values)
+
 
 if __name__ == "__main__":
     unittest.main()

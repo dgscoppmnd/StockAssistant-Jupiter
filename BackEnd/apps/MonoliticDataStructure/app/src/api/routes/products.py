@@ -66,6 +66,21 @@ async def get_products(
     
     return result
 
+
+@router.get("/semantic-search")
+def semantic_search_products(
+    q: str = Query(..., min_length=2, description="Descripción del producto buscado"),
+    limit: int = Query(10, ge=1, le=50),
+    category: Optional[str] = None,
+):
+    """Busca productos por similitud semántica mediante Qdrant."""
+    from ...vector_store.search import search_products
+
+    return {
+        "query": q,
+        "items": search_products(q, limit=limit, category=category),
+    }
+
 @router.get("/{product_id}")
 async def get_product(product_id: str, db: Session = Depends(get_db)):
     """Obtener producto por ID"""

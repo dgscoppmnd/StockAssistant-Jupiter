@@ -150,6 +150,16 @@ export type Product = {
   default_image_url?: string | null;
 };
 
+export type ProductPage = {
+  items: Product[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+export type ProductOption = Pick<Product, "pk_product" | "cdgo_producto_externo" | "name_product">;
+export type ProductOptions = { items: ProductOption[]; next_cursor: number | null };
+
 export type ProductImage = {
   id: number;
   product_id?: number | null;
@@ -332,4 +342,6 @@ export type PurchaseProposal = { id: number; product_name: string; warehouse_nam
 export type ExecutiveResult = { decision_id: number; routed_agent: string; tool: string; execution_policy: string; result: Record<string, unknown> };
 
 export type MasterRecord = { id: number; created_at?: string; updated_at?: string; [key: string]: unknown };
-export type MasterField = { key: string; label: string; type?: "text" | "number" | "decimal" | "textarea" | "checkbox"; required?: boolean; placeholder?: string };
+export type MasterField = { key: string; label: string; type?: "text" | "number" | "decimal" | "textarea" | "checkbox" | "select"; required?: boolean; placeholder?: string; options?: Array<{ value: string; label: string }> };
+
+export type ClientAddress = { id: number; global_address_id: number; address_type: string; address_line_1: string; address_line_2?: string | null; city: string; state_province?: string | null; postal_code?: string | null; country_code: string; country_name?: string | null; contact_name?: string | null; contact_phone?: string | null; contact_email?: string | null; notes?: string | null };

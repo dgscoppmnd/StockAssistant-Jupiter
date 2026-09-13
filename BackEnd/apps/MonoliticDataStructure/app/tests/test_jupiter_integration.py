@@ -58,7 +58,7 @@ class JupiterIntegrationTests(unittest.TestCase):
                      "/api/executive/automations", "/api/executive/automations/runs",
                      "/api/executive/purchase-proposals", "/api/executive/decisions"]:
             self.call("GET", path)
-        for resource in ("units", "currencies", "warehouses", "suppliers", "unit-conversions", "knowledge-documents"):
+        for resource in ("units", "currencies", "warehouses", "suppliers", "unit-conversions", "knowledge-documents", "clients", "client-types", "global-addresses"):
             self.call("GET", "/api/master-data/" + resource)
         paths = requests.get(self.base + "/openapi.json", timeout=10).json()["paths"]
         self.assertFalse(any(word in path.lower() for path in paths for word in ("n8n", "tasks", "worksheet")))
@@ -92,3 +92,50 @@ class JupiterIntegrationTests(unittest.TestCase):
         proposals = self.call("GET", "/api/executive/purchase-proposals")
         self.assertTrue(any(row["product_id"] == product_id and row["status"] == "pending_approval" for row in proposals))
         self.call("DELETE", f'/api/master-data/warehouses/{warehouse["id"]}', expected=409)
+
+    def test_client_and_supplier_addresses_lifecycle(self):
+        for resource in ("clients", "suppliers"):
+            with self.subTest(resource=resource):
+                values = {"name": "Address test " + uuid4().hex[:8]}
+                if resource == "clients":
+                    values.update(client_code="001-ABC", fk_type_client=1)
+                owner = self.call("POST", f"/api/master-data/{resource}", {"values": values}, 201)
+                if resource == "clients":
+                    self.assertEqual(owner["client_code"], "001-ABC")
+                    self.call("DELETE", "/api/master-data/client-types/1", expected=409)
+                address = self.call("POST", "/api/master-data/global-addresses", {"values": {
+                    "address_line_1": "Calle de prueba 1", "city": "Madrid", "country_code": "ES"}}, 201)
+                route = f'/api/master-data/{resource}/{owner["id"]}/addresses'
+                payload = {"global_address_id": address["id"], "address_type": "Dirección principal"}
+                association = self.call("POST", route, payload, 201)
+                self.call("POST", route, payload, 409)
+                self.call("DELETE", f'/api/master-data/{resource}/{owner["id"]}', expected=409)
+                self.call("DELETE", f'/api/master-data/global-addresses/{address["id"]}', expected=409)
+                payload["address_type"] = "Dirección de entrega"
+                second = self.call("POST", route, payload, 201)
+                self.call("PUT", f'{route}/{association["id"]}', payload, 409)
+                payload["address_type"] = "Dirección de Recogida"
+                updated = self.call("PUT", f'{route}/{association["id"]}', payload)
+                self.assertEqual(updated["address_type"], payload["address_type"])
+                for item in (association, second):
+                    self.call("DELETE", f'{route}/{item["id"]}', expected=204)
+                self.call("DELETE", f'/api/master-data/{resource}/{owner["id"]}', expected=204)
+                self.call("GET", route, expected=404)
+                self.call("DELETE", f'/api/master-data/global-addresses/{address["id"]}', expected=204)
+
+    def test_unit_conversion_create_update_delete(self):
+        units = [self.call("POST", "/api/master-data/units", {"values": {
+            "code": uuid4().hex[:12], "name": "Conversion test"}}, 201) for _ in range(2)]
+        conversion = self.call("POST", "/api/master-data/unit-conversions", {"values": {
+            "from_unit_id": units[0]["id"], "to_unit_id": units[1]["id"], "factor": "2.5"}}, 201)
+        updated = self.call("PUT", f'/api/master-data/unit-conversions/{conversion["id"]}', {"values": {"factor": "3.5"}})
+        self.assertEqual(float(updated["factor"]), 3.5)
+        self.call("DELETE", f'/api/master-data/unit-conversions/{conversion["id"]}', expected=204)
+        for unit in units:
+            self.call("DELETE", f'/api/master-data/units/{unit["id"]}', expected=204)
+
+    def test_donor_prompt_contract_works_with_local_schema(self):
+        record = self.call("POST", "/api/proms", {"data": {"nombre": "Integration prompt", "prom": "Texto", "status": 1}})["record"]
+        self.assertEqual(record["id"], record["id_prom"])
+        self.call("PUT", "/api/proms", {"id": record["id_prom"], "data": {"prom": "Actualizado"}})
+        self.call("DELETE", f'/api/proms?record_id={record["id"]}')

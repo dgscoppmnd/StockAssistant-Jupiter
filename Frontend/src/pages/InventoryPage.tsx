@@ -5,6 +5,8 @@ import {
   confirmInventoryReceipt,
   createWarehouse,
   fetchInventoryDashboard,
+  fetchMasterRecords,
+  fetchProducts,
   transferInventoryStock,
 } from "../api";
 import type {
@@ -16,9 +18,15 @@ import type {
   InventoryStockItem,
   InventoryWarehouse,
   InventoryWarehousePayload,
+  MasterRecord,
+  Product,
 } from "../types";
 import InventoryCrudCard from "./components/InventoryCrudCard";
+import ProductConfigModal from "./components/ProductConfigModal";
 import SectionIcon from "./components/SectionIcon";
+import SupplierCombobox from "./components/SupplierCombobox";
+import ProductCombobox from "./components/ProductCombobox";
+import WarehouseCreateModal from "./components/WarehouseCreateModal";
 
 const emptyWarehouse: InventoryWarehousePayload = {
   code: "",
@@ -58,6 +66,15 @@ type ProductConfigRow = {
   warehouses: string;
 };
 
+type MovementTableRow = InventoryMovement & {
+  product_label: string;
+  warehouse_name: string;
+  destination_warehouse_name: string;
+  document_number: string;
+};
+
+type SnapshotTableRow = InventoryStockItem & { id: string };
+
 const createOrderLine = (id: number, productId = 0, unitCode = "unit"): StockOrderLine => ({
   id,
   product_id: productId,
@@ -75,8 +92,8 @@ function formatDateTime(raw?: string | null): string {
   return parsed.toLocaleString("es-ES");
 }
 
-function formatQuantity(value: number): string {
-  return Number(value).toLocaleString("es-ES", { maximumFractionDigits: 2 });
+function formatQuantity(value: number, maximumFractionDigits = 2): string {
+  return Number(value).toLocaleString("es-ES", { maximumFractionDigits });
 }
 
 function buildStockOrderRows(
@@ -147,9 +164,19 @@ function buildProductConfigRows(snapshot: InventoryStockItem[]): ProductConfigRo
 export default function InventoryPage() {
   const [dashboard, setDashboard] = useState<InventoryDashboard | null>(null);
   const [warehouseForm, setWarehouseForm] = useState<InventoryWarehousePayload>(emptyWarehouse);
+  const [showWarehouseModal, setShowWarehouseModal] = useState(false);
   const [productConfig, setProductConfig] = useState<InventoryProductConfigPayload>(emptyProductConfig);
+  const [showProductConfigModal, setShowProductConfigModal] = useState(false);
   const [stockOrderSupplier, setStockOrderSupplier] = useState("");
   const [stockOrderSupplierCode, setStockOrderSupplierCode] = useState("");
+  const [suppliers, setSuppliers] = useState<MasterRecord[]>([]);
+  const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(null);
+  const [creatingSupplier, setCreatingSupplier] = useState(false);
+  const [suppliersLoading, setSuppliersLoading] = useState(true);
+  const [suppliersError, setSuppliersError] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState("");
   const [stockOrderNumber, setStockOrderNumber] = useState("");
   const [stockOrderWarehouseId, setStockOrderWarehouseId] = useState(0);
   const [stockOrderNotes, setStockOrderNotes] = useState("");
@@ -157,6 +184,34 @@ export default function InventoryPage() {
   const [status, setStatus] = useState("Cargando inventario...");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const loadSuppliers = useCallback(async () => {
+    setSuppliersLoading(true);
+    setSuppliersError("");
+    try {
+      setSuppliers(await fetchMasterRecords("suppliers"));
+    } catch (err) {
+      setSuppliersError(err instanceof Error ? err.message : "No se pudieron cargar los proveedores.");
+    } finally {
+      setSuppliersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadSuppliers(); }, [loadSuppliers]);
+
+  const loadProducts = useCallback(async () => {
+    setProductsLoading(true);
+    setProductsError("");
+    try {
+      setProducts(await fetchProducts());
+    } catch (err) {
+      setProductsError(err instanceof Error ? err.message : "No se pudieron cargar los productos.");
+    } finally {
+      setProductsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadProducts(); }, [loadProducts]);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -204,6 +259,26 @@ export default function InventoryPage() {
     () => buildProductConfigRows(dashboard?.stock_snapshot ?? []),
     [dashboard],
   );
+  const movementRows = useMemo<MovementTableRow[]>(() => {
+    const warehouseNames = new Map((dashboard?.warehouses ?? []).map((warehouse) => [warehouse.id, warehouse.name]));
+    const productNames = new Map((dashboard?.stock_snapshot ?? []).map((item) => [item.product_id, item.product_name]));
+
+    return (dashboard?.recent_movements ?? []).map((movement) => ({
+      ...movement,
+      product_label: productNames.get(movement.product_id) ?? `Producto #${movement.product_id}`,
+      warehouse_name: movement.warehouse_id ? warehouseNames.get(movement.warehouse_id) ?? `Bodega #${movement.warehouse_id}` : "-",
+      destination_warehouse_name: movement.warehouse_destination_id
+        ? warehouseNames.get(movement.warehouse_destination_id) ?? `Bodega #${movement.warehouse_destination_id}`
+        : "-",
+      document_number: movement.document_id
+        ? `${movement.document_type ?? "Documento"} #${movement.document_id}`
+        : movement.operation_key,
+    }));
+  }, [dashboard]);
+  const snapshotRows = useMemo<SnapshotTableRow[]>(
+    () => (dashboard?.stock_snapshot ?? []).map((item) => ({ ...item, id: `${item.product_id}-${item.warehouse_id}` })),
+    [dashboard],
+  );
 
   const warehouseColumns = useMemo<any[]>(
     () => [
@@ -242,6 +317,32 @@ export default function InventoryPage() {
     [],
   );
 
+  const movementColumns = useMemo<any[]>(
+    () => [
+      { dataField: "created_at", text: "Fecha", sort: true, formatter: (value: string) => formatDateTime(value) },
+      { dataField: "movement_type", text: "Tipo", sort: true },
+      { dataField: "product_label", text: "Producto", sort: true },
+      { dataField: "warehouse_name", text: "Bodega origen", sort: true },
+      { dataField: "destination_warehouse_name", text: "Bodega destino", sort: true },
+      { dataField: "quantity_signed", text: "Cantidad", sort: true, formatter: (value: number, row: MovementTableRow) => `${formatQuantity(value)} ${row.base_unit_code}` },
+      { dataField: "document_number", text: "Documento", sort: true },
+    ],
+    [],
+  );
+
+  const snapshotColumns = useMemo<any[]>(
+    () => [
+      { dataField: "product_id", text: "Producto ID", sort: true, headerStyle: { width: "110px" } },
+      { dataField: "product_name", text: "Producto", sort: true },
+      { dataField: "warehouse_name", text: "Bodega", sort: true },
+      { dataField: "physical_qty", text: "Fisico", sort: true, formatter: (value: number, row: SnapshotTableRow) => `${formatQuantity(value)} ${row.base_unit_code}` },
+      { dataField: "reserved_qty", text: "Reservado", sort: true, formatter: (value: number, row: SnapshotTableRow) => `${formatQuantity(value)} ${row.base_unit_code}` },
+      { dataField: "available_qty", text: "Disponible", sort: true, formatter: (value: number, row: SnapshotTableRow) => `${formatQuantity(value)} ${row.base_unit_code}` },
+      { dataField: "reorder_point", text: "Punto pedido", sort: true, formatter: (value: number) => formatQuantity(value) },
+    ],
+    [],
+  );
+
   const runOperation = async (operation: Promise<InventoryOperationResponse>, message: string) => {
     setBusy(true);
     setError("");
@@ -265,6 +366,7 @@ export default function InventoryPage() {
     try {
       await createWarehouse(warehouseForm);
       setWarehouseForm(emptyWarehouse);
+      setShowWarehouseModal(false);
       setStatus("Bodega creada correctamente.");
       await loadDashboard();
     } catch (err) {
@@ -281,6 +383,7 @@ export default function InventoryPage() {
     try {
       await configureInventoryProduct(productConfig);
       setProductConfig(emptyProductConfig);
+      setShowProductConfigModal(false);
       setStatus("Configuracion de inventario guardada.");
       await loadDashboard();
     } catch (err) {
@@ -292,38 +395,92 @@ export default function InventoryPage() {
 
   const onSubmitStockOrder = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (busy || suppliersLoading || suppliersError || productsLoading || productsError) return;
     const invalidLine = stockOrderLines.some(
-      (line) => !line.product_id || line.quantity <= 0 || !line.unit_code || line.unit_price === undefined || line.unit_price < 0,
+      (line) => !products.some((product) => product.pk_product === line.product_id) || line.quantity <= 0 || !line.unit_code || line.unit_price === undefined || line.unit_price < 0,
     );
 
-    if (!stockOrderWarehouseId || !stockOrderSupplier.trim() || invalidLine) {
+    if (!stockOrderWarehouseId || !stockOrderSupplier.trim() || (!selectedSupplierId && !creatingSupplier) || invalidLine) {
       setError("Indica una bodega, un proveedor y lineas con producto, cantidad y precio validos.");
       return;
     }
 
-    const completed = await runOperation(
-      confirmInventoryReceipt({
-        warehouse_id: stockOrderWarehouseId,
-        supplier_name: stockOrderSupplier.trim(),
-        supplier_code: stockOrderSupplierCode.trim() || undefined,
-        purchase_order_number: stockOrderNumber.trim() || undefined,
-        user_name: "frontend",
-        notes: stockOrderNotes.trim() || undefined,
-        lines: stockOrderLines.map(({ id: _id, ...line }) => line),
-      }),
-      "Pedido de stock recibido.",
-    );
-    if (!completed) return;
+    setBusy(true);
+    setError("");
+    try {
+      // Recheck the catalog before allowing the receipt endpoint to create a supplier.
+      const currentSuppliers = await fetchMasterRecords("suppliers");
+      setSuppliers(currentSuppliers);
+      const name = stockOrderSupplier.trim();
+      const code = stockOrderSupplierCode.trim();
+      const existing = selectedSupplierId
+        ? currentSuppliers.find((supplier) => supplier.id === selectedSupplierId)
+        : currentSuppliers.find((supplier) => String(supplier.name).trim().toLowerCase() === name.toLowerCase());
+      if (selectedSupplierId && !existing) {
+        setError("El proveedor seleccionado ya no existe. Selecciona otro proveedor o crea uno nuevo.");
+        return;
+      }
+      if (!existing && code && currentSuppliers.some((supplier) => String(supplier.supplier_code ?? "").toLowerCase() === code.toLowerCase())) {
+        setError("Ese código ya pertenece a un proveedor. Selecciónalo en el buscador.");
+        return;
+      }
+      if (!existing && !window.confirm(`¿Estás seguro de crear el nuevo proveedor «${name}»${code ? ` con código «${code}»` : ""} y confirmar el pedido?`)) return;
 
-    setStockOrderSupplier("");
-    setStockOrderSupplierCode("");
-    setStockOrderNumber("");
-    setStockOrderNotes("");
-    setStockOrderLines([createOrderLine(Date.now(), firstProductId)]);
+      const completed = await runOperation(
+        confirmInventoryReceipt({
+          warehouse_id: stockOrderWarehouseId,
+          supplier_name: existing ? String(existing.name) : name,
+          supplier_code: existing ? String(existing.supplier_code ?? "") || undefined : code || undefined,
+          purchase_order_number: stockOrderNumber.trim() || undefined,
+          user_name: "frontend",
+          notes: stockOrderNotes.trim() || undefined,
+          lines: stockOrderLines.map(({ id: _id, ...line }) => line),
+        }),
+        "Pedido de stock recibido.",
+      );
+      if (!completed) return;
+
+      setStockOrderSupplier("");
+      setStockOrderSupplierCode("");
+      setSelectedSupplierId(null);
+      setCreatingSupplier(false);
+      setStockOrderNumber("");
+      setStockOrderNotes("");
+      setStockOrderLines([createOrderLine(Date.now(), firstProductId)]);
+      await loadSuppliers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo comprobar el proveedor.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const updateStockOrderLine = (id: number, changes: Partial<StockOrderLine>) => {
     setStockOrderLines((current) => current.map((line) => (line.id === id ? { ...line, ...changes } : line)));
+  };
+
+  const openWarehouseModal = () => {
+    setWarehouseForm(emptyWarehouse);
+    setError("");
+    setShowWarehouseModal(true);
+  };
+
+  const closeWarehouseModal = () => {
+    if (busy) return;
+    setShowWarehouseModal(false);
+    setError("");
+  };
+
+  const openProductConfigModal = () => {
+    setProductConfig(emptyProductConfig);
+    setError("");
+    setShowProductConfigModal(true);
+  };
+
+  const closeProductConfigModal = () => {
+    if (busy) return;
+    setShowProductConfigModal(false);
+    setError("");
   };
 
   return (
@@ -334,23 +491,23 @@ export default function InventoryPage() {
         <div className="quick-row">
           <div className="inventory-stat-card">
             <span>Productos</span>
-            <strong>{dashboard?.total_products ?? 0}</strong>
+            <strong>{formatQuantity(dashboard?.total_products ?? 0, 0)}</strong>
           </div>
           <div className="inventory-stat-card">
             <span>Bodegas</span>
-            <strong>{dashboard?.total_warehouses ?? 0}</strong>
+            <strong>{formatQuantity(dashboard?.total_warehouses ?? 0, 0)}</strong>
           </div>
           <div className="inventory-stat-card">
             <span>Stock fisico</span>
-            <strong>{dashboard?.total_stock_units ?? 0}</strong>
+            <strong>{formatQuantity(dashboard?.total_stock_units ?? 0, 0)}</strong>
           </div>
           <div className="inventory-stat-card">
             <span>Disponible</span>
-            <strong>{dashboard?.total_available_units ?? 0}</strong>
+            <strong>{formatQuantity(dashboard?.total_available_units ?? 0, 0)}</strong>
           </div>
           <div className="inventory-stat-card">
             <span>Bajo minimo</span>
-            <strong>{dashboard?.low_stock_items ?? 0}</strong>
+            <strong>{formatQuantity(dashboard?.low_stock_items ?? 0, 0)}</strong>
           </div>
         </div>
         <p className="status-line">{status}</p>
@@ -375,7 +532,7 @@ export default function InventoryPage() {
                 >
                   Agregar linea
                 </button>
-                <button className="primary-btn" disabled={busy || !dashboard?.warehouses.length} type="submit">
+                <button className="primary-btn" disabled={busy || suppliersLoading || Boolean(suppliersError) || productsLoading || Boolean(productsError) || !dashboard?.warehouses.length} type="submit">
                   Confirmar pedido y entrada
                 </button>
               </div>
@@ -393,16 +550,20 @@ export default function InventoryPage() {
           }
         >
           <div className="stock-order-meta">
-            <div className="field-group">
-              <label className="input-label" htmlFor="stock-order-supplier">Proveedor</label>
-              <input
-                id="stock-order-supplier"
-                placeholder="Nombre del proveedor"
-                required
-                value={stockOrderSupplier}
-                onChange={(event) => setStockOrderSupplier(event.target.value)}
-              />
-            </div>
+            <SupplierCombobox suppliers={suppliers} selectedId={selectedSupplierId} creating={creatingSupplier}
+              disabled={busy || suppliersLoading || Boolean(suppliersError)} loading={suppliersLoading}
+              onSelect={(supplier) => {
+                setSelectedSupplierId(supplier.id);
+                setCreatingSupplier(false);
+                setStockOrderSupplier(String(supplier.name));
+                setStockOrderSupplierCode(String(supplier.supplier_code ?? ""));
+              }}
+              onCreate={(name) => {
+                setSelectedSupplierId(null);
+                setCreatingSupplier(true);
+                setStockOrderSupplier(name);
+                setStockOrderSupplierCode("");
+              }} />
             <div className="field-group">
               <label className="input-label" htmlFor="stock-order-warehouse">Bodega de destino</label>
               <select
@@ -428,20 +589,31 @@ export default function InventoryPage() {
                 onChange={(event) => setStockOrderNumber(event.target.value)}
               />
             </div>
+          </div>
+          {suppliersError && <p className="error-line" role="alert">{suppliersError} <button className="chip-btn" type="button" onClick={() => void loadSuppliers()}>Reintentar</button></p>}
+          {creatingSupplier && <div className="stock-order-meta">
+            <div className="field-group">
+              <label className="input-label" htmlFor="stock-order-new-supplier">Nombre del nuevo proveedor</label>
+              <input id="stock-order-new-supplier" required maxLength={200} disabled={busy}
+                value={stockOrderSupplier} onChange={(event) => setStockOrderSupplier(event.target.value)} />
+            </div>
             <div className="field-group">
               <label className="input-label" htmlFor="stock-order-supplier-code">Codigo proveedor</label>
               <input
                 id="stock-order-supplier-code"
                 placeholder="Opcional"
+                maxLength={80}
+                disabled={busy}
                 value={stockOrderSupplierCode}
                 onChange={(event) => setStockOrderSupplierCode(event.target.value)}
               />
             </div>
-          </div>
+          </div>}
 
+          {productsError && <p className="error-line" role="alert">{productsError} <button className="chip-btn" type="button" onClick={() => void loadProducts()}>Reintentar</button></p>}
           <div className="stock-order-lines" aria-label="Lineas del pedido">
             <div className="stock-order-line stock-order-line-header" aria-hidden="true">
-              <span>Producto</span>
+              <span>Producto · Código y nombre</span>
               <span>Cantidad</span>
               <span>Unidad</span>
               <span>Precio</span>
@@ -449,18 +621,12 @@ export default function InventoryPage() {
             </div>
             {stockOrderLines.map((line) => (
               <div className="stock-order-line" key={line.id}>
-                <label>
-                  <span>Producto</span>
-                  <input
-                    aria-label="ID de producto"
-                    list="inventory-products"
-                    min="1"
-                    required
-                    type="number"
-                    value={line.product_id || ""}
-                    onChange={(event) => updateStockOrderLine(line.id, { product_id: Number(event.target.value) })}
-                  />
-                </label>
+                <ProductCombobox products={products} selectedId={line.product_id}
+                  disabled={busy || Boolean(productsError)} loading={productsLoading}
+                  onSelect={(product) => updateStockOrderLine(line.id, {
+                    product_id: product.pk_product,
+                    unit_code: dashboard?.stock_snapshot.find((item) => item.product_id === product.pk_product)?.base_unit_code ?? "unit",
+                  })} />
                 <label>
                   <span>Cantidad</span>
                   <input
@@ -506,11 +672,6 @@ export default function InventoryPage() {
               </div>
             ))}
           </div>
-          <datalist id="inventory-products">
-            {(dashboard?.stock_snapshot ?? []).map((item) => (
-              <option key={item.product_id} value={item.product_id} label={item.product_name} />
-            ))}
-          </datalist>
         </InventoryCrudCard>
 
         <InventoryCrudCard<StockOrderListRow>
@@ -530,50 +691,22 @@ export default function InventoryPage() {
         />
       </section>
 
-      <section className="grid two-columns">
-        <InventoryCrudCard
-          sectionLabel="Setup minimo"
-          title="Crear bodega"
-          description="Alta rapida de ubicaciones fisicas para recepcion, almacenamiento y transferencia."
-          onSubmit={onCreateWarehouse}
-          footer={<button className="primary-btn" disabled={busy} type="submit">Guardar bodega</button>}
-        >
-          <div className="inventory-crud-grid">
-            <div className="field-group">
-              <label className="input-label" htmlFor="warehouse-code">Codigo</label>
-              <input
-                id="warehouse-code"
-                placeholder="Ejemplo: MADRID"
-                value={warehouseForm.code}
-                onChange={(event) => setWarehouseForm((prev) => ({ ...prev, code: event.target.value }))}
-              />
-            </div>
-            <div className="field-group">
-              <label className="input-label" htmlFor="warehouse-name">Nombre</label>
-              <input
-                id="warehouse-name"
-                placeholder="Nombre de la bodega"
-                value={warehouseForm.name}
-                onChange={(event) => setWarehouseForm((prev) => ({ ...prev, name: event.target.value }))}
-              />
-            </div>
-            <div className="field-group inventory-crud-grid-full">
-              <label className="input-label" htmlFor="warehouse-description">Descripcion</label>
-              <input
-                id="warehouse-description"
-                placeholder="Descripcion opcional"
-                value={warehouseForm.description ?? ""}
-                onChange={(event) => setWarehouseForm((prev) => ({ ...prev, description: event.target.value }))}
-              />
-            </div>
-          </div>
-        </InventoryCrudCard>
-
+      <section className="grid">
         <InventoryCrudCard<InventoryWarehouse & { description: string }>
           sectionLabel="Setup minimo"
           title="Listado de bodegas"
           titleIcon={<SectionIcon kind="warehouse" />}
-          description="Consulta las bodegas activas e historico reciente dentro del mismo patron CRUD."
+          description="Bodegas activas e historico reciente."
+          headerAction={
+            <button
+              className="primary-btn"
+              onClick={openWarehouseModal}
+              title="Alta rapida de ubicaciones fisicas para recepcion, almacenamiento y transferencia."
+              type="button"
+            >
+              Agregar bodega
+            </button>
+          }
           table={{
             keyField: "id",
             data: warehouseRows,
@@ -585,70 +718,22 @@ export default function InventoryPage() {
         />
       </section>
 
-      <section className="grid two-columns">
-        <InventoryCrudCard
-          sectionLabel="Producto base"
-          title="Configurar unidad y punto de pedido"
-          description="Define la unidad base y los minimos de reposicion por producto."
-          onSubmit={onConfigureProduct}
-          footer={<button className="primary-btn" disabled={busy} type="submit">Guardar configuracion</button>}
-        >
-          <div className="inventory-crud-grid">
-            <div className="field-group">
-              <label className="input-label" htmlFor="product-id">ID de producto</label>
-              <input
-                id="product-id"
-                placeholder="Ejemplo: 123"
-                type="number"
-                value={productConfig.product_id || ""}
-                onChange={(event) => setProductConfig((prev) => ({ ...prev, product_id: Number(event.target.value) }))}
-              />
-            </div>
-            <div className="field-group">
-              <label className="input-label" htmlFor="base-unit-code">Unidad base</label>
-              <input
-                id="base-unit-code"
-                placeholder="Ejemplo: unit"
-                value={productConfig.base_unit_code}
-                onChange={(event) => setProductConfig((prev) => ({ ...prev, base_unit_code: event.target.value }))}
-              />
-            </div>
-            <div className="field-group">
-              <label className="input-label" htmlFor="reorder-point">Punto de pedido</label>
-              <input
-                id="reorder-point"
-                placeholder="Unidades minimas"
-                type="number"
-                value={productConfig.reorder_point}
-                onChange={(event) => setProductConfig((prev) => ({ ...prev, reorder_point: Number(event.target.value) }))}
-              />
-            </div>
-            <div className="field-group">
-              <label className="input-label" htmlFor="reorder-quantity">Cantidad sugerida</label>
-              <input
-                id="reorder-quantity"
-                placeholder="Unidades por reposicion"
-                type="number"
-                value={productConfig.reorder_quantity}
-                onChange={(event) => setProductConfig((prev) => ({ ...prev, reorder_quantity: Number(event.target.value) }))}
-              />
-            </div>
-            <label className="field-label inventory-crud-checkbox inventory-crud-grid-full">
-              <input
-                checked={productConfig.allow_negative_stock}
-                onChange={(event) => setProductConfig((prev) => ({ ...prev, allow_negative_stock: event.target.checked }))}
-                type="checkbox"
-              />
-              Permitir stock negativo
-            </label>
-          </div>
-        </InventoryCrudCard>
-
+      <section className="grid">
         <InventoryCrudCard<ProductConfigRow>
           sectionLabel="Producto base"
           title="Listado de configuraciones"
           titleIcon={<SectionIcon kind="operations" />}
           description="Vista consolidada de unidad base, punto de pedido y stock disponible por producto."
+          headerAction={
+            <button
+              className="primary-btn"
+              onClick={openProductConfigModal}
+              title="Define la unidad base y los minimos de reposicion por producto."
+              type="button"
+            >
+              Configurar unidad y punto de pedido
+            </button>
+          }
           table={{
             keyField: "id",
             data: productConfigRows,
@@ -660,86 +745,106 @@ export default function InventoryPage() {
         />
       </section>
 
-      <section className="grid two-columns">
-        <article className="card">
-          <p className="section-label">Operaciones</p>
-          <h3><SectionIcon kind="operations" />Acciones rapidas de prueba</h3>
-          <p className="muted">
-            Usan el primer producto y las primeras bodegas visibles para validar recepcion y transferencia minima.
-          </p>
-          <div className="quick-row">
-            <button
-              className="primary-btn"
-              disabled={busy || !firstWarehouseId || !firstProductId}
-              type="button"
-              onClick={() =>
-                void runOperation(
-                  confirmInventoryReceipt({
-                    warehouse_id: firstWarehouseId,
-                    supplier_name: "Proveedor demo",
-                    user_name: "frontend",
-                    lines: [{ product_id: firstProductId, quantity: 5, unit_code: "unit", unit_price: 1, exchange_rate: 1 }],
-                  }),
-                  "Recepcion registrada.",
-                )
-              }
-            >
-              Recepcion demo
-            </button>
-            <button
-              className="chip-btn"
-              disabled={busy || !firstWarehouseId || !secondWarehouseId || !firstProductId || firstWarehouseId === secondWarehouseId}
-              type="button"
-              onClick={() =>
-                void runOperation(
-                  transferInventoryStock({
-                    source_warehouse_id: firstWarehouseId,
-                    destination_warehouse_id: secondWarehouseId,
-                    user_name: "frontend",
-                    reason: "transferencia demo",
-                    lines: [{ product_id: firstProductId, quantity: 1, unit_code: "unit", unit_price: 0, exchange_rate: 1 }],
-                  }),
-                  "Transferencia registrada.",
-                )
-              }
-            >
-              Transferencia demo
-            </button>
+      <section className="grid">
+        <InventoryCrudCard<MovementTableRow>
+          sectionLabel="Movimientos"
+          title="Ultimos registros"
+          titleIcon={<SectionIcon kind="movement" />}
+          table={{
+            keyField: "id",
+            data: movementRows,
+            columns: movementColumns,
+            noDataIndication: "No hay movimientos todavia.",
+            totalLabel: "movimientos",
+            minWidth: 980,
+          }}
+        >
+          <div>
+            <p className="section-label">Operaciones</p>
+            <h3><SectionIcon kind="operations" />Acciones rapidas de prueba</h3>
+            <p className="muted">
+              Usan el primer producto y las primeras bodegas visibles para validar recepcion y transferencia minima.
+            </p>
+            <div className="quick-row">
+              <button
+                className="primary-btn"
+                disabled={busy || !firstWarehouseId || !firstProductId}
+                type="button"
+                onClick={() =>
+                  void runOperation(
+                    confirmInventoryReceipt({
+                      warehouse_id: firstWarehouseId,
+                      supplier_name: "Proveedor demo",
+                      user_name: "frontend",
+                      lines: [{ product_id: firstProductId, quantity: 5, unit_code: "unit", unit_price: 1, exchange_rate: 1 }],
+                    }),
+                    "Recepcion registrada.",
+                  )
+                }
+              >
+                Recepcion demo
+              </button>
+              <button
+                className="chip-btn"
+                disabled={busy || !firstWarehouseId || !secondWarehouseId || !firstProductId || firstWarehouseId === secondWarehouseId}
+                type="button"
+                onClick={() =>
+                  void runOperation(
+                    transferInventoryStock({
+                      source_warehouse_id: firstWarehouseId,
+                      destination_warehouse_id: secondWarehouseId,
+                      user_name: "frontend",
+                      reason: "transferencia demo",
+                      lines: [{ product_id: firstProductId, quantity: 1, unit_code: "unit", unit_price: 0, exchange_rate: 1 }],
+                    }),
+                    "Transferencia registrada.",
+                  )
+                }
+              >
+                Transferencia demo
+              </button>
+            </div>
           </div>
-        </article>
-
-        <article className="card">
-          <p className="section-label">Movimientos</p>
-          <h3><SectionIcon kind="movement" />Ultimos registros</h3>
-          <div className="inventory-table">
-            {(dashboard?.recent_movements ?? []).map((movement) => (
-              <div className="inventory-table-row" key={movement.id}>
-                <span>{movement.movement_type}</span>
-                <span>Producto #{movement.product_id}</span>
-                <span>{movement.quantity_signed} {movement.base_unit_code}</span>
-              </div>
-            ))}
-            {(dashboard?.recent_movements?.length ?? 0) === 0 && <p className="muted">No hay movimientos todavia.</p>}
-          </div>
-        </article>
+        </InventoryCrudCard>
       </section>
 
       <section className="grid">
-        <article className="card">
-          <p className="section-label">Stock disponible</p>
-          <h3><SectionIcon kind="stock" />Snapshot por producto y bodega</h3>
-          <div className="inventory-table">
-            {(dashboard?.stock_snapshot ?? []).map((item) => (
-              <div className="inventory-table-row" key={`${item.product_id}-${item.warehouse_id}`}>
-                <span>{item.product_name}</span>
-                <span>{item.warehouse_name}</span>
-                <span>{item.available_qty} {item.base_unit_code}</span>
-              </div>
-            ))}
-            {(dashboard?.stock_snapshot?.length ?? 0) === 0 && <p className="muted">Todavia no hay stock cargado.</p>}
-          </div>
-        </article>
+        <InventoryCrudCard<SnapshotTableRow>
+          sectionLabel="Stock disponible"
+          title="Snapshot por producto y bodega"
+          titleIcon={<SectionIcon kind="stock" />}
+          table={{
+            keyField: "id",
+            data: snapshotRows,
+            columns: snapshotColumns,
+            noDataIndication: "Todavia no hay stock cargado.",
+            totalLabel: "registros",
+            minWidth: 980,
+          }}
+        />
       </section>
+
+      {showWarehouseModal ? (
+        <WarehouseCreateModal
+          error={error}
+          onChange={(changes) => setWarehouseForm((current) => ({ ...current, ...changes }))}
+          onClose={closeWarehouseModal}
+          onSubmit={onCreateWarehouse}
+          saving={busy}
+          warehouse={warehouseForm}
+        />
+      ) : null}
+
+      {showProductConfigModal ? (
+        <ProductConfigModal
+          config={productConfig}
+          error={error}
+          onChange={(changes) => setProductConfig((current) => ({ ...current, ...changes }))}
+          onClose={closeProductConfigModal}
+          onSubmit={onConfigureProduct}
+          saving={busy}
+        />
+      ) : null}
     </div>
   );
 }
