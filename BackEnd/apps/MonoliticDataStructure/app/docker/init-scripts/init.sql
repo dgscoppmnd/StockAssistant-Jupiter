@@ -714,6 +714,8 @@ CREATE INDEX IF NOT EXISTS ix_external_data_cache_source_expiry
 CREATE INDEX IF NOT EXISTS ix_product_reviews_batch
     ON public.product_reviews (batch_id);
 
+ALTER TABLE public.knowledge_documents ADD COLUMN IF NOT EXISTS archivo TEXT;
+
 CREATE INDEX IF NOT EXISTS ix_knowledge_documents_active_expiry
     ON public.knowledge_documents (is_active, expires_at);
 
