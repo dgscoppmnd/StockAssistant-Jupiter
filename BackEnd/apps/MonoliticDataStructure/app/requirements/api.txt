@@ -26,6 +26,6 @@ markdown==3.4.3
 # pandas 2.1 usa la ABI de NumPy 1.x.
 numpy==1.26.4
 pandas==2.2.3
-qdrant-client==1.19.1
+qdrant-client==1.19.0
 sentence-transformers==5.1.0
 pypdf==6.1.3
