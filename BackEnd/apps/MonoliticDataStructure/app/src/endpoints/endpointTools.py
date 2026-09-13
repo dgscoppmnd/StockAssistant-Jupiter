@@ -83,15 +83,34 @@ def tool_search_products_db(connection: Any, query: str, limit: int = 10) -> lis
     return data
 
 
-def tool_search_products_semantic(query: str, limit: int = 10) -> list[dict[str, Any]]:
-    """Busca articulos semanticamente en Qdrant mediante la pregunta del usuario."""
+def tool_search_products_semantic(query: str, limit: int = 10) -> dict[str, Any]:
+    """Busca articulos semanticamente y devuelve una respuesta util para el chatbot."""
     if not query.strip():
-        return []
+        return {
+            "status": "invalid_query",
+            "message": "Necesito una descripción del producto que quieres buscar.",
+            "products": [],
+        }
 
     # Se importa bajo demanda para no cargar el modelo de embeddings al arrancar la API.
     from src.vector_store.search import search_products
 
-    return search_products(query=query, limit=limit)
+    products = search_products(query=query, limit=limit)
+    if not products:
+        return {
+            "status": "empty",
+            "message": (
+                "No se encontraron productos relacionados. "
+                "El catálogo todavía no contiene productos indexados para la búsqueda semántica."
+            ),
+            "products": [],
+        }
+
+    return {
+        "status": "success",
+        "message": f"Se encontraron {len(products)} productos relacionados.",
+        "products": products,
+    }
 
 
 def tool_save_product(connection: Any, payload: ProductToolCreatePayload) -> dict[str, Any]:
