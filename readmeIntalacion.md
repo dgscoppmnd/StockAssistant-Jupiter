@@ -308,4 +308,3 @@ En la validación local del 8 de septiembre de 2026 pasaron las 14 pruebas de re
 | Hay tablas sin datos o indicadores vacíos | Carga datos operativos o registra operaciones; los datos del catálogo analítico no se copian al operativo. |
 
 Esta guía describe el arranque HTTP local. El repositorio también incluye `docker-compose.https.yml` para HTTPS con certificados propios, documentado en las notas de integración.
-..
