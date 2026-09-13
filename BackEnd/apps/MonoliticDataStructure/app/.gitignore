@@ -68,7 +68,9 @@ dockerfiles/.env.*.local
 Thumbs.db
 
 # Docker volumes locales
-data/
+data/*
+!data/knowledge/
+!data/knowledge/**
 volumes/
 
 # Node dependencies
@@ -81,4 +83,5 @@ html_nginx/web/dist/
 **/dist/
 
 # No cargar la carpeta Docs
-docs/
+docs/*
+!docs/**
