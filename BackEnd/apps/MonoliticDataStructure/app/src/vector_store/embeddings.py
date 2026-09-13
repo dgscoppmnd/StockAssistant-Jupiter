@@ -11,7 +11,11 @@ from ..api.config import settings
 @lru_cache(maxsize=1)
 def get_embedding_model() -> SentenceTransformer:
     """Carga el modelo una sola vez por proceso."""
-    return SentenceTransformer(settings.EMBEDDING_MODEL)
+    return SentenceTransformer(
+        settings.EMBEDDING_MODEL,
+        device="cpu",
+        model_kwargs={"low_cpu_mem_usage": False},
+    )
 
 
 def encode_texts(texts: Iterable[str]) -> List[List[float]]:
