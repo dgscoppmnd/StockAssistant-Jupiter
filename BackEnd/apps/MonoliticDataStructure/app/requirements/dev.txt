@@ -1,25 +1,17 @@
-# Core
-pandas==2.1.0
-numpy==1.24.3
-python-dotenv==1.0.0
+-r api.txt
 
-# Database
-psycopg2-binary==2.9.9
-sqlalchemy==2.0.22
-alembic==1.12.1
-
-# Data Generation
+# Data generation
 faker==18.11.2
 
-# API
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic==2.4.2
-pydantic-settings==2.0.3
-
-# Development
+# Testing
 pytest==7.4.0
+pytest-cov==4.1.0
+httpx==0.28.1
+
+# Code quality
 black==23.9.1
 flake8==6.1.0
+
+# Local development
 ipython==8.15.0
 jupyter==1.0.0
