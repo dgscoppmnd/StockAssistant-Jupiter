@@ -7,7 +7,7 @@ import hashlib
 from pathlib import Path
 from typing import Any, Iterator
 
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
 
 from ..api.config import settings
 from .embeddings import encode_query, encode_texts
@@ -101,12 +101,14 @@ def index_knowledge(directory: Path, batch_size: int = 32) -> int:
 def search_knowledge(query: str, limit: int | None = None, source_type: str | None = None) -> list[dict[str, Any]]:
     """Recupera evidencia relevante y descarta coincidencias de baja confianza."""
     client = get_client()
+    query_filter = knowledge_source_filter(source_type)
     try:
         if not client.collection_exists(settings.KNOWLEDGE_COLLECTION):
             return []
         response = client.query_points(
             collection_name=settings.KNOWLEDGE_COLLECTION,
             query=encode_query(query),
+            query_filter=query_filter,
             limit=limit or settings.KNOWLEDGE_SEARCH_LIMIT,
             with_payload=True,
         )
@@ -118,10 +120,16 @@ def search_knowledge(query: str, limit: int | None = None, source_type: str | No
         payload = dict(point.payload or {})
         if point.score < settings.KNOWLEDGE_SCORE_THRESHOLD:
             continue
-        if source_type and payload.get("source_type") != source_type.lower():
-            continue
         results.append({"score": round(float(point.score), 4), **payload})
     return results
+
+
+def knowledge_source_filter(source_type: str | None) -> Filter | None:
+    if not source_type:
+        return None
+    return Filter(
+        must=[FieldCondition(key="source_type", match=MatchValue(value=source_type.lower()))]
+    )
 
 
 def main() -> None:
