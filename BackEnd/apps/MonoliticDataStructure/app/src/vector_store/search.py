@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.models import FieldCondition, Filter, MatchValue
 
-from ..api.config import settings
+from api.config import settings
 from .embeddings import encode_query
 from .product_indexer import get_client
 

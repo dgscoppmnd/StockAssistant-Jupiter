@@ -10,7 +10,7 @@ import pandas as pd
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-from ..api.config import settings
+from api.config import settings
 from .embeddings import encode_texts
 
 logger = logging.getLogger(__name__)
