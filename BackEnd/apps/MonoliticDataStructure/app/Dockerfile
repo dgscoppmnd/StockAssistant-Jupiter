@@ -12,6 +12,8 @@ RUN pip install --no-cache-dir torch==2.8.0 --index-url https://download.pytorch
 RUN pip install --no-cache-dir -r /tmp/requirements-api.txt
 
 COPY src /app/src
+RUN mkdir -p /app/data/knowledge
+VOLUME ["/app/data/knowledge"]
 
 EXPOSE 8000
 

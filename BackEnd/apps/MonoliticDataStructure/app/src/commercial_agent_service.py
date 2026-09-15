@@ -148,35 +148,49 @@ class CommercialAgentService:
 
     def _support_documents(self, question: str) -> list[dict[str, Any]]:
         return self._all("""
-            SELECT title, content, source, expires_at FROM public.knowledge_documents
-            WHERE is_active = TRUE AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
-              AND (to_tsvector('simple', title || ' ' || content) @@ plainto_tsquery('simple', %s) OR content ILIKE %s)
+            SELECT title, content, source, expires_at 
+            FROM public.knowledge_documents
+            WHERE is_active = TRUE 
+                AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+                AND (to_tsvector('simple', title || ' ' || content) @@ plainto_tsquery('simple', %s) OR content ILIKE %s)
             ORDER BY updated_at DESC LIMIT 5
         """, (question, f"%{question[:80]}%"))
-
-    def _support_product_context(self, product_id: int | None) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
-        if not product_id:
-            return None, []
-        product = self._product(product_id)
-        stock = self._all("""SELECT w.name AS warehouse, s.physical_qty - s.reserved_qty AS available_qty, u.code AS unit
-            FROM public.inventory_stock_levels s JOIN public.inventory_warehouses w ON w.id = s.warehouse_id
-            JOIN public.product_inventory_config c ON c.product_id = s.product_id JOIN public.inventory_units u ON u.id = c.base_unit_id
-            WHERE s.product_id = %s""", (product_id,))
-        return product, stock
-
-    def _pdf_evidence(self, question: str) -> list[dict[str, Any]]:
+        stock: list[dict[str, Any]] = []
+        product_context: dict[str, Any] | None = None
+        if product_id:
+            product_context = self._product(product_id)
+            stock = self._all("""SELECT w.name AS warehouse, s.physical_qty - s.reserved_qty AS available_qty, u.code AS unit
+                FROM public.inventory_stock_levels s 
+                    JOIN public.inventory_warehouses w ON w.id = s.warehouse_id
+                    JOIN public.product_inventory_config c 
+                        ON c.product_id = s.product_id 
+                    JOIN public.inventory_units u ON u.id = c.base_unit_id
+                WHERE s.product_id = %s""", (product_id,))
+        context = {"documents": documents, 
+                   "catalog_product": product_context, 
+                   "stock": stock}
+        fallback = "No hay informacion vigente suficiente para responder esa consulta."
+        if stock:
+            fallback = "Stock disponible confirmado: " + "; ".join(f"{row['warehouse']}: {row['available_qty']} {row['unit']}" for row in stock)
         try:
-            return search_knowledge(question, limit=5, source_type="pdf")
-        except Exception:
-            return []
-
-    def _support_ai_answer(self, question: str, context: dict[str, Any], fallback: str) -> tuple[str, dict[str, Any] | None]:
-        try:
-            ai = generate_ai(f"Pregunta: {question}\nContexto RAG: {json.dumps(context, default=str)}", "Responde solo con el contexto vigente. Si falta informacion, dilo claramente.")
-            metadata = {key: ai[key] for key in ("provider", "model", "used_fallback")}
-            return ai["response"], metadata
+            ai = generate_ai(f"Pregunta: {question}\nContexto RAG: {json.dumps(context, default=str)}", 
+                             "Responde solo con el contexto vigente. Si falta informacion, dilo claramente.")
+            answer, ai_meta = ai["response"], {key: ai[key] for key in ("provider", "model", "used_fallback")}
         except AIProviderError:
-            return fallback, None
+            answer, ai_meta = fallback, None
+        sources = [{"title": row["title"], 
+                    "source": row["source"], 
+                    "expires_at": row["expires_at"]} for row in documents]
+        if product_context:
+            sources.append({"title": product_context["name_product"], 
+                            "source": "product_catalog", 
+                            "expires_at": None})
+        return {"agent": "customer_support", 
+                "answer": answer, 
+                "sources": sources, 
+                "stock": stock, 
+                "ai": ai_meta, 
+                "generated_at": datetime.now(timezone.utc).isoformat()}
 
     def risks(self) -> dict[str, Any]:
         rows = self._all("""
