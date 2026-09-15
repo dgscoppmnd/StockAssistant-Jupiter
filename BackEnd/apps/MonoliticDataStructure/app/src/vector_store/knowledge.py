@@ -9,7 +9,7 @@ from typing import Any, Iterator
 
 from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
 
-from ..api.config import settings
+from api.config import settings
 from .embeddings import encode_query, encode_texts
 from .knowledge_text import chunk_text, normalize_text
 from .product_indexer import get_client
