@@ -9,6 +9,8 @@ from psycopg2.extras import Json, RealDictCursor
 
 from ai_service import AIProviderError, generate_ai
 from external_connectors import ExternalSourceError, get_connectors
+from support_rag import build_support_context, support_fallback, support_sources
+from vector_store.knowledge import search_knowledge
 
 
 class CommercialAgentError(Exception):
@@ -129,7 +131,23 @@ class CommercialAgentService:
             return {"agent": "commercial", "product_id": product_id, "channel": channel, "content": f"{product['name_product']}. {product['description_product'] or ''}".strip(), "evidence": facts, "ai": None}
 
     def support_answer(self, question: str, product_id: int | None = None) -> dict[str, Any]:
-        documents = self._all("""
+        documents = self._support_documents(question)
+        product_context, stock = self._support_product_context(product_id)
+        pdf_documents = self._pdf_evidence(question)
+        context = build_support_context(documents, pdf_documents, product_context, stock)
+        fallback = support_fallback(stock)
+        answer, ai_meta = self._support_ai_answer(question, context, fallback)
+        return {
+            "agent": "customer_support",
+            "answer": answer,
+            "sources": support_sources(documents, pdf_documents, product_context),
+            "stock": stock,
+            "ai": ai_meta,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def _support_documents(self, question: str) -> list[dict[str, Any]]:
+        return self._all("""
             SELECT title, content, source, expires_at 
             FROM public.knowledge_documents
             WHERE is_active = TRUE 

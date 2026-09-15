@@ -5,7 +5,7 @@ from typing import Iterable, List
 
 from sentence_transformers import SentenceTransformer
 
-from ..api.config import settings
+from api.config import settings
 
 
 @lru_cache(maxsize=1)
