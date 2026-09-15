@@ -569,6 +569,9 @@ def init_products_db() -> None:
             ON public.product_reviews (batch_id)
         """,
         """
+        ALTER TABLE public.knowledge_documents ADD COLUMN IF NOT EXISTS archivo TEXT
+        """,
+        """
         CREATE INDEX IF NOT EXISTS ix_knowledge_documents_active_expiry
             ON public.knowledge_documents (is_active, expires_at)
         """,

@@ -116,7 +116,22 @@ def _primary_provider_response(provider: str, prompt: str, system_prompt: str) -
 
 def _semantic_fallback_response(tool_results: dict[str, Any]) -> dict[str, Any] | None:
     """Construye una respuesta útil cuando no hay proveedor LLM disponible."""
-    products = tool_results.get("semantic_products")
+    semantic_result = tool_results.get("semantic_products")
+    if isinstance(semantic_result, dict):
+        products = semantic_result.get("products")
+        if semantic_result.get("status") == "empty":
+            return {
+                "response": semantic_result.get(
+                    "message",
+                    "No se encontraron productos relacionados en el catálogo.",
+                ),
+                "provider": "qdrant",
+                "model": "semantic-search",
+                "used_fallback": True,
+            }
+    else:
+        products = semantic_result
+
     if not isinstance(products, list) or not products:
         return None
 

@@ -35,7 +35,22 @@ export default function MasterDataEditorModal({ title, fields, record, values, s
             return (
               <div className="master-editor-field" key={field.key}>
                 <label className="field-label" htmlFor={inputId}>{field.label}</label>
-                {field.type === "textarea" ? (
+                {field.type === "file" ? (
+                  <>
+                    <input id={inputId} type="file" accept=".txt,.pdf,.md" disabled={saving} onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file && (!/\.(txt|pdf|md)$/i.test(file.name) || file.size === 0 || file.size > 20 * 1024 * 1024)) {
+                        event.target.setCustomValidity("Selecciona un TXT, PDF o MD no vacío de hasta 20 MB.");
+                        event.target.reportValidity();
+                        return;
+                      }
+                      event.target.setCustomValidity("");
+                      onChange(field.key, file ?? record?.[field.key] ?? "");
+                    }} />
+                    <small className="muted">TXT, PDF o MD · Máximo 20 MB · Texto en UTF-8</small>
+                    {record?.[field.key] && <p className="muted">Archivo actual: {String(record[field.key])}. Selecciona otro para sustituir la referencia.</p>}
+                  </>
+                ) : field.type === "textarea" ? (
                   <textarea id={inputId} required={field.required} placeholder={field.placeholder} rows={4} value={String(values[field.key] ?? "")} onChange={(event) => onChange(field.key, event.target.value)} />
                 ) : field.type === "select" ? (
                   <select id={inputId} required={field.required} value={String(values[field.key] ?? "")} onChange={(event) => onChange(field.key, event.target.value)}>
