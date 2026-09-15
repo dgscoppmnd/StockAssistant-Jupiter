@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 from src.DataBaseManagement.dbConectionPostgres import get_db_products
 from src.DataBaseManagement.dbManagementProducts import insert_product
 
+from src.inventory_service import InventoryService
+
 router = APIRouter(prefix="/tools", tags=["tools"])
 logger = logging.getLogger("api.endpointTools")
 
@@ -37,6 +39,26 @@ class ToolEmailPayload(BaseModel):
     subject: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=1)
 
+
+def tool_get_inventory_risk(
+    connection: Any,
+    period_days: int = 30,
+) -> dict[str, Any]:
+    """Obtiene datos reales y de solo lectura sobre riesgos de inventario."""
+    service = InventoryService(connection)
+    stock_items = service.list_stock()
+    dashboard = service.get_executive_dashboard(period_days=period_days)
+
+    return {
+        "has_inventory_data": bool(stock_items),
+        "inventory_records": len(stock_items),
+        "period_days": dashboard.get("period_days", period_days),
+        "metrics": dashboard.get("metrics", {}),
+        "priority_purchases": dashboard.get("priority_purchases", []),
+        "alerts": dashboard.get("alerts", []),
+        "forecast_vs_available": dashboard.get("forecast_vs_available", []),
+        "risk_distribution": dashboard.get("risk_distribution", []),
+    }
 
 def tool_search_products_db(connection: Any, query: str, limit: int = 10) -> list[dict[str, Any]]:
     if not query.strip():
