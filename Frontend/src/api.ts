@@ -338,7 +338,7 @@ export async function fetchProductsPage(page: number, pageSize: number, signal?:
 }
 
 export async function searchProductOptions(query: string, after = 0, signal?: AbortSignal): Promise<ProductOptions> {
-  const params = new URLSearchParams({ q: query, after: String(after), limit: "25" });
+  const params = new URLSearchParams({ q: query, after: String(after), limit: "10" });
   return request<ProductOptions>(`${API_BASE}/products/options?${params}`, { method: "GET", signal });
 }
 
