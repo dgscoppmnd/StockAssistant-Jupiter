@@ -21,7 +21,7 @@ class UserUpdate(BaseModel):
     apellido: str = Field(min_length=1, max_length=100, description="Edita apellido del usuario")
     email: str = Field(min_length=1, max_length=255, description="Edita email del usuario")
     descripcion: str = Field(min_length=1, max_length=200, description="Edita descripción del usuario")
-    password: str = Field(min_length=6, max_length=100, description="Edita contraseña del usuario")
+    password: Optional[str] = Field(default=None, min_length=6, max_length=100, description="Edita contraseña del usuario")
     status: int = Field(description="Edita status del usuario")
     startline: Optional[datetime] = Field(default=None, description="Edita fecha de inicio del usuario")
     deadline: Optional[datetime] = Field(default=None, description="Edita fecha de vencimiento del usuario")

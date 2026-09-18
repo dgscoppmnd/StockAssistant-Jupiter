@@ -1,4 +1,4 @@
-import type { Dispatch, FormEvent, SetStateAction } from "react";
+import { useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 
 export type EditorState = {
   id?: number;
@@ -29,6 +29,9 @@ export default function UserEditorModal({
   onSubmit,
   onClose,
 }: UserEditorModalProps) {
+  const [showPassword, setShowPassword] = useState(false);
+  const isEditing = editor.id !== undefined;
+
   return (
     <div
       className="product-modal-overlay"
@@ -107,16 +110,38 @@ export default function UserEditorModal({
           <label className="field-label" htmlFor="password">
             Contraseña
           </label>
-          <input
-            id="password"
-            maxLength={100}
-            minLength={6}
-            onChange={(e) => setEditor((p) => ({ ...p, password: e.target.value }))}
-            placeholder="Mínimo 6 caracteres"
-            required
-            type="password"
-            value={editor.password}
-          />
+          <div className="password-input-wrapper">
+            <input
+              autoComplete="new-password"
+              id="password"
+              maxLength={100}
+              minLength={6}
+              onChange={(e) => setEditor((p) => ({ ...p, password: e.target.value }))}
+              placeholder={isEditing ? "Dejar vacío para conservar la actual" : "Mínimo 6 caracteres"}
+              required={!isEditing}
+              type={showPassword ? "text" : "password"}
+              value={editor.password}
+            />
+            <button
+              aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              aria-pressed={showPassword}
+              className="password-visibility-button"
+              onClick={() => setShowPassword((visible) => !visible)}
+              title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              type="button"
+            >
+              {showPassword ? (
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="m3 3 18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 4.2A10.9 10.9 0 0 1 12 4c5.5 0 9 8 9 8a18.5 18.5 0 0 1-2.1 3.2M6.6 6.6C4.2 8.2 3 12 3 12s3.5 8 9 8a9.8 9.8 0 0 0 4-.9" />
+                </svg>
+              ) : (
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M3 12s3.5-8 9-8 9 8 9 8-3.5 8-9 8-9-8-9-8Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              )}
+            </button>
+          </div>
 
           <label className="field-label" htmlFor="status">
             Estado

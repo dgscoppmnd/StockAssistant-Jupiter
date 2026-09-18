@@ -66,7 +66,7 @@ export default function UsersPage() {
       apellido: user.apellido,
       email: user.email,
       descripcion: user.descripcion,
-      password: user.password,
+      password: "",
       status: user.status,
       startline: toInputDate(user.startline),
       deadline: toInputDate(user.deadline),
@@ -88,7 +88,7 @@ export default function UsersPage() {
       !editor.apellido.trim() ||
       !editor.email.trim() ||
       !editor.descripcion.trim() ||
-      !editor.password.trim()
+      (!editor.id && !editor.password.trim())
     ) {
       setError("Por favor completa todos los campos obligatorios.");
       return;
@@ -103,10 +103,10 @@ export default function UsersPage() {
           apellido: editor.apellido.trim(),
           email: editor.email.trim(),
           descripcion: editor.descripcion.trim(),
-          password: editor.password.trim(),
           status: editor.status,
           startline: editor.startline || null,
           deadline: editor.deadline || null,
+          ...(editor.password ? { password: editor.password } : {}),
         };
         await updateUser(editor.id, payload);
       } else {

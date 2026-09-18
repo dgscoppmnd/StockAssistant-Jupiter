@@ -1,6 +1,6 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
-import { askCustomerSupport, createPurchaseRecommendation, fetchCompetition, fetchExternalSourceStatuses, fetchFinancialSummary, fetchMarketIntelligence, fetchProducts, fetchRisks, fetchSalesForecast, fetchStockAlerts, processReviewBatch } from "../api";
-import type { CustomerSupportAnswer, ExternalSourceStatus, FinancialSummary, Product, PurchaseRecommendation, SalesForecast, StockAlert } from "../types";
+import { FormEvent, useEffect, useState } from "react";
+import { askCustomerSupport, createPurchaseRecommendation, fetchCompetition, fetchExternalSourceStatuses, fetchFinancialSummary, fetchMarketIntelligence, fetchRisks, fetchSalesForecast, fetchStockAlerts, processReviewBatch } from "../api";
+import type { CustomerSupportAnswer, ExternalSourceStatus, FinancialSummary, ProductOption, PurchaseRecommendation, SalesForecast, StockAlert } from "../types";
 import SectionIcon from "./components/SectionIcon";
 import ProductCombobox from "./components/ProductCombobox";
 
@@ -9,17 +9,14 @@ export default function AgentsOperationsPage() {
   const [alerts, setAlerts] = useState<StockAlert[]>([]);
   const [recommendation, setRecommendation] = useState<PurchaseRecommendation | null>(null);
   const [productId, setProductId] = useState("");
-  const [products, setProducts] = useState<Product[]>([]);
-  const [productsLoading, setProductsLoading] = useState(true);
-  const [productsError, setProductsError] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState<ProductOption | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
-  const selectedProduct = products.find((product) => product.pk_product === Number(productId));
-  const canAnalyze = Boolean(selectedProduct) && !productsLoading && !productsError && !analyzing;
+  const canAnalyze = Boolean(selectedProduct) && !analyzing;
   const [reviewProductId, setReviewProductId] = useState("");
   const [reviews, setReviews] = useState("");
   const [processingReviews, setProcessingReviews] = useState(false);
-  const selectedReviewProduct = products.find((product) => product.pk_product === Number(reviewProductId));
-  const canProcessReviews = Boolean(selectedReviewProduct) && Boolean(reviews.trim()) && !productsLoading && !productsError && !processingReviews;
+  const [selectedReviewProduct, setSelectedReviewProduct] = useState<ProductOption | null>(null);
+  const canProcessReviews = Boolean(selectedReviewProduct) && Boolean(reviews.trim()) && !processingReviews;
   const [status, setStatus] = useState("Cargando agentes...");
   const [error, setError] = useState("");
   const [forecast, setForecast] = useState<SalesForecast | null>(null);
@@ -38,19 +35,6 @@ export default function AgentsOperationsPage() {
     } catch (err) { setError(err instanceof Error ? err.message : "No se pudieron cargar los agentes"); }
   };
   useEffect(() => { void load(); }, []);
-
-  const loadProducts = useCallback(async () => {
-    setProductsLoading(true);
-    setProductsError("");
-    try {
-      setProducts(await fetchProducts());
-    } catch (err) {
-      setProductsError(err instanceof Error ? err.message : "No se pudieron cargar los productos.");
-    } finally {
-      setProductsLoading(false);
-    }
-  }, []);
-  useEffect(() => { void loadProducts(); }, [loadProducts]);
 
   const recommend = async (event: FormEvent) => {
     event.preventDefault();
@@ -108,15 +92,14 @@ export default function AgentsOperationsPage() {
       <article className="card"><p className="section-label">Agente de compras</p>
         <h3><SectionIcon kind="cart" />Recomendacion con evidencia</h3>
         <form className="stack" onSubmit={recommend}>
-          <ProductCombobox products={products} selectedId={Number(productId)}
-            disabled={analyzing || Boolean(productsError)} loading={productsLoading}
+          <ProductCombobox selectedProduct={selectedProduct} selectedId={Number(productId)}
+            disabled={analyzing}
             onSelect={(product) => {
               if (product.pk_product === Number(productId)) return;
-              setProductId(String(product.pk_product));
+              setSelectedProduct(product); setProductId(String(product.pk_product));
               setRecommendation(null); setForecast(null); setFinancial(null); setCompetition(null);
               setError("");
             }} />
-          {productsError && <p className="error-line" role="alert">{productsError} <button className="chip-btn" type="button" onClick={() => void loadProducts()}>Reintentar</button></p>}
           <button className="primary-btn" disabled={!canAnalyze} type="submit">Analizar compra</button>
         </form>
         <button className="chip-btn" disabled={!canAnalyze} onClick={() => void analyzeProduct()} type="button">Analisis comercial</button>
@@ -131,10 +114,9 @@ export default function AgentsOperationsPage() {
       <article className="card"><p className="section-label">Agente de valoraciones</p>
         <h3><SectionIcon kind="review" />Procesar lote</h3>
         <form className="stack" onSubmit={submitReviews}>
-          <ProductCombobox products={products} selectedId={Number(reviewProductId)}
-            disabled={processingReviews || Boolean(productsError)} loading={productsLoading}
-            onSelect={(product) => { setReviewProductId(String(product.pk_product)); setError(""); }} />
-          {productsError && <p className="error-line" role="alert">{productsError} <button className="chip-btn" type="button" onClick={() => void loadProducts()}>Reintentar</button></p>}
+          <ProductCombobox selectedProduct={selectedReviewProduct} selectedId={Number(reviewProductId)}
+            disabled={processingReviews}
+            onSelect={(product) => { setSelectedReviewProduct(product); setReviewProductId(String(product.pk_product)); setError(""); }} />
           <textarea required disabled={processingReviews} placeholder="Una valoracion por linea" value={reviews} onChange={(event) => setReviews(event.target.value)} rows={5} />
           <button className="chip-btn" disabled={!canProcessReviews} type="submit">{processingReviews ? "Procesando…" : "Clasificar valoraciones"}</button>
         </form>

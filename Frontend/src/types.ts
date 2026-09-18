@@ -122,7 +122,7 @@ export type UserUpdatePayload = {
   apellido: string;
   email: string;
   descripcion: string;
-  password: string;
+  password?: string;
   status: number;
   startline?: string | null;
   deadline?: string | null;

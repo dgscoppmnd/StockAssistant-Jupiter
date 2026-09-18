@@ -356,7 +356,7 @@ def listar_productos_paginados(
 def buscar_opciones_productos(
 	q: str = Query(default="", max_length=200),
 	after: int = Query(default=0, ge=0),
-	limit: int = Query(default=25, ge=1, le=50),
+	limit: int = Query(default=10, ge=1, le=50),
 	db=Depends(get_db_products),
 ):
 	return search_product_options(q, after, limit, db)
