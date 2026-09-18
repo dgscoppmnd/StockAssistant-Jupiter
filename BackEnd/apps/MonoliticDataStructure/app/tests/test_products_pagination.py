@@ -13,12 +13,38 @@ if __file__ != "<stdin>":
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from DataBaseManagement.dbConectionPostgres import db_context, get_db_products
-from DataBaseManagement.dbManagementProducts import get_products_page
+from DataBaseManagement.dbManagementProducts import get_products_page, search_product_options
+from DataBaseManagement.product_search import search_pattern
 from DataBaseManagement.dbservicesProducts import ProductServicesManager
 from endpoints.endpointsProducts import router
 
 
 class ProductsPaginationTests(unittest.TestCase):
+    def test_short_search_does_not_query_database(self):
+        db, cursor = self.connection()
+        for text in ("a", "ab", " ab "):
+            self.assertEqual(search_product_options(text, 0, 10, db), {"items": [], "next_cursor": None})
+        cursor.execute.assert_not_called()
+
+    def test_recent_options_are_bounded_and_descending(self):
+        db, cursor = self.connection(rows=[{"pk_product": n} for n in range(100, 89, -1)])
+        result = search_product_options("", 0, 10, db)
+        self.assertEqual(len(result["items"]), 10)
+        self.assertEqual(result["next_cursor"], 91)
+        self.assertIn("ORDER BY pk_product DESC", cursor.execute.call_args.args[0])
+        self.assertEqual(cursor.execute.call_args.args[1], [11])
+
+    def test_search_by_code_or_name_uses_cursor_and_literals(self):
+        db, cursor = self.connection()
+        result = search_product_options("Café_100%", 123, 10, db)
+        self.assertIsNone(result["next_cursor"])
+        sql, params = cursor.execute.call_args.args
+        self.assertIn("cdgo_producto_externo", sql)
+        self.assertIn("name_product", sql)
+        self.assertIn("pk_product < %s", sql)
+        self.assertEqual(params, [123, "%cafe\\_100\\%%", 11])
+        self.assertEqual(search_pattern(" CAFÉ "), "%cafe%")
+
     def connection(self, total=100000, rows=None):
         db = MagicMock()
         cursor = db.cursor.return_value.__enter__.return_value
@@ -100,6 +126,10 @@ def benchmark_read_only():
                             "returned": len(ids), "milliseconds": round(elapsed, 2),
                             "json_bytes": len(json.dumps(result, default=str).encode())})
         print("READ_ONLY_BENCHMARK " + json.dumps(samples))
+        for term in ("", "PRD0000001", "Zapatillas", "inexistente-xyz-123"):
+            start = perf_counter()
+            options = search_product_options(term, 0, 10, db)
+            print("OPTIONS_BENCHMARK", json.dumps({"query": term, "returned": len(options["items"]), "ms": round((perf_counter() - start) * 1000, 2)}))
 
 
 if __name__ == "__main__":

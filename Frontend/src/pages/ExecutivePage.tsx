@@ -1,6 +1,6 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
-import { askExecutive, fetchAutomationRules, fetchAutomationRuns, fetchProducts, fetchPurchaseProposals, runAutomationRule, updateAutomationRule } from "../api";
-import type { AutomationRule, AutomationRun, ExecutiveResult, Product, PurchaseProposal } from "../types";
+import { FormEvent, useEffect, useState } from "react";
+import { askExecutive, fetchAutomationRules, fetchAutomationRuns, fetchPurchaseProposals, runAutomationRule, updateAutomationRule } from "../api";
+import type { AutomationRule, AutomationRun, ExecutiveResult, ProductOption, PurchaseProposal } from "../types";
 import ProductCombobox from "./components/ProductCombobox";
 import SectionIcon from "./components/SectionIcon";
 
@@ -10,13 +10,10 @@ export default function ExecutivePage() {
   const [proposals, setProposals] = useState<PurchaseProposal[]>([]);
   const [question, setQuestion] = useState("");
   const [productId, setProductId] = useState("");
-  const [products, setProducts] = useState<Product[]>([]);
-  const [productsLoading, setProductsLoading] = useState(true);
-  const [productsError, setProductsError] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState<ProductOption | null>(null);
   const [answer, setAnswer] = useState<ExecutiveResult | null>(null);
   const [status, setStatus] = useState("Cargando coordinación...");
   const [error, setError] = useState("");
-  const selectedProduct = products.find((product) => product.pk_product === Number(productId));
 
   const load = async () => {
     try {
@@ -25,19 +22,6 @@ export default function ExecutivePage() {
     } catch (err) { setError(err instanceof Error ? err.message : "No se pudo cargar la coordinacion"); }
   };
   useEffect(() => { void load(); }, []);
-
-  const loadProducts = useCallback(async () => {
-    setProductsLoading(true);
-    setProductsError("");
-    try {
-      setProducts(await fetchProducts());
-    } catch (err) {
-      setProductsError(err instanceof Error ? err.message : "No se pudieron cargar los productos.");
-    } finally {
-      setProductsLoading(false);
-    }
-  }, []);
-  useEffect(() => { void loadProducts(); }, [loadProducts]);
 
   const query = async (event: FormEvent) => {
     event.preventDefault();
@@ -56,17 +40,15 @@ export default function ExecutivePage() {
     <section className="grid two-columns"><article className="card"><p className="section-label">Consulta ejecutiva</p><h3><SectionIcon kind="route" />Enrutamiento trazable</h3><form className="stack" onSubmit={query}><textarea required placeholder="Ejemplo: ¿qué productos tienen riesgo de rotura de stock?" value={question} onChange={(event) => setQuestion(event.target.value)} rows={3} />
       <ProductCombobox
         label="Producto opcional (código o nombre)"
-        products={products}
-        selectedId={Number(productId)}
-        disabled={Boolean(productsError)}
-        loading={productsLoading}
+        selectedProduct={selectedProduct} selectedId={Number(productId)}
+        disabled={false}
+
         onSelect={(product) => {
-          setProductId(String(product.pk_product));
+          setSelectedProduct(product); setProductId(String(product.pk_product));
           setError("");
         }}
       />
-      {productsError && <p className="error-line" role="alert">{productsError} <button className="chip-btn" type="button" onClick={() => void loadProducts()}>Reintentar</button></p>}
-      {selectedProduct && <button className="chip-btn" type="button" onClick={() => setProductId("")}>Quitar producto</button>}
+      {selectedProduct && <button className="chip-btn" type="button" onClick={() => { setProductId(""); setSelectedProduct(null); }}>Quitar producto</button>}
       <button className="primary-btn" type="submit">Consultar al Ejecutivo</button></form>{answer && <div className="agent-result"><strong>Enrutado a: {answer.routed_agent}</strong><p>Herramienta: {answer.tool}</p><small>{answer.execution_policy}</small><details open><summary>Resultado de la consulta</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(answer.result, null, 2)}</pre></details></div>}</article>
       <article className="card"><p className="section-label">Propuestas de compra</p><h3><SectionIcon kind="approval" />Aprobación humana obligatoria</h3><div className="inventory-list">{proposals.map((proposal) => <div className="inventory-list-item" key={proposal.id}><strong>{proposal.product_name}</strong><span>{proposal.suggested_qty} {proposal.base_unit_code} · {proposal.warehouse_name}</span><small>{proposal.status}: {proposal.justification}</small></div>)}{!proposals.length && <p className="muted">No hay propuestas pendientes.</p>}</div></article></section>
     <section className="card"><p className="section-label">Automatizaciones del backend</p><h3><SectionIcon kind="automation" />Activar, ejecutar y auditar</h3><div className="inventory-table">{rules.map((rule) => <div className="inventory-table-row executive-rule" key={rule.id}><span><strong>{rule.name}</strong><small>{rule.description}</small></span><span>{rule.is_active ? "Activa" : "Pausada"}</span><span><button className="chip-btn" onClick={() => void toggle(rule)} type="button">{rule.is_active ? "Pausar" : "Activar"}</button><button className="primary-btn" onClick={() => void run(rule.id)} type="button">Ejecutar</button></span></div>)}</div></section>

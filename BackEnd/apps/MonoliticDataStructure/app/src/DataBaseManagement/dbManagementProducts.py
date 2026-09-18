@@ -86,14 +86,17 @@ def get_products_page(page: int, page_size: int, connection: Any = None) -> dict
 def search_product_options(query: str, after: int, limit: int, connection: Any) -> dict[str, Any]:
 	if not 1 <= limit <= 50 or after < 0 or len(query) > 200:
 		raise ValueError("Parámetros de búsqueda no válidos.")
-	where = "pk_product > %s"
-	params = [after]
+	if query.strip() and len(query.strip()) < 3:
+		return {"items": [], "next_cursor": None}
+	# El ID de inserción conserva el orden de alta, incluso con fechas importadas.
+	where = "pk_product < %s" if after else "TRUE"
+	params = [after] if after else []
 	if query.strip():
 		where += f" AND {SEARCH_EXPRESSION} LIKE %s"
 		params.append(search_pattern(query))
 	with connection.cursor(cursor_factory=RealDictCursor) as cursor:
 		cursor.execute(
-			f"SELECT pk_product, cdgo_producto_externo, name_product FROM public.productos WHERE {where} ORDER BY pk_product LIMIT %s",
+			f"SELECT pk_product, cdgo_producto_externo, name_product FROM public.productos WHERE {where} ORDER BY pk_product DESC LIMIT %s",
 			[*params, limit + 1],
 		)
 		rows = [dict(row) for row in cursor.fetchall()]
