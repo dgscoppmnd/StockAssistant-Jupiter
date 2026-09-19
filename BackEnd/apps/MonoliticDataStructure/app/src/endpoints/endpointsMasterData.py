@@ -1,14 +1,21 @@
 import json
+import logging
+import os
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status, File, Form, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, status, File, Form, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
-from DataBaseManagement.dbConectionPostgres import get_db_products
+from DataBaseManagement.client_csv_import import MAX_CSV_BYTES as MAX_CLIENT_CSV_BYTES, import_client_csv, import_client_csv_events
+from DataBaseManagement.dbConectionPostgres import db_context, get_db_products
+from DataBaseManagement.supplier_csv_import import MAX_CSV_BYTES as MAX_SUPPLIER_CSV_BYTES, import_supplier_csv, import_supplier_csv_events
 from knowledge_files import save_document
 from master_data_service import MasterDataError, MasterDataService
 
 router = APIRouter(prefix="/master-data", tags=["master data"])
+logger = logging.getLogger("api.endpointsMasterData")
 
 
 class MasterPayload(BaseModel):
@@ -26,6 +33,97 @@ def _service(db=Depends(get_db_products)) -> MasterDataService:
 
 def _raise(exc: MasterDataError) -> None:
     raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.post("/clients/import-csv")
+async def import_clients_csv(file: UploadFile = File(...), progress: bool = Query(default=False)):
+    try:
+        if not (file.filename or "").lower().endswith(".csv"):
+            raise HTTPException(status_code=400, detail="Selecciona un archivo .csv.")
+        if file.size is not None and file.size > MAX_CLIENT_CSV_BYTES:
+            raise HTTPException(status_code=413, detail="El CSV supera el límite de 200 MB.")
+        if progress:
+            source = await run_in_threadpool(_duplicate_csv_file, file.file)
+            return StreamingResponse(
+                _stream_client_import(source), media_type="application/x-ndjson",
+                headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+            )
+        return await run_in_threadpool(_import_client_file, file.file)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("event=import_clients_csv_failed")
+        raise HTTPException(status_code=500, detail="No se pudo importar el CSV. No se ha guardado ningún cliente.") from exc
+    finally:
+        await file.close()
+
+
+def _duplicate_csv_file(source):
+    source.seek(0)
+    return os.fdopen(os.dup(source.fileno()), "rb")
+
+
+def _import_client_file(source):
+    with db_context() as db:
+        return import_client_csv(source, db)
+
+
+def _stream_client_import(source):
+    with source:
+        try:
+            with db_context() as db:
+                for event in import_client_csv_events(source, db):
+                    yield json.dumps(event, ensure_ascii=False) + "\n"
+        except ValueError as exc:
+            yield json.dumps({"stage": "error", "detail": str(exc)}, ensure_ascii=False) + "\n"
+        except Exception:
+            logger.exception("event=import_clients_csv_failed")
+            yield json.dumps({"stage": "error", "detail": "No se pudo importar el CSV. No se ha guardado ningún cliente."}) + "\n"
+
+
+@router.post("/suppliers/import-csv")
+async def import_suppliers_csv(file: UploadFile = File(...), progress: bool = Query(default=False)):
+    try:
+        if not (file.filename or "").lower().endswith(".csv"):
+            raise HTTPException(status_code=400, detail="Selecciona un archivo .csv.")
+        if file.size is not None and file.size > MAX_SUPPLIER_CSV_BYTES:
+            raise HTTPException(status_code=413, detail="El CSV supera el límite de 200 MB.")
+        if progress:
+            source = await run_in_threadpool(_duplicate_csv_file, file.file)
+            return StreamingResponse(
+                _stream_supplier_import(source), media_type="application/x-ndjson",
+                headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+            )
+        return await run_in_threadpool(_import_supplier_file, file.file)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("event=import_suppliers_csv_failed")
+        raise HTTPException(status_code=500, detail="No se pudo importar el CSV. No se ha guardado ningún proveedor.") from exc
+    finally:
+        await file.close()
+
+
+def _import_supplier_file(source):
+    with db_context() as db:
+        return import_supplier_csv(source, db)
+
+
+def _stream_supplier_import(source):
+    with source:
+        try:
+            with db_context() as db:
+                for event in import_supplier_csv_events(source, db):
+                    yield json.dumps(event, ensure_ascii=False) + "\n"
+        except ValueError as exc:
+            yield json.dumps({"stage": "error", "detail": str(exc)}, ensure_ascii=False) + "\n"
+        except Exception:
+            logger.exception("event=import_suppliers_csv_failed")
+            yield json.dumps({"stage": "error", "detail": "No se pudo importar el CSV. No se ha guardado ningún proveedor."}) + "\n"
 
 
 @router.get("/clients/{client_id}/addresses")
