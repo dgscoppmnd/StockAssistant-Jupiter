@@ -63,6 +63,20 @@ def get_all_products(connection: Any = None) -> list[dict[str, Any]]:
 			return [dict(row) for row in cursor.fetchall()]
 
 
+def get_products_by_external_codes(codes: list[str], connection: Any) -> list[dict[str, Any]]:
+	"""Recupera por lotes los productos que deben sincronizarse con Qdrant."""
+	if not codes:
+		return []
+	with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+		cursor.execute(
+			"""SELECT * FROM public.productos
+			WHERE cdgo_producto_externo = ANY(%s)
+			ORDER BY pk_product ASC""",
+			(codes,),
+		)
+		return [dict(row) for row in cursor.fetchall()]
+
+
 def get_products_page(page: int, page_size: int, connection: Any = None) -> dict[str, Any]:
 	if page < 1 or not 1 <= page_size <= 100:
 		raise ValueError("Página o tamaño de página fuera del rango permitido.")
