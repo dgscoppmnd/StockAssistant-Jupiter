@@ -39,6 +39,7 @@ import type {
 
 import { uploadProductCsv, type ProductImportProgress, type ProductImportResult } from "./utils/productCsvUpload";
 import { uploadClientCsv, type ClientImportProgress, type ClientImportResult } from "./utils/clientCsvUpload";
+import { uploadSupplierCsv, type SupplierImportProgress, type SupplierImportResult } from "./utils/supplierCsvUpload";
 
 const API_BASE = "/api";
 const API_KEY_STORAGE_KEY = "stockassistant-api-key";
@@ -482,6 +483,20 @@ export async function importClientsCsv(file: File, onProgress?: (progress: Clien
   const formData = new FormData();
   formData.append("file", file);
   return request(`${API_BASE}/master-data/clients/import-csv`, { method: "POST", body: formData });
+}
+
+export async function importSuppliersCsv(file: File, onProgress?: (progress: SupplierImportProgress) => void): Promise<SupplierImportResult> {
+  if (onProgress) {
+    const token = getSessionToken();
+    const key = token ? "" : getApiKey();
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    else if (key) headers["X-API-Key"] = key;
+    return uploadSupplierCsv(file, headers, onProgress);
+  }
+  const formData = new FormData();
+  formData.append("file", file);
+  return request(`${API_BASE}/master-data/suppliers/import-csv`, { method: "POST", body: formData });
 }
 
 export async function createMasterRecord(resource: string, values: Record<string, unknown>): Promise<MasterRecord> {

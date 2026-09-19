@@ -34,7 +34,7 @@ def iter_client_csv(source):
     try:
         yield from _parse_client_rows(text)
     except UnicodeDecodeError as exc:
-            raise ValueError("El CSV debe estar codificado en UTF-8.") from exc
+        raise ValueError("El CSV debe estar codificado en UTF-8.") from exc
     finally:
         text.detach()
 
