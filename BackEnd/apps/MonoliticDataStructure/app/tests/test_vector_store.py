@@ -15,7 +15,9 @@ class VectorStoreIntegrationTests(unittest.TestCase):
     def test_index_search_and_empty_collection(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
-        from src.api.config import settings
+        # Los módulos vectoriales cargan la configuración desde esta raíz.
+        # Importar también ``src.api.config`` crearía una segunda instancia de settings.
+        from api.config import settings
         from src.api.routes.products import router
         from src.vector_store.product_indexer import get_client, index_products
 

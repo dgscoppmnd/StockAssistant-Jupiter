@@ -2,9 +2,16 @@ import logging
 import json
 import os
 import uuid
+from itertools import islice
 from pathlib import Path
 from starlette.concurrency import run_in_threadpool
-from DataBaseManagement.product_csv_import import MAX_CSV_BYTES, import_product_csv, import_product_csv_events
+from DataBaseManagement.product_csv_import import (
+	IMPORT_BATCH_SIZE,
+	MAX_CSV_BYTES,
+	import_product_csv,
+	import_product_csv_events,
+	iter_product_csv,
+)
 from fastapi.responses import StreamingResponse
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -19,7 +26,11 @@ from DataBaseManagement.dbManagementProductImages import (
 	set_default_product_image,
 )
 from DataBaseManagement.dbservicesProducts import ProductServicesManager
-from DataBaseManagement.dbManagementProducts import search_product_options, get_product_option
+from DataBaseManagement.dbManagementProducts import (
+	get_product_option,
+	get_products_by_external_codes,
+	search_product_options,
+)
 from DataBaseManagement.schemasProducts import (
 	ProductCreate,
 	ProductImageResponse,
@@ -44,6 +55,58 @@ ALLOWED_IMAGE_CONTENT_TYPES: dict[str, str] = {
 	"image/gif": ".gif",
 	"image/svg+xml": ".svg",
 }
+
+
+def _sync_product_vector(product: dict) -> tuple[bool, str | None]:
+	"""Sincroniza un alta/cambio sin convertir un fallo vectorial en un falso rollback SQL."""
+	try:
+		from src.vector_store.product_indexer import delete_product_record, upsert_product_records
+
+		if product.get("disabled"):
+			delete_product_record(int(product["pk_product"]))
+		else:
+			upsert_product_records([product])
+		return True, None
+	except Exception as exc:
+		logger.exception(
+			"event=product_vector_sync_failed product_id=%s",
+			product.get("pk_product"),
+		)
+		return False, str(exc)
+
+
+def _iter_imported_product_vector_counts(source, db):
+	"""Relee el CSV ya confirmado y sincroniza sus productos en memoria acotada."""
+	from src.vector_store.product_indexer import iter_upsert_product_records
+
+	def database_rows():
+		products = iter_product_csv(source)
+		try:
+			while batch := list(islice(products, IMPORT_BATCH_SIZE)):
+				codes = [product.cdgo_producto_externo for product in batch]
+				yield from get_products_by_external_codes(codes, connection=db)
+		finally:
+			products.close()
+
+	yield from iter_upsert_product_records(database_rows())
+
+
+def _sync_imported_product_vectors(source, db) -> int:
+	indexed = 0
+	for indexed in _iter_imported_product_vector_counts(source, db):
+		pass
+	return indexed
+
+
+def _add_vector_result(result: dict, source, db) -> dict:
+	try:
+		result["indexed"] = _sync_imported_product_vectors(source, db)
+		result["index_error"] = None
+	except Exception as exc:
+		logger.exception("event=import_products_vector_sync_failed")
+		result["indexed"] = 0
+		result["index_error"] = str(exc)
+	return result
 
 
 def _content_type_to_extension(content_type: str) -> str:
@@ -258,15 +321,39 @@ def _duplicate_csv_file(source):
 
 def _import_product_file(source):
 	with db_context() as db:
-		return import_product_csv(source, db)
+		result = import_product_csv(source, db)
+		return _add_vector_result(result, source, db)
 
 
 def _stream_product_import(source):
 	with source:
 		try:
 			with db_context() as db:
+				completion = None
 				for event in import_product_csv_events(source, db):
-					yield json.dumps(event, ensure_ascii=False) + "\n"
+					if event["stage"] == "complete":
+						completion = event
+					else:
+						yield json.dumps(event, ensure_ascii=False) + "\n"
+				if completion is None:
+					raise RuntimeError("La importación no ha finalizado.")
+				yield json.dumps({"stage": "indexing", "percent": 0}, ensure_ascii=False) + "\n"
+				try:
+					indexed = 0
+					total = max(int(completion["result"]["total"]), 1)
+					for indexed in _iter_imported_product_vector_counts(source, db):
+						yield json.dumps(
+							{"stage": "indexing", "percent": min(99, int(indexed * 100 / total)), "processed": indexed, "total": total},
+							ensure_ascii=False,
+						) + "\n"
+					completion["result"]["indexed"] = indexed
+					completion["result"]["index_error"] = None
+				except Exception as exc:
+					logger.exception("event=import_products_vector_sync_failed")
+					completion["result"]["indexed"] = 0
+					completion["result"]["index_error"] = str(exc)
+				yield json.dumps({"stage": "indexing", "percent": 100}, ensure_ascii=False) + "\n"
+				yield json.dumps(completion, ensure_ascii=False) + "\n"
 		except ValueError as exc:
 			yield json.dumps({"stage": "error", "detail": str(exc)}, ensure_ascii=False) + "\n"
 		except Exception:
@@ -279,6 +366,7 @@ def crear_producto(product: ProductCreate, db=Depends(get_db_products)):
 	logger.info("event=create_product_start name=%s", product.name_product)
 	manager: ProductServicesManager = ProductServicesManager(db)
 	created_product = manager.add_Product(product)
+	created_product["semantic_indexed"], created_product["semantic_index_error"] = _sync_product_vector(created_product)
 	logger.info("event=create_product_success product_id=%s", created_product.get("pk_product"))
 	return created_product
 
@@ -289,6 +377,7 @@ def actualizar_producto(product_id: int, product_update: ProductUpdate, db=Depen
 	manager: ProductServicesManager = ProductServicesManager(db)
 	try:
 		updated_product = manager.update_Product(product_id, product_update)
+		updated_product["semantic_indexed"], updated_product["semantic_index_error"] = _sync_product_vector(updated_product)
 		logger.info("event=update_product_success product_id=%s", product_id)
 		return updated_product
 	except ValueError as e:
@@ -302,6 +391,11 @@ def borrar_producto(product_id: int, db=Depends(get_db_products)):
 	manager: ProductServicesManager = ProductServicesManager(db)
 	try:
 		manager.delete_Product(product_id)
+		try:
+			from src.vector_store.product_indexer import delete_product_record
+			delete_product_record(product_id)
+		except Exception:
+			logger.exception("event=delete_product_vector_sync_failed product_id=%s", product_id)
 		logger.info("event=delete_product_success product_id=%s", product_id)
 	except ValueError as e:
 		logger.warning("event=delete_product_not_found product_id=%s detail=%s", product_id, str(e))
@@ -315,6 +409,7 @@ def set_product_status(product_id: int, db=Depends(get_db_products)):
 	manager: ProductServicesManager = ProductServicesManager(db)
 	try:
 		updated_product = manager.set_Product_status(product_id)
+		updated_product["semantic_indexed"], updated_product["semantic_index_error"] = _sync_product_vector(updated_product)
 		logger.info("event=set_product_status_success product_id=%s", product_id)
 		return updated_product
 	except ValueError as e:
