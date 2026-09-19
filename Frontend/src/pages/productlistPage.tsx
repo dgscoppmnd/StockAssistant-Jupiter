@@ -81,10 +81,11 @@ export default function ProductlistPage() {
   const [importResult, setImportResult] = useState("");
   const [importProgress, setImportProgress] = useState<ProductImportProgress | null>(null);
   const progressLabels = {
-    uploading: "Subiendo archivo (1/3)",
-    validating: "Validando CSV (2/3)",
-    importing: "Importando productos (3/3)",
+    uploading: "Subiendo archivo (1/4)",
+    validating: "Validando CSV (2/4)",
+    importing: "Importando productos (3/4)",
     committing: "Confirmando el guardado",
+    indexing: "Actualizando búsqueda semántica en Qdrant (4/4)",
     complete: "Importación completada",
   };
 
@@ -126,7 +127,10 @@ export default function ProductlistPage() {
     setImporting(true);
     try {
       const result = await importProductsCsv(csvFile, setImportProgress);
-      setImportResult(`Importación completada: ${result.imported} productos importados y ${result.skipped} omitidos por código existente, de ${result.total} productos.`);
+      const vectorStatus = result.index_error
+        ? " No se pudo actualizar Qdrant; los productos sí quedaron guardados."
+        : ` ${result.indexed} productos quedaron disponibles para búsqueda semántica.`;
+      setImportResult(`Importación completada: ${result.imported} productos importados y ${result.skipped} omitidos por código existente, de ${result.total} productos.${vectorStatus}`);
       setCsvFile(null);
       setShowImport(false);
       await loadProducts();
@@ -191,14 +195,15 @@ export default function ProductlistPage() {
     try {
       const payload = buildPayload(editor);
 
-      if (editor.pk_product) {
-        await updateProduct(editor.pk_product, payload as ProductUpdatePayload);
-      } else {
-        await createProduct(payload);
-      }
+      const saved = editor.pk_product
+        ? await updateProduct(editor.pk_product, payload as ProductUpdatePayload)
+        : await createProduct(payload);
 
       await loadProducts();
       closeModal();
+      if (saved.semantic_indexed === false) {
+        setError("El producto se guardó, pero no se pudo actualizar su vector en Qdrant.");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar el producto");
     } finally {
@@ -310,7 +315,7 @@ export default function ProductlistPage() {
           <p id="product-import-progress-label" role="status" style={{ marginBottom: 6 }}>
             {progressLabels[importProgress.stage]}
             {importProgress.stage !== "committing" && `: ${importProgress.percent}%`}
-            {importProgress.stage === "importing" && ` · ${importProgress.processed?.toLocaleString("es-ES")} de ${importProgress.total?.toLocaleString("es-ES")} productos procesados`}
+            {(importProgress.stage === "importing" || importProgress.stage === "indexing") && typeof importProgress.processed === "number" && ` · ${importProgress.processed.toLocaleString("es-ES")} de ${importProgress.total?.toLocaleString("es-ES")} productos procesados`}
           </p>
           <progress aria-labelledby="product-import-progress-label" max={100} value={importProgress.stage === "committing" ? undefined : importProgress.percent} style={{ width: "100%", height: 22, accentColor: "#2563eb" }} />
         </div>

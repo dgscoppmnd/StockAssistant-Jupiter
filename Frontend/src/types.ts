@@ -148,6 +148,8 @@ export type Product = {
   last_update: string | null;
   supplier: string | null;
   default_image_url?: string | null;
+  semantic_indexed?: boolean | null;
+  semantic_index_error?: string | null;
 };
 
 export type ProductPage = {
