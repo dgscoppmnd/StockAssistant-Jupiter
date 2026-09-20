@@ -77,6 +77,33 @@ def get_products_by_external_codes(codes: list[str], connection: Any) -> list[di
 		return [dict(row) for row in cursor.fetchall()]
 
 
+def count_active_products(connection: Any) -> int:
+	with connection.cursor() as cursor:
+		cursor.execute("SELECT COUNT(*) FROM public.productos WHERE disabled = FALSE")
+		return int(cursor.fetchone()[0])
+
+
+def iter_active_product_batches(connection: Any, batch_size: int = 1000):
+	"""Recorre productos activos con paginación keyset y memoria acotada."""
+	if batch_size < 1:
+		raise ValueError("batch_size debe ser mayor que cero")
+	last_product_id = 0
+	while True:
+		with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+			cursor.execute(
+				"""SELECT * FROM public.productos
+				WHERE disabled = FALSE AND pk_product > %s
+				ORDER BY pk_product ASC
+				LIMIT %s""",
+				(last_product_id, batch_size),
+			)
+			batch = [dict(row) for row in cursor.fetchall()]
+		if not batch:
+			return
+		yield batch
+		last_product_id = int(batch[-1]["pk_product"])
+
+
 def get_products_page(page: int, page_size: int, connection: Any = None) -> dict[str, Any]:
 	if page < 1 or not 1 <= page_size <= 100:
 		raise ValueError("Página o tamaño de página fuera del rango permitido.")

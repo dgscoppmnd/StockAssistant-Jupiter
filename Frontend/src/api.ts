@@ -38,6 +38,7 @@ import type {
 } from "./types";
 
 import { uploadProductCsv, type ProductImportProgress, type ProductImportResult } from "./utils/productCsvUpload";
+import { runProductQdrantSync, type ProductQdrantSyncProgress, type ProductQdrantSyncResult } from "./utils/productQdrantSync";
 import { uploadClientCsv, type ClientImportProgress, type ClientImportResult } from "./utils/clientCsvUpload";
 import { uploadSupplierCsv, type SupplierImportProgress, type SupplierImportResult } from "./utils/supplierCsvUpload";
 
@@ -329,6 +330,17 @@ export async function importProductsCsv(file: File, onProgress?: (progress: Prod
   const formData = new FormData();
   formData.append("file", file);
   return request(`${API_BASE}/products/import-csv`, { method: "POST", body: formData });
+}
+
+export async function syncProductsQdrant(
+  onProgress: (progress: ProductQdrantSyncProgress) => void,
+): Promise<ProductQdrantSyncResult> {
+  const token = getSessionToken();
+  const key = token ? "" : getApiKey();
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  else if (key) headers["X-API-Key"] = key;
+  return runProductQdrantSync(headers, onProgress);
 }
 
 export async function fetchProducts(): Promise<Product[]> {
