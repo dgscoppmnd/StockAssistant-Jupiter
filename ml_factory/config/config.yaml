@@ -6,7 +6,7 @@ database:
     products: products
     suppliers: suppliers
     logistics: logistics
-    warehouse: warehouse
+    warehouse: warehouses
 
 model:
   stockout:

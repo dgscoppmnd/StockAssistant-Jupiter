@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -50,7 +51,7 @@ class TrainingPipeline:
         global_params = self.config["model"].get("params", {})
         trainer = ModelTrainer(
             model_params=global_params,
-            tracking_uri=self.config["mlflow"].get("tracking_uri"),
+            tracking_uri=os.getenv("MLFLOW_TRACKING_URI", self.config["mlflow"].get("tracking_uri")),
             experiment_name=self.config["mlflow"].get("experiment_name", "stockassistant-ml-factory"),
             registered_model_name=model_config["name"],
         )
