@@ -1,10 +1,11 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BootstrapTable from "react-bootstrap-table-next";
 import paginationFactory from "react-bootstrap-table2-paginator";
-import { createProduct, deleteProduct, fetchProductsPage, importProductsCsv, updateProduct } from "../api";
+import { createProduct, deleteProduct, fetchProductsPage, importProductsCsv, syncProductsQdrant, updateProduct } from "../api";
 import type { Product, ProductCreatePayload, ProductUpdatePayload } from "../types";
 import ProductEditerForm, { type EditorState, emptyEditor } from "./components/productEditerForm";
 import type { ProductImportProgress } from "../utils/productCsvUpload";
+import type { ProductQdrantSyncProgress } from "../utils/productQdrantSync";
 
 function toInputDate(raw?: string | null): string {
   if (!raw) return "";
@@ -80,6 +81,9 @@ export default function ProductlistPage() {
   const [importError, setImportError] = useState("");
   const [importResult, setImportResult] = useState("");
   const [importProgress, setImportProgress] = useState<ProductImportProgress | null>(null);
+  const [syncingQdrant, setSyncingQdrant] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<ProductQdrantSyncProgress | null>(null);
+  const [syncResult, setSyncResult] = useState("");
   const progressLabels = {
     uploading: "Subiendo archivo (1/4)",
     validating: "Validando CSV (2/4)",
@@ -144,6 +148,22 @@ export default function ProductlistPage() {
       }
     } finally {
       setImporting(false);
+    }
+  };
+
+  const onSyncQdrant = async () => {
+    if (syncingQdrant || importing) return;
+    setSyncingQdrant(true);
+    setSyncProgress(null);
+    setSyncResult("");
+    setError("");
+    try {
+      const result = await syncProductsQdrant(setSyncProgress);
+      setSyncResult(`Qdrant actualizado: ${result.indexed} de ${result.total} productos activos indexados.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo sincronizar Qdrant.");
+    } finally {
+      setSyncingQdrant(false);
     }
   };
 
@@ -303,13 +323,31 @@ export default function ProductlistPage() {
         <button className="primary-btn" onClick={openCreate} type="button">
           + Nuevo producto
         </button>
-        <button className="primary-btn" onClick={() => { setShowImport(!showImport); setCsvFile(null); setImportError(""); setImportProgress(null); }} type="button" disabled={importing} aria-expanded={showImport} aria-controls="product-csv-import">
+        <button className="primary-btn" onClick={() => { setShowImport(!showImport); setCsvFile(null); setImportError(""); setImportProgress(null); }} type="button" disabled={importing || syncingQdrant} aria-expanded={showImport} aria-controls="product-csv-import">
           Importar CSV
+        </button>
+        <button
+          className="primary-btn"
+          disabled={importing || syncingQdrant}
+          onClick={() => void onSyncQdrant()}
+          title="Actualiza la búsqueda semántica con todos los productos activos de PostgreSQL."
+          type="button"
+        >
+          {syncingQdrant ? "Sincronizando Qdrant..." : "Sincronizar Qdrant"}
         </button>
         {error && <p className="error-line" role="alert" style={{ margin: 0 }}>{error} <button type="button" className="chip-btn" disabled={loading} onClick={() => void loadProducts()}>Recargar lista</button></p>}
       </div>
 
       {importResult && <p role="status">{importResult}</p>}
+      {syncResult && <p role="status">{syncResult}</p>}
+      {syncProgress && syncingQdrant && (
+        <div style={{ margin: "16px 0" }}>
+          <p id="qdrant-sync-progress-label" role="status" style={{ marginBottom: 6 }}>
+            Sincronizando Qdrant: {syncProgress.percent}% · {syncProgress.processed.toLocaleString("es-ES")} de {syncProgress.total.toLocaleString("es-ES")} productos
+          </p>
+          <progress aria-labelledby="qdrant-sync-progress-label" max={100} value={syncProgress.percent} style={{ width: "100%", height: 22, accentColor: "#2563eb" }} />
+        </div>
+      )}
       {importProgress && !importError && (
         <div style={{ margin: "16px 0" }}>
           <p id="product-import-progress-label" role="status" style={{ marginBottom: 6 }}>
