@@ -27,8 +27,10 @@ from DataBaseManagement.dbManagementProductImages import (
 )
 from DataBaseManagement.dbservicesProducts import ProductServicesManager
 from DataBaseManagement.dbManagementProducts import (
+	count_active_products,
 	get_product_option,
 	get_products_by_external_codes,
+	iter_active_product_batches,
 	search_product_options,
 )
 from DataBaseManagement.schemasProducts import (
@@ -107,6 +109,41 @@ def _add_vector_result(result: dict, source, db) -> dict:
 		result["indexed"] = 0
 		result["index_error"] = str(exc)
 	return result
+
+
+def _stream_full_product_vector_sync():
+	"""Sincroniza todos los productos activos y emite progreso NDJSON."""
+	try:
+		from src.vector_store.product_indexer import iter_upsert_product_records
+
+		with db_context() as db:
+			total = count_active_products(db)
+			yield json.dumps({"stage": "indexing", "percent": 0, "processed": 0, "total": total}) + "\n"
+
+			def products():
+				for batch in iter_active_product_batches(db):
+					yield from batch
+
+			indexed = 0
+			for indexed in iter_upsert_product_records(products()):
+				percent = 100 if total == 0 else min(99, int(indexed * 100 / total))
+				yield json.dumps({
+					"stage": "indexing",
+					"percent": percent,
+					"processed": indexed,
+					"total": total,
+				}) + "\n"
+			yield json.dumps({
+				"stage": "complete",
+				"percent": 100,
+				"processed": indexed,
+				"total": total,
+				"result": {"indexed": indexed, "total": total},
+			}) + "\n"
+		logger.info("event=full_product_vector_sync_success indexed=%s total=%s", indexed, total)
+	except Exception as exc:
+		logger.exception("event=full_product_vector_sync_failed")
+		yield json.dumps({"stage": "error", "detail": str(exc)}, ensure_ascii=False) + "\n"
 
 
 def _content_type_to_extension(content_type: str) -> str:
@@ -286,6 +323,16 @@ def borrar_imagen_producto(product_id: int, image_id: int, db=Depends(get_db_pro
 			set_default_product_image(next_image[0]["id"], product_id, connection=db)
 
 	return None
+
+
+@router.post("/products/sync-qdrant")
+def sincronizar_productos_qdrant():
+	logger.info("event=full_product_vector_sync_start")
+	return StreamingResponse(
+		_stream_full_product_vector_sync(),
+		media_type="application/x-ndjson",
+		headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+	)
 
 
 @router.post("/products/import-csv")
