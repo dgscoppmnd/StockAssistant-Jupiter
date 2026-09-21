@@ -1,5 +1,5 @@
 database:
-  url: "postgresql+psycopg2://${POSTGRES_USER:admin}:${POSTGRES_PASSWORD:admin123}@${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DB:supply_chain}"
+  url: "postgresql+psycopg2://admin:admin123@localhost:5433/supply_chain"
   tables:
     sales: sales
     inventory: inventory

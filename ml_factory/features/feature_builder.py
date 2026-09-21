@@ -181,7 +181,14 @@ class FeatureBuilder:
         result = self.create_ratio_features(result)
         result = self.create_target(result, target_type)
 
-        excluded = {"target", self.date_column, *self.group_columns, "holiday_dates"}
+        excluded = {
+            "target",
+            self.date_column,
+            *self.group_columns,
+            "holiday_dates",
+            "supplier_id",
+            "product_name",
+        }
         feature_columns = [column for column in result.columns if column not in excluded]
         features = result[feature_columns].copy()
         features = pd.get_dummies(features, columns=features.select_dtypes(include=["object", "category"]).columns.tolist(), dtype=float)

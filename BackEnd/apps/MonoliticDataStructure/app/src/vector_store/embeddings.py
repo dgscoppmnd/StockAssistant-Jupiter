@@ -3,14 +3,14 @@
 from functools import lru_cache
 from typing import Iterable, List
 
-from sentence_transformers import SentenceTransformer
-
 from ..api.config import settings
 
 
 @lru_cache(maxsize=1)
-def get_embedding_model() -> SentenceTransformer:
+def get_embedding_model():
     """Carga el modelo una sola vez por proceso."""
+    from sentence_transformers import SentenceTransformer
+
     return SentenceTransformer(
         settings.EMBEDDING_MODEL,
         device="cpu",

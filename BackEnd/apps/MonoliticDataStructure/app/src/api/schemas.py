@@ -159,3 +159,65 @@ class PaginatedResponse(BaseModel):
     skip: int
     limit: int
     has_more: bool
+
+# =============================================
+# SCHEMAS DE MACHINE LEARNING (ML FACTORY)
+# =============================================
+
+class OperationalOverrides(BaseModel):
+    current_stock: Optional[int] = Field(None, description="Sobrescribir stock actual para simulación")
+    reorder_level: Optional[int] = Field(None, description="Sobrescribir punto de reorden")
+    safety_stock: Optional[int] = Field(None, description="Sobrescribir stock de seguridad")
+    daily_demand: Optional[int] = Field(None, description="Sobrescribir demanda diaria")
+
+class StockoutPredictionRequest(BaseModel):
+    product_id: str = Field(..., description="ID del producto (ej: PRD0000001)")
+    warehouse_id: str = Field(..., description="ID del almacén (ej: WH004)")
+    current_stock: Optional[int] = Field(None, description="Stock actual opcional para simulación")
+    reorder_level: Optional[int] = Field(None, description="Punto de reorden opcional para simulación")
+    safety_stock: Optional[int] = Field(None, description="Stock de seguridad opcional")
+    daily_demand: Optional[int] = Field(None, description="Demanda diaria estimada opcional")
+
+class StockoutPredictionResponse(BaseModel):
+    product_id: str
+    warehouse_id: str
+    model_name: str
+    model_stage: str
+    prediction: int = Field(..., description="0: Sin rotura, 1: Riesgo de rotura")
+    probability: float = Field(..., description="Probabilidad de rotura entre 0.0 y 1.0")
+    risk_level: str = Field(..., description="LOW, MEDIUM, HIGH, CRITICAL")
+    action_required: bool
+    recommendation: str
+    operational_context: dict
+    features_used: dict
+    timestamp: datetime
+
+class ReorderPredictionRequest(BaseModel):
+    product_id: str = Field(..., description="ID del producto (ej: PRD0000001)")
+    warehouse_id: str = Field(..., description="ID del almacén (ej: WH004)")
+    current_stock: Optional[int] = Field(None, description="Stock actual opcional para simulación")
+    reorder_level: Optional[int] = Field(None, description="Punto de reorden opcional para simulación")
+    safety_stock: Optional[int] = Field(None, description="Stock de seguridad opcional")
+    daily_demand: Optional[int] = Field(None, description="Demanda diaria estimada opcional")
+
+class ReorderPredictionResponse(BaseModel):
+    product_id: str
+    warehouse_id: str
+    model_name: str
+    model_stage: str
+    prediction: float = Field(..., description="Cantidad continua predicha por el modelo")
+    recommended_quantity: int = Field(..., description="Cantidad entera recomendada a pedir")
+    confidence_score: float = Field(..., description="Puntaje de confianza en la predicción")
+    status: str = Field(..., description="NORMAL, REORDER_NEEDED, URGENT")
+    action_required: bool
+    recommendation: str
+    operational_context: dict
+    features_used: dict
+    timestamp: datetime
+
+class MLHealthResponse(BaseModel):
+    status: str
+    mlflow_connected: bool
+    tracking_uri: str
+    models: dict
+    timestamp: datetime

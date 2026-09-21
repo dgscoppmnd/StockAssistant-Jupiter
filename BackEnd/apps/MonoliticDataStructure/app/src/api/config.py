@@ -8,10 +8,16 @@ class Settings(BaseSettings):
     
     # Base de datos
     DB_HOST: str = "localhost"
-    DB_PORT: int = 5432
+    DB_PORT: int = 5433
     DB_USER: str = "admin"
     DB_PASSWORD: str = "admin123"
     DB_NAME: str = "supply_chain"
+
+    # Machine Learning / MLflow
+    MLFLOW_TRACKING_URI: str = "http://localhost:5000"
+    ML_STOCKOUT_MODEL_NAME: str = "stockout-predictor"
+    ML_REORDER_MODEL_NAME: str = "reorder-forecaster"
+    ML_MODEL_STAGE: str = "Production"
 
     # Búsqueda vectorial
     QDRANT_URL: str = "http://localhost:6333"

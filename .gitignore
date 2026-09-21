@@ -42,6 +42,11 @@ venv/
 # Variables de entorno (IMPORTANTE: no subir contraseñas)
 .env
 *.env
+.venv/*
+.venv/**/*.env  
+venv/
+*.venv/
+.env.local/
 dockerfiles/.env.production
 dockerfiles/.env.development
 dockerfiles/.env.local

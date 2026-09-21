@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 DB_CONFIG = {
     "host": "localhost",
-    "port": 5432,
+    "port": 5433,
     "user": "admin",
     "password": "admin123",
     "database": "supply_chain"
