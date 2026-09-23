@@ -14,6 +14,8 @@ from .endpointsCommercialAgents import router as commercial_agents_router
 from .endpointsExecutive import router as executive_router
 from .endpointsMasterData import router as master_data_router
 
+from .endpointsChat import router as chat_router
+
 router = APIRouter(dependencies=[Depends(require_api_key)])
 public_router = APIRouter()
 public_router.include_router(auth_router)
@@ -23,6 +25,7 @@ router.include_router(user_router)
 router.include_router(web_router)
 router.include_router(tools_router)
 router.include_router(agents_router)
+router.include_router(chat_router)
 router.include_router(inventory_router)
 router.include_router(intelligence_agents_router)
 router.include_router(commercial_agents_router)
