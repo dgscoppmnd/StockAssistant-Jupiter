@@ -35,6 +35,10 @@ import type {
   User,
   UserCreatePayload,
   UserUpdatePayload,
+  ChatConversationListResponse,
+  ChatHistoryResponse,
+  ChatRequest,
+  ChatResponse,
 } from "./types";
 
 import { uploadProductCsv, type ProductImportProgress, type ProductImportResult } from "./utils/productCsvUpload";
@@ -189,6 +193,49 @@ export async function analyzeWithStockAssistantAgent(payload: AgentChatRequest):
     method: "POST",
     body: JSON.stringify(payload)
   });
+}
+
+export async function sendChatMessage(
+  payload: ChatRequest
+): Promise<ChatResponse> {
+  return request<ChatResponse>(`${API_BASE}/chat`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+
+export async function fetchChatConversations(
+  limit = 50,
+  offset = 0
+): Promise<ChatConversationListResponse> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+
+  return request<ChatConversationListResponse>(
+    `${API_BASE}/chat/history?${params.toString()}`,
+    { method: "GET" }
+  );
+}
+
+
+export async function fetchChatHistory(
+  conversationId: number,
+  limit = 100,
+  offset = 0
+): Promise<ChatHistoryResponse> {
+  const params = new URLSearchParams({
+    conversation_id: String(conversationId),
+    limit: String(limit),
+    offset: String(offset),
+  });
+
+  return request<ChatHistoryResponse>(
+    `${API_BASE}/chat/history?${params.toString()}`,
+    { method: "GET" }
+  );
 }
 
 export type SemanticProductResult = {
