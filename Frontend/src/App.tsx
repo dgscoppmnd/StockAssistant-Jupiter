@@ -15,6 +15,7 @@ import MasterDataPage from "./pages/MasterDataPage";
 import ProductlistPage from "./pages/productlistPage";
 import LoginPage from "./pages/LoginPage";
 import HeaderMain from "./pages/components/headerMain";
+import ChatHistoryPage from "./pages/ChatHistoryPage";
 
 type ThemeMode = "night" | "day";
 
@@ -47,6 +48,7 @@ const groups: MenuGroup[] = [
     children: [
       { to: "/dashboard", label: "Dashboard ejecutivo" },
       { to: "/jupiter", label: "Chat OpenAI + Ollama" },
+      { to: "/chat", label: "Chat con memoria" },
       { to: "/agentes", label: "Agentes de compras y stock" },
       { to: "/ejecutivo", label: "Centro Ejecutivo y automatizaciones" },
       { to: "/users", label: "Usuarios" }
@@ -200,6 +202,7 @@ function PortalShell({
             <Route path="/" element={<Navigate replace to="/dashboard" />} />
             <Route path="/dashboard" element={<ExecutiveDashboardPage />} />
             <Route path="/jupiter" element={<StockAssistantPage />} />
+            <Route path="/chat" element={<ChatHistoryPage />} />
             <Route path="/agentes" element={<AgentsOperationsPage />} />
             <Route path="/ejecutivo" element={<ExecutivePage />} />
             <Route path="/users" element={<UsersPage />} />

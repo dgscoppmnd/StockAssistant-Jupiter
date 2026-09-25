@@ -347,3 +347,46 @@ export type MasterRecord = { id: number; created_at?: string; updated_at?: strin
 export type MasterField = { key: string; label: string; type?: "text" | "number" | "decimal" | "textarea" | "checkbox" | "select" | "file"; required?: boolean; placeholder?: string; options?: Array<{ value: string; label: string }> };
 
 export type ClientAddress = { id: number; global_address_id: number; address_type: string; address_line_1: string; address_line_2?: string | null; city: string; state_province?: string | null; postal_code?: string | null; country_code: string; country_name?: string | null; contact_name?: string | null; contact_phone?: string | null; contact_email?: string | null; notes?: string | null };
+
+
+export type ChatProvider = "openai" | "ollama";
+
+export type ChatRequest = {
+  prompt: string;
+  conversation_id?: number | null;
+  provider: ChatProvider;
+  agent_key?: string;
+};
+
+export type ChatResponse = {
+  response: string;
+  provider: string;
+  model: string;
+  used_fallback: boolean;
+  conversation_id: number;
+};
+
+export type ChatConversation = {
+  id: number;
+  agent_key: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+  message_count?: number;
+};
+
+export type ChatMessage = {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+};
+
+export type ChatConversationListResponse = {
+  conversations: ChatConversation[];
+};
+
+export type ChatHistoryResponse = {
+  conversation: ChatConversation;
+  messages: ChatMessage[];
+};
