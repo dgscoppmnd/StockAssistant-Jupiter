@@ -19,6 +19,10 @@ from endpoints.endpoints import public_router, router as stockassistant_router
 from DataBaseManagement.dbConectionPostgres import init_db, init_products_db, _get_postgres_connection_server
 from executive_service import start_automation_worker, stop_automation_worker
 
+
+import sys
+from pathlib import Path
+
 # Crear tablas
 Base.metadata.create_all(bind=engine)
 LOGGER = logging.getLogger("src.api.main")

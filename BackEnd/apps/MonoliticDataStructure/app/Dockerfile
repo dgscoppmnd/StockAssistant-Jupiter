@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir torch==2.8.0 --index-url https://download.pytorch
 RUN pip install --no-cache-dir -r /tmp/requirements-api.txt
 
 COPY src /app/src
+COPY data/knowledge /app/BackEnd/apps/MonoliticDataStructure/app/data/knowledge
 RUN mkdir -p /app/data/knowledge
 VOLUME ["/app/data/knowledge"]
 
