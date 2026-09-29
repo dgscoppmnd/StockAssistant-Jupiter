@@ -86,3 +86,6 @@ docs/
 !BackEnd/apps/MonoliticDataStructure/app/
 !BackEnd/apps/MonoliticDataStructure/app/docs/
 !BackEnd/apps/MonoliticDataStructure/app/docs/**
+.venv/
+.venv-mlfactory/
+BackEnd/apps/MLStockPredictTool/
