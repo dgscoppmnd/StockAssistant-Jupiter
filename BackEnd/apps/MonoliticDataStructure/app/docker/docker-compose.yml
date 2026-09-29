@@ -60,10 +60,11 @@ services:
       AUTOMATION_WORKER_ENABLED: ${AUTOMATION_WORKER_ENABLED:-true}
       AUTOMATION_WORKER_POLL_SECONDS: ${AUTOMATION_WORKER_POLL_SECONDS:-60}
       TZ: ${TZ:-Europe/Madrid}
-      PYTHONPATH: /app/src
+      PYTHONPATH: /app/src:/app
     volumes:
       - ../src:/app/src
       - ../data:/app/data
+      - ../../../../../ml_factory:/app/ml_factory
     command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"

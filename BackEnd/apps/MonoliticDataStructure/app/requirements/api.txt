@@ -33,3 +33,6 @@ pypdf==6.1.3
 # Machine Learning Inference
 mlflow==2.22.0
 xgboost>=2.0.0
+scikit-learn>=1.4,<2
+matplotlib>=3.8,<4
+seaborn>=0.13,<1

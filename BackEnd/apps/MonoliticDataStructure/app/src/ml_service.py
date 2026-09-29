@@ -17,15 +17,15 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import text
 
-# Asegurar importación de ml_factory desde la raíz del repositorio
+# Asegurar importación de ml_factory: /app/ml_factory en contenedor, o raíz del repo en local.
 _current_file = Path(__file__).resolve()
-# Buscar la raíz del repositorio buscando la carpeta 'ml_factory'
-_repo_root = _current_file.parents[4]
-if not (_repo_root / "ml_factory").exists():
-    for parent in _current_file.parents:
-        if (parent / "ml_factory").exists():
-            _repo_root = parent
-            break
+_search_roots = [Path("/app"), *_current_file.parents]
+_repo_root = next((c for c in _search_roots if (c / "ml_factory").exists()), None)
+if _repo_root is None:
+    raise RuntimeError(
+        "No se encontro la carpeta 'ml_factory'. Verifica el volumen montado en docker-compose.yml "
+        "o que el repositorio tenga 'ml_factory' en su raiz."
+    )
 
 if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
