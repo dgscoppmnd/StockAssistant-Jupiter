@@ -1027,4 +1027,76 @@ VALUES (
 ON CONFLICT (email) DO UPDATE SET
     password = EXCLUDED.password, status = 1, auth_provider = 'local', email_verified = TRUE;
 
+-- BEGIN RAG SCHEMA
+ALTER TABLE public.knowledge_documents ADD COLUMN IF NOT EXISTS index_status TEXT NOT NULL DEFAULT 'pending';
+
+ALTER TABLE public.knowledge_documents ADD COLUMN IF NOT EXISTS index_error TEXT;
+
+ALTER TABLE public.knowledge_documents ADD COLUMN IF NOT EXISTS index_revision INTEGER NOT NULL DEFAULT 1;
+
+ALTER TABLE public.knowledge_documents ADD COLUMN IF NOT EXISTS content_hash TEXT;
+
+ALTER TABLE public.knowledge_documents ADD COLUMN IF NOT EXISTS index_progress SMALLINT NOT NULL DEFAULT 0;
+
+ALTER TABLE public.knowledge_documents DROP CONSTRAINT IF EXISTS ck_knowledge_documents_index_progress;
+
+ALTER TABLE public.knowledge_documents ADD CONSTRAINT ck_knowledge_documents_index_progress CHECK (index_progress BETWEEN 0 AND 100);
+
+CREATE TABLE IF NOT EXISTS public.knowledge_chunks (
+            id UUID PRIMARY KEY,
+            document_id BIGINT NOT NULL REFERENCES public.knowledge_documents(id) ON DELETE CASCADE,
+            revision INTEGER NOT NULL,
+            page INTEGER,
+            content TEXT NOT NULL,
+            embedding_provider TEXT NOT NULL DEFAULT 'ollama',
+            embedding_model TEXT NOT NULL
+        );
+
+ALTER TABLE public.knowledge_chunks ADD COLUMN IF NOT EXISTS embedding_provider TEXT NOT NULL DEFAULT 'ollama';
+
+ALTER TABLE public.knowledge_documents ADD COLUMN IF NOT EXISTS index_embedding_provider TEXT;
+
+ALTER TABLE public.knowledge_documents ADD COLUMN IF NOT EXISTS index_embedding_model TEXT;
+
+CREATE INDEX IF NOT EXISTS ix_knowledge_chunks_document ON public.knowledge_chunks(document_id, revision);
+
+CREATE INDEX IF NOT EXISTS ix_knowledge_chunks_embedding_profile ON public.knowledge_chunks(embedding_provider, embedding_model);
+
+CREATE OR REPLACE FUNCTION public.invalidate_knowledge_index() RETURNS TRIGGER AS $$
+        BEGIN
+            IF NEW.archivo IS DISTINCT FROM OLD.archivo OR NEW.content IS DISTINCT FROM OLD.content
+               OR NEW.title IS DISTINCT FROM OLD.title
+               OR NEW.is_active IS DISTINCT FROM OLD.is_active
+               OR NEW.expires_at IS DISTINCT FROM OLD.expires_at THEN
+                NEW.index_status := 'pending';
+                NEW.index_error := NULL;
+                NEW.index_progress := 0;
+                NEW.index_revision := OLD.index_revision + 1;
+                NEW.content_hash := NULL;
+                DELETE FROM public.knowledge_chunks WHERE document_id = OLD.id;
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS knowledge_document_changed ON public.knowledge_documents;
+
+CREATE TRIGGER knowledge_document_changed BEFORE UPDATE ON public.knowledge_documents
+            FOR EACH ROW EXECUTE FUNCTION public.invalidate_knowledge_index();
+
+CREATE TABLE IF NOT EXISTS public.knowledge_vector_deletions (
+    id UUID PRIMARY KEY, provider TEXT NOT NULL, model TEXT NOT NULL
+);
+CREATE OR REPLACE FUNCTION public.retire_knowledge_vector() RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.knowledge_vector_deletions (id, provider, model)
+    VALUES (OLD.id, OLD.embedding_provider, OLD.embedding_model) ON CONFLICT DO NOTHING;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS knowledge_chunk_retired ON public.knowledge_chunks;
+CREATE TRIGGER knowledge_chunk_retired AFTER DELETE ON public.knowledge_chunks
+    FOR EACH ROW EXECUTE FUNCTION public.retire_knowledge_vector();
+-- END RAG SCHEMA
+
 COMMIT;

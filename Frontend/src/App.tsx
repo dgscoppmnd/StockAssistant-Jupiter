@@ -1,4 +1,4 @@
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useAuth } from "./auth";
 import StockAssistantPage from "./pages/StockAssistantPage";
@@ -16,6 +16,7 @@ import ProductlistPage from "./pages/productlistPage";
 import LoginPage from "./pages/LoginPage";
 import HeaderMain from "./pages/components/headerMain";
 import ChatHistoryPage from "./pages/ChatHistoryPage";
+import RagChat from "./pages/RagChat";
 
 type ThemeMode = "night" | "day";
 
@@ -35,6 +36,7 @@ const groups: MenuGroup[] = [
       { to: "/dashboard", label: "Resumen ejecutivo" },
       { to: "/agentes", label: "Alertas y análisis" },
       { to: "/ejecutivo", label: "Compras y automatizaciones" },
+    
     ]
   },
   {
@@ -48,6 +50,7 @@ const groups: MenuGroup[] = [
     children: [
       { to: "/dashboard", label: "Dashboard ejecutivo" },
       { to: "/jupiter", label: "Chat OpenAI + Ollama" },
+      { to: "/rag", label: "Asistente RAG" },
       { to: "/chat", label: "Chat con memoria" },
       { to: "/agentes", label: "Agentes de compras y stock" },
       { to: "/ejecutivo", label: "Centro Ejecutivo y automatizaciones" },
@@ -107,6 +110,16 @@ function PortalShell({
   setTheme: Dispatch<SetStateAction<ThemeMode>>;
 }) {
   const { user, logout, sessionRemainingSeconds } = useAuth();
+  const location = useLocation();
+
+  useEffect(() => {
+    const currentGroup = groups.find((group) =>
+      group.children.some((child) => child.to === location.pathname)
+    );
+    if (currentGroup) {
+      setOpenMenu(currentGroup.key);
+    }
+  }, [location.pathname, setOpenMenu]);
 
   const title = useMemo(() => {
     const active = groups.find((group) => group.key === openMenu);
@@ -209,6 +222,7 @@ function PortalShell({
             <Route path="/productlist" element={<ProductlistPage />} />
             <Route path="/inventario" element={<InventoryPage />} />
             <Route path="/configuracion" element={<ConfigPage />} />
+            <Route path="/rag" element={<RagChat />} />
             <Route path="/setup" element={<ConfigPage />} />
             <Route path="/maestros/unidades" element={<MasterDataPage resource="units" />} />
             <Route path="/maestros/monedas" element={<MasterDataPage resource="currencies" />} />

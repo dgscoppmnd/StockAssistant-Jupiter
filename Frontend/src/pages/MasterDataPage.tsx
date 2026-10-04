@@ -1,12 +1,13 @@
 import { FormEvent, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import BootstrapTable from "react-bootstrap-table-next";
 import paginationFactory from "react-bootstrap-table2-paginator";
-import { saveKnowledgeDocument, createMasterRecord, deleteMasterRecord, fetchMasterRecords, updateMasterRecord } from "../api";
+import { saveKnowledgeDocument, createMasterRecord, deleteMasterRecord, fetchMasterRecords, updateMasterRecord, reindexKnowledgeDocument } from "../api";
 import MasterDataEditorModal from "./components/MasterDataEditorModal";
 import type { MasterField, MasterRecord } from "../types";
 
-type ResourceConfig = { title: string; description: string; fields: MasterField[] };
+type ResourceConfig = { title: string; description: ReactNode; fields: MasterField[] };
 
 const resources: Record<string, ResourceConfig> = {
   units: { title: "Unidades de medida", description: "Unidades base y de compra usadas por el inventario.", fields: [{ key: "code", label: "Código", required: true, placeholder: "unit" }, { key: "name", label: "Nombre", required: true, placeholder: "Unidad" }, { key: "description", label: "Descripción", type: "text" }] },
@@ -14,7 +15,11 @@ const resources: Record<string, ResourceConfig> = {
   warehouses: { title: "Bodegas", description: "Ubicaciones físicas para existencias y movimientos.", fields: [{ key: "code", label: "Código", required: true, placeholder: "MADRID" }, { key: "name", label: "Nombre", required: true }, { key: "description", label: "Descripción" }, { key: "is_active", label: "Activa", type: "checkbox" }] },
   suppliers: { title: "Proveedores", description: "Contrapartes para las órdenes y recepciones de compra.", fields: [{ key: "supplier_code", label: "Código" }, { key: "name", label: "Nombre", required: true }, { key: "email", label: "Email" }, { key: "phone", label: "Teléfono" }] },
   "unit-conversions": { title: "Conversiones de unidad", description: "Factores explícitos hacia la unidad base del producto.", fields: [{ key: "product_id", label: "ID de producto (vacío = global)", type: "number" }, { key: "from_unit_id", label: "ID unidad origen", type: "number", required: true }, { key: "to_unit_id", label: "ID unidad destino", type: "number", required: true }, { key: "factor", label: "Factor", type: "decimal", required: true, placeholder: "1" }] },
-  "knowledge-documents": { title: "Base de conocimiento", description: "Documentos y archivos disponibles para la base de conocimiento.", fields: [{ key: "title", label: "Título", required: true }, { key: "content", label: "Contenido", type: "textarea", required: true }, { key: "source", label: "Fuente", required: true, placeholder: "política interna" }, { key: "archivo", label: "Archivo", type: "file" }, { key: "expires_at", label: "Caducidad ISO (opcional)", placeholder: "2026-12-31T23:59:59Z" }, { key: "is_active", label: "Activo", type: "checkbox" }] },
+  "knowledge-documents": { title: "Base de conocimiento", description: <>
+    Sube PDF, TXT o Markdown. El procesamiento y el OCR se ejecutan automáticamente; solo los documentos disponibles y vigentes se usan en el RAG.{" "}
+    <a href="http://localhost:6333/dashboard#/collections" target="_blank" rel="noopener noreferrer">Colecciones de Qdrant</a>{" · "}
+    <a href="http://localhost:5050/browser/" target="_blank" rel="noopener noreferrer">pgAdmin</a>
+  </>, fields: [{ key: "title", label: "Título", required: true }, { key: "content", label: "Contenido", type: "textarea", required: true }, { key: "source", label: "Fuente", required: true, placeholder: "política interna" }, { key: "archivo", label: "Archivo", type: "file" }, { key: "expires_at", label: "Caducidad ISO (opcional)", placeholder: "2026-12-31T23:59:59Z" }, { key: "is_active", label: "Activo", type: "checkbox" }] },
   "client-types": { title: "Tipos de cliente", description: "Estados y clasificación usados para clientes propios, prospectos y cuentas activas.", fields: [{ key: "name", label: "Nombre", required: true, placeholder: "Activo" }] },
   clients: { title: "Clientes", description: "Contrapartes comerciales asociadas a un tipo de cliente existente.", fields: [{ key: "client_code", label: "Código de cliente" }, { key: "name", label: "Nombre", required: true, placeholder: "Cliente ejemplo" }, { key: "description", label: "Descripción" }, { key: "fk_type_client", label: "ID tipo de cliente", type: "number", required: true, placeholder: "1 = Propio" }] },
   "global-addresses": { title: "Direcciones globales", description: "Direcciones reutilizables que pueden vincularse a clientes y otras entidades.", fields: [{ key: "address_line_1", label: "Dirección", required: true }, { key: "address_line_2", label: "Complemento" }, { key: "city", label: "Ciudad", required: true }, { key: "state_province", label: "Provincia / estado" }, { key: "postal_code", label: "Código postal" }, { key: "country_code", label: "Código país", required: true, placeholder: "ES" }, { key: "country_name", label: "País" }, { key: "contact_name", label: "Contacto" }, { key: "contact_phone", label: "Teléfono" }, { key: "contact_email", label: "Email" }, { key: "notes", label: "Notas", type: "textarea" }] },
@@ -32,9 +37,17 @@ export default function MasterDataPage({ resource }: { resource: string }) {
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [reindexing, setReindexing] = useState<number | null>(null);
 
   const load = async () => { try { setRecords(await fetchMasterRecords(resource)); setError(""); } catch (err) { setError(err instanceof Error ? err.message : "No se pudo cargar el maestro"); } };
   useEffect(() => { if (config) void load(); }, [resource]);
+  useEffect(() => {
+    if (resource !== "knowledge-documents" || !records.some((record) => record.is_active &&
+      (!record.expires_at || new Date(String(record.expires_at)).getTime() > Date.now()) &&
+      ["pending", "processing"].includes(String(record.index_status)))) return;
+    const interval = window.setInterval(() => void load(), 3000);
+    return () => window.clearInterval(interval);
+  }, [resource, records]);
   if (!config) return <p className="error-line">Recurso maestro no disponible.</p>;
   const openCreate = () => { setEditor(null); setValues(initialValues(config)); setError(""); };
   const openEdit = (record: MasterRecord) => { setEditor(record); setValues(Object.fromEntries(config.fields.map((field) => [field.key, record[field.key] ?? (field.type === "checkbox" ? true : "")] ))); setError(""); };
@@ -48,11 +61,30 @@ export default function MasterDataPage({ resource }: { resource: string }) {
       sort: true,
       formatter: (value: unknown) => field.type === "checkbox" ? (value ? "Sí" : "No") : String(value ?? "—"),
     })),
+    ...(resource === "knowledge-documents" ? [{
+      dataField: "index_status", text: "Procesamiento RAG",
+      formatter: (_value: unknown, record: MasterRecord) => {
+        if (!record.is_active) return <span className="muted">Inactivo</span>;
+        if (record.expires_at && new Date(String(record.expires_at)).getTime() <= Date.now()) return <span className="muted">Caducado</span>;
+        const state = String(record.index_status || "pending");
+        return <div>
+          <strong>{({ pending: "En cola", processing: "Procesando", available: "Procesado · 100 %", error: "Error" } as Record<string, string>)[state] || state}</strong>
+          {state === "processing" && <div><progress max={100} value={Number(record.index_progress || 0)} aria-label="Progreso de procesamiento" /> {Number(record.index_progress || 0)}%</div>}
+          {state === "available" && <div><progress max={100} value={100} aria-label="Procesamiento completado" /></div>}
+          {Boolean(record.index_error) && <p className="error-line">{String(record.index_error)}</p>}
+        </div>;
+      },
+    }] : []),
     {
       dataField: "actions",
       text: "Acciones",
       isDummyField: true,
-      formatter: (_value: unknown, record: MasterRecord) => <div className="actions-row master-table-actions">{resource === "clients" && <button className="chip-btn" onClick={() => navigate(`/maestros/clientes/${record.id}`)} type="button">Direcciones</button>}<button className="chip-btn" onClick={() => openEdit(record)} type="button">Editar</button><button className="danger-btn" onClick={() => void remove(record)} type="button">Eliminar</button></div>,
+      formatter: (_value: unknown, record: MasterRecord) => <div className="actions-row master-table-actions">{resource === "clients" && <button className="chip-btn" onClick={() => navigate(`/maestros/clientes/${record.id}`)} type="button">Direcciones</button>}<button className="chip-btn" onClick={() => openEdit(record)} type="button">Editar</button><button className="danger-btn" onClick={() => void remove(record)} type="button">Eliminar</button>
+        {resource === "knowledge-documents" && <button className="chip-btn" type="button" disabled={reindexing !== null || !record.is_active || record.index_status === "processing"} onClick={() => {
+          setReindexing(record.id);
+          void reindexKnowledgeDocument(record.id).then(load).catch((err) => setError(err instanceof Error ? err.message : "No se pudo reprocesar")).finally(() => setReindexing(null));
+        }}>{reindexing === record.id ? "Encolando…" : "Reprocesar"}</button>}
+      </div>,
       headerStyle: { width: "190px" },
     },
   ];

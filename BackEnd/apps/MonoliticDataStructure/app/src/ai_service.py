@@ -72,7 +72,9 @@ class AIService:
         openai_call: Callable[[str, str | None], dict[str, Any]] | None = None,
     ) -> None:
         self.provider_mode = os.getenv("AI_PROVIDER", "auto").strip().lower() or "auto"
-        self.ollama_url = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434/api/generate").strip()
+        self.ollama_url = os.getenv(
+            "OLLAMA_URL", "http://host.docker.internal:11434/api/generate"
+        ).strip()
         self.ollama_model = os.getenv("OLLAMA_MODEL", "qwen3:14b").strip() or "qwen3:14b"
         self.ollama_timeout = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "20"))
         self.openai_model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini").strip() or "gpt-4.1-mini"
@@ -106,15 +108,28 @@ class AIService:
         try:
             response = requests.post(self.ollama_url, json=payload, timeout=self.ollama_timeout)
         except requests.RequestException as exc:
-            raise AIProviderError("Cannot connect to Ollama", provider="ollama", retryable=True) from exc
+            raise AIProviderError(
+                "Cannot connect to Ollama", provider="ollama", retryable=True
+            ) from exc
 
+        if response.status_code == 404:
+            raise AIProviderError(
+                "Ollama model is not available", provider="ollama", retryable=True
+            )
+        if response.status_code == 429:
+            raise AIProviderError(
+                "Ollama is temporarily unavailable", provider="ollama", retryable=True
+            )
         if response.status_code >= 500:
             raise AIProviderError("Ollama server error", provider="ollama", retryable=True)
         if response.status_code >= 400:
             raise AIProviderError("Ollama request rejected", provider="ollama", retryable=False)
 
         data = response.json()
-        return {"response": data.get("response", ""), "model": data.get("model") or self.ollama_model}
+        return {
+            "response": data.get("response", ""),
+            "model": data.get("model") or self.ollama_model,
+        }
 
     def _call_openai(self, prompt: str, system: str | None) -> dict[str, Any]:
         if not self.openai_api_key:
@@ -138,7 +153,9 @@ class AIService:
                 timeout=self.openai_timeout,
             )
         except requests.RequestException as exc:
-            raise AIProviderError("Cannot connect to OpenAI", provider="openai", retryable=True) from exc
+            raise AIProviderError(
+                "Cannot connect to OpenAI", provider="openai", retryable=True
+            ) from exc
 
         if response.status_code >= 500:
             raise AIProviderError("OpenAI server error", provider="openai", retryable=True)
@@ -149,7 +166,9 @@ class AIService:
         text = _extract_openai_text(data)
         return {"response": text, "model": data.get("model") or self.openai_model}
 
-    def _generate_with_provider(self, provider: str, prompt: str, system: str | None = None) -> AIResponse:
+    def _generate_with_provider(
+        self, provider: str, prompt: str, system: str | None = None
+    ) -> AIResponse:
         if provider == "ollama":
             data = self._ollama_call(prompt, system)
             return AIResponse(
@@ -182,12 +201,20 @@ class AIService:
                 if not exc.retryable:
                     raise
                 self._mark_ollama_down()
-                logger.warning("event=ollama_fallback reason=%s cooldown_seconds=%s", str(exc), self.cooldown_seconds)
+                logger.warning(
+                    "event=ollama_fallback reason=%s cooldown_seconds=%s",
+                    str(exc),
+                    self.cooldown_seconds,
+                )
 
         data = self._generate_with_provider("openai", prompt, system)
-        return AIResponse(text=data.text, provider=data.provider, model=data.model, used_fallback=True)
+        return AIResponse(
+            text=data.text, provider=data.provider, model=data.model, used_fallback=True
+        )
 
-    def generate_for_provider(self, provider: str, prompt: str, system: str | None = None) -> dict[str, Any]:
+    def generate_for_provider(
+        self, provider: str, prompt: str, system: str | None = None
+    ) -> dict[str, Any]:
         return self._generate_with_provider(provider.strip().lower(), prompt, system).to_dict()
 
     def provider_status(self, provider: str) -> dict[str, Any]:
@@ -207,7 +234,9 @@ class AIService:
                 "available": self._ollama_available(),
                 "model": self.ollama_model,
                 "cooldown_active": cooldown_active,
-                "cooldown_until": self._ollama_down_until.isoformat() if self._ollama_down_until else None,
+                "cooldown_until": self._ollama_down_until.isoformat()
+                if self._ollama_down_until
+                else None,
             }
         raise ValueError(f"Unsupported provider: {provider}")
 
@@ -222,8 +251,12 @@ class AIService:
             "ollama_model": self.ollama_model,
             "openai_model": self.openai_model,
             "openai_configured": bool(self.openai_api_key),
-            "ollama_cooldown_active": bool(self._ollama_down_until and _now_utc() < self._ollama_down_until),
-            "ollama_cooldown_until": self._ollama_down_until.isoformat() if self._ollama_down_until else None,
+            "ollama_cooldown_active": bool(
+                self._ollama_down_until and _now_utc() < self._ollama_down_until
+            ),
+            "ollama_cooldown_until": self._ollama_down_until.isoformat()
+            if self._ollama_down_until
+            else None,
             "providers": {
                 "openai": self.provider_status("openai"),
                 "ollama": self.provider_status("ollama"),

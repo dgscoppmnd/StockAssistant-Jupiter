@@ -713,7 +713,6 @@ body[data-theme="day"] pre {
   color: #ff8ca8;
 }
 
-/* ── Mini buttons ────────────────────────────── */
 
 
 .chip-btn-mini {
@@ -749,7 +748,6 @@ body[data-theme="day"] pre {
 
 
 
-/* ── Action row ────────────────────────────── */
 .quick-row,
 .actions-row {
   display: flex;
@@ -823,7 +821,6 @@ body[data-theme="day"] .stock-order-line {
   font-weight: 600;
 }
 
-/* ── LOGIN ──────────────────────────────────── */
 .login-page {
   min-height: 100vh;
   display: grid;
@@ -964,7 +961,6 @@ body[data-theme="day"] .login-card {
   }
 }
 
-/* ── USERS TABLE ────────────────────────────── */
 .users-page {
   display: grid;
   gap: 14px;
@@ -1092,7 +1088,6 @@ body[data-theme="day"] .users-table-wrapper .pagination {
 }
 
 
-/* ── MODAL POPUP PRODUCT─────────────────────────────── */
 .product-modal-overlay {
   position: fixed;
   inset: 0;
@@ -1929,3 +1924,9 @@ body[data-theme="day"] .chat-message-user,
 body[data-theme="day"] .chat-message-assistant {
   color: #05243a;
 }
+.support-chat-messages { max-height: 480px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 12px 0; }
+.support-chat-message { padding: 12px; border: 1px solid var(--border-color); border-radius: 10px; overflow-wrap: anywhere; }
+.support-chat-message.user { align-self: flex-end; max-width: 90%; background: rgba(0, 120, 185, 0.15); }
+.support-chat-message.assistant { align-self: stretch; }
+.support-chat-message details { margin-top: 8px; }
+.support-chat-message summary { cursor: pointer; }

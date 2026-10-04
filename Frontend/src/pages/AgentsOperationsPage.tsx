@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useState } from "react";
-import { askCustomerSupport, createPurchaseRecommendation, fetchCompetition, fetchExternalSourceStatuses, fetchFinancialSummary, fetchMarketIntelligence, fetchRisks, fetchSalesForecast, fetchStockAlerts, processReviewBatch } from "../api";
-import type { CustomerSupportAnswer, ExternalSourceStatus, FinancialSummary, ProductOption, PurchaseRecommendation, SalesForecast, StockAlert } from "../types";
+import { createPurchaseRecommendation, fetchCompetition, fetchExternalSourceStatuses, fetchFinancialSummary, fetchMarketIntelligence, fetchRisks, fetchSalesForecast, fetchStockAlerts, processReviewBatch } from "../api";
+import type { ExternalSourceStatus, FinancialSummary, ProductOption, PurchaseRecommendation, SalesForecast, StockAlert } from "../types";
 import SectionIcon from "./components/SectionIcon";
 import ProductCombobox from "./components/ProductCombobox";
+import CustomerSupportChat from "./components/CustomerSupportChat";
 
 export default function AgentsOperationsPage() {
   const [sources, setSources] = useState<ExternalSourceStatus[]>([]);
@@ -23,9 +24,7 @@ export default function AgentsOperationsPage() {
   const [financial, setFinancial] = useState<FinancialSummary | null>(null);
   const [competition, setCompetition] = useState<Record<string, unknown> | null>(null);
   const [market, setMarket] = useState<Record<string, unknown> | null>(null);
-  const [support, setSupport] = useState<CustomerSupportAnswer | null>(null);
   const [risks, setRisks] = useState<Array<{ type: string; product_name: string; return_rate: number }>>([]);
-  const [question, setQuestion] = useState("");
   const [term, setTerm] = useState("");
 
   const load = async () => {
@@ -62,14 +61,6 @@ export default function AgentsOperationsPage() {
       setForecast(nextForecast); setFinancial(nextFinancial); setCompetition(nextCompetition); setStatus("Prevision, margen y competencia calculados con evidencia."); setError("");
     } catch (err) { setError(err instanceof Error ? err.message : "No se pudo analizar el producto"); }
     finally { setAnalyzing(false); }
-  };
-  const askSupport = async (event: FormEvent) => {
-    event.preventDefault();
-    try {
-      setSupport(await askCustomerSupport(question, productId ? Number(productId) : undefined));
-      setError("");
-    }
-    catch (err) { setError(err instanceof Error ? err.message : "No se pudo consultar al asistente"); }
   };
   const analyzeMarket = async (event: FormEvent) => {
     event.preventDefault();
@@ -127,22 +118,7 @@ export default function AgentsOperationsPage() {
       <article className="card"><p className="section-label">Competencia y riesgos</p><h3><SectionIcon kind="risk" />Datos con vigencia</h3>{competition ? <div className="agent-result"><p>Ofertas comparables: {Array.isArray(competition.offers) ? competition.offers.length : 0}</p><small>La fuente y fecha se devuelven en cada consulta.</small></div> : <p className="muted">No se ha consultado competencia.</p>}<div className="inventory-list">{risks.map((risk, index) => <div className="inventory-list-item" key={`${risk.product_name}-${index}`}><strong>{risk.product_name}</strong><span>Devoluciones: {(risk.return_rate * 100).toFixed(1)}%</span></div>)}{!risks.length && <p className="muted">No hay riesgos de devolucion sobre el umbral.</p>}</div></article>
     </section>
     <section className="grid two-columns">
-      <article className="card">
-        <p className="section-label">Atencion al cliente · RAG</p>
-        <h3><SectionIcon kind="assistant" />Respuesta con fuentes vigentes</h3>
-        <form className="stack" onSubmit={askSupport}>
-          <textarea
-            required
-            placeholder="Pregunta del cliente" value={question}
-            onChange={(event) => setQuestion(event.target.value)}
-            rows={3} />
-          <button className="primary-btn" type="submit">Consultar contexto</button>
-        </form>
-        {support && <div className="agent-result">
-          <p>{support.answer}</p>
-          <small>Fuentes: {support.sources.map((source) => source.title).join(", ") || "sin documentos vigentes"}</small>
-        </div>}
-      </article>
+      <CustomerSupportChat />
       <article className="card"><p className="section-label">Inteligencia de mercado</p><h3><SectionIcon kind="market" />Tendencias autorizadas</h3><form className="stack" onSubmit={analyzeMarket}><input required placeholder="Termino de busqueda" value={term} onChange={(event) => setTerm(event.target.value)} /><button className="chip-btn" type="submit">Consultar SerpAPI Trends</button></form>{market && <div className="agent-result"><p>{market.data ? "Datos de tendencia recibidos." : "La fuente no esta disponible."}</p><small>Fuente: {String((market.source as { name?: string })?.name ?? "sin fuente")}</small></div>}</article>
     </section>
   </div>;
