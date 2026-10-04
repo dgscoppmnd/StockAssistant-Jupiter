@@ -2,7 +2,7 @@
 
 import traceback
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 # Importamos ask_rag e infer_zone desde el módulo de Qdrant
@@ -14,6 +14,7 @@ class QueryRequest(BaseModel):
     question: str
     top_k: int = 3
     target_zone: Optional[str] = None  # Opcional: permite al cliente enviar una zona fija si lo requiere
+    model_config = ConfigDict(extra="allow") 
 
 class QueryResponse(BaseModel):
     answer: str
