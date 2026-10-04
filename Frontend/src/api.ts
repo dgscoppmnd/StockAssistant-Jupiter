@@ -15,6 +15,7 @@ import type {
   PurchaseRecommendation,
   StockAlert,
   CustomerSupportAnswer,
+  SupportTurn,
   FinancialSummary,
   SalesForecast,
   AutomationRule,
@@ -341,7 +342,6 @@ export async function logoutSession(): Promise<void> {
   }
 }
 
-// User API endpoints
 export async function fetchUsers(): Promise<User[]> {
   return request<User[]>(`${API_BASE}/users/`, { method: "GET" });
 }
@@ -364,7 +364,6 @@ export async function deleteUser(userId: number): Promise<void> {
   await request<void>(`${API_BASE}/users/${userId}`, { method: "DELETE" });
 }
 
-// Products API endpoints
 export async function importProductsCsv(file: File, onProgress?: (progress: ProductImportProgress) => void): Promise<ProductImportResult> {
   if (onProgress) {
     const token = getSessionToken();
@@ -494,8 +493,12 @@ export async function fetchMarketIntelligence(term: string): Promise<Record<stri
   return request(`${API_BASE}/agents/market-intelligence`, { method: "POST", body: JSON.stringify({ term }) });
 }
 
-export async function askCustomerSupport(question: string, productId?: number): Promise<CustomerSupportAnswer> {
-  return request<CustomerSupportAnswer>(`${API_BASE}/agents/customer-support`, { method: "POST", body: JSON.stringify({ question, product_id: productId || null }) });
+export async function askCustomerSupport(question: string, productId?: number, history: SupportTurn[] = []): Promise<CustomerSupportAnswer> {
+  return request<CustomerSupportAnswer>(`${API_BASE}/agents/customer-support`, { method: "POST", body: JSON.stringify({ question, product_id: productId || null, history }) });
+}
+
+export async function reindexKnowledgeDocument(id: number): Promise<MasterRecord> {
+  return request<MasterRecord>(`${API_BASE}/master-data/knowledge-documents/${id}/reindex`, { method: "POST" });
 }
 
 export async function fetchRisks(): Promise<{ alerts: Array<{ type: string; product_name: string; return_rate: number }> }> {

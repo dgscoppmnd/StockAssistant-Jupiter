@@ -1,15 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { getApiKey, getSessionToken } from '../api';
 
 interface Message {
   id: string;
   sender: 'user' | 'assistant';
   text: string;
+  citations?: { source: string; page?: number | null; score: number }[];
+  provider?: string;
+  ingestionWarnings?: string[];
 }
 
 export default function RagChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputQuery, setInputQuery] = useState('');
-  const [selectedZone, setSelectedZone] = useState<string>('auto'); // Estado para la zona seleccionada
+  const [selectedZone, setSelectedZone] = useState<string>('auto');
   const [isLoading, setIsLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -36,8 +40,8 @@ export default function RagChat() {
     setIsLoading(true);
 
     try {
-      const token = localStorage.getItem('token') || localStorage.getItem('access_token');
-      const apiKey = localStorage.getItem('api_key') || import.meta.env.VITE_API_KEY;
+      const token = getSessionToken();
+      const apiKey = getApiKey();
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -50,10 +54,8 @@ export default function RagChat() {
         headers['X-API-Key'] = apiKey;
       }
 
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       
-      // Petición al endpoint /api/rag/ask enviando target_zone si no es 'auto'
-      const response = await fetch(`${API_URL}/api/rag/ask`, {
+      const response = await fetch('/api/rag/ask', {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -75,7 +77,8 @@ export default function RagChat() {
 
       setMessages((prev) => [
         ...prev,
-        { id: (Date.now() + 1).toString(), sender: 'assistant', text: answerText },
+        { id: (Date.now() + 1).toString(), sender: 'assistant', text: answerText,
+          citations: data.citations, provider: data.provider, ingestionWarnings: data.ingestion_warnings },
       ]);
     } catch (error: any) {
       console.error('Error en RAG:', error);
@@ -120,6 +123,23 @@ export default function RagChat() {
             >
               <strong>{msg.sender === 'user' ? 'Tú: ' : 'IA: '}</strong>
               {msg.text}
+              {msg.citations && msg.citations.length > 0 && (
+                <div style={{ marginTop: '8px', fontSize: '12px', opacity: 0.8 }}>
+                  <strong>Fuentes:</strong>
+                  <ul style={{ margin: '4px 0' }}>
+                    {msg.citations.map((citation, index) => (
+                      <li key={index}>{citation.source}{citation.page ? `, p. ${citation.page}` : ''}</li>
+                    ))}
+                  </ul>
+                  {msg.provider && <span>Proveedor: {msg.provider === 'openai' ? 'OpenAI' : 'Ollama'}</span>}
+                </div>
+              )}
+              {msg.ingestionWarnings && msg.ingestionWarnings.length > 0 && (
+                <div style={{ marginTop: '8px', fontSize: '12px' }} role="status">
+                  <strong>Documentos pendientes de procesar:</strong>
+                  <ul>{msg.ingestionWarnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+                </div>
+              )}
             </div>
           ))
         )}
@@ -133,7 +153,6 @@ export default function RagChat() {
         <div ref={chatEndRef} />
       </div>
 
-      {/* Formulario con input de texto y selector de zona */}
       <form onSubmit={handleSend} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <div style={{ display: 'flex', gap: '8px' }}>
           <input
@@ -149,7 +168,6 @@ export default function RagChat() {
           </button>
         </div>
 
-        {/* Selector de filtro Qdrant */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
           <label htmlFor="zone-select" style={{ opacity: 0.8 }}>Filtrar zona:</label>
           <select 
@@ -160,6 +178,7 @@ export default function RagChat() {
             style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', background: 'var(--bg-input, #fff)', color: 'inherit' }}
           >
             <option value="general">🔍 General</option>
+            <option value="auto">🔍 Automático (toda la base)</option>
             <option value="inventario">📦 Inventario</option>
             <option value="ventas">💰 Ventas</option>
             <option value="logistica">🚚 Logística</option>

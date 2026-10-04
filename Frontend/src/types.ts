@@ -336,7 +336,14 @@ export type PurchaseRecommendation = {
 
 export type SalesForecast = { product_id: number; product_name: string; forecast_qty: number; daily_average: number; horizon_days: number; trend: string };
 export type FinancialSummary = { revenue: number; cost: number; margin: number; margin_percent: number; currency_basis: string };
-export type CustomerSupportAnswer = { answer: string; sources: Array<{ title: string; source: string; expires_at?: string | null }>; stock: Array<{ warehouse: string; available_qty: number; unit: string }> };
+export type CustomerSupportAnswer = {
+  answer: string;
+  sources: Array<{ title: string; source: string; expires_at?: string | null; page?: number | null; score?: number; excerpt?: string; citation?: string }>;
+  stock: Array<{ warehouse: string; available_qty: number; unit: string }>;
+  ai?: { provider: string; model: string; used_fallback: boolean } | null;
+  ingestion_warnings?: string[];
+};
+export type SupportTurn = { role: "user" | "assistant"; content: string };
 
 export type AutomationRule = { id: number; code: string; name: string; description: string; is_active: boolean; interval_minutes: number; last_run_at?: string | null };
 export type AutomationRun = { id: number; rule_code: string; initiated_by: string; status: string; started_at: string; completed_at?: string | null };
