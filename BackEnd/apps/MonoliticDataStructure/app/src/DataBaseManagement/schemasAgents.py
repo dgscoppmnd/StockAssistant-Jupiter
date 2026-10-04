@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -41,9 +42,15 @@ class CommercialContentRequest(BaseModel):
     channel: str = Field(default="product_page", min_length=2, max_length=40)
 
 
+class SupportTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+
 class CustomerSupportRequest(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
-    product_id: Optional[int] = None
+    product_id: Optional[int] = Field(default=None, gt=0)
+    history: list[SupportTurn] = Field(default_factory=list, max_length=12)
 
 
 class ExecutiveRequest(BaseModel):

@@ -70,6 +70,11 @@ jobs:
             -d supply_chain \
             -f BackEnd/apps/MonoliticDataStructure/app/docker/init-scripts/init.sql
 
+      - name: Prepare upload directory for tests
+        run: |
+          sudo install -d -o "$(id -un)" -g "$(id -gn)" /app/data/uploads
+          test -w /app/data/uploads
+
       - name: Run backend tests
         id: tests
         working-directory: BackEnd/apps/MonoliticDataStructure/app

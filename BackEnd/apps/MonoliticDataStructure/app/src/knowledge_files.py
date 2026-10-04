@@ -10,6 +10,20 @@ MAX_FILE_SIZE = 20 * 1024 * 1024
 SUPPORTED_SUFFIXES = {".txt", ".pdf", ".md"}
 
 
+def resolve_file(name: str) -> Path:
+    if (
+        not isinstance(name, str)
+        or Path(name).name != name
+        or any(char in name for char in ("\\", "/", ":", "\x00"))
+    ):
+        raise ValueError("Nombre de archivo no válido")
+    root = KNOWLEDGE_DIR.resolve()
+    path = (root / name).resolve()
+    if path.parent != root or path.suffix.lower() not in SUPPORTED_SUFFIXES or not path.is_file():
+        raise ValueError("No se encuentra el archivo adjunto en la base de conocimiento")
+    return path
+
+
 def store_file(upload) -> Path:
     name = (upload.filename or "").replace("\\", "/").split("/")[-1]
     suffix = Path(name).suffix.lower()

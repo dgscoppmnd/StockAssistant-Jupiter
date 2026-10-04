@@ -15,6 +15,7 @@ import type {
   PurchaseRecommendation,
   StockAlert,
   CustomerSupportAnswer,
+  SupportTurn,
   FinancialSummary,
   SalesForecast,
   AutomationRule,
@@ -35,6 +36,10 @@ import type {
   User,
   UserCreatePayload,
   UserUpdatePayload,
+  ChatConversationListResponse,
+  ChatHistoryResponse,
+  ChatRequest,
+  ChatResponse,
 } from "./types";
 
 import { uploadProductCsv, type ProductImportProgress, type ProductImportResult } from "./utils/productCsvUpload";
@@ -191,6 +196,49 @@ export async function analyzeWithStockAssistantAgent(payload: AgentChatRequest):
   });
 }
 
+export async function sendChatMessage(
+  payload: ChatRequest
+): Promise<ChatResponse> {
+  return request<ChatResponse>(`${API_BASE}/chat`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+
+export async function fetchChatConversations(
+  limit = 50,
+  offset = 0
+): Promise<ChatConversationListResponse> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+
+  return request<ChatConversationListResponse>(
+    `${API_BASE}/chat/history?${params.toString()}`,
+    { method: "GET" }
+  );
+}
+
+
+export async function fetchChatHistory(
+  conversationId: number,
+  limit = 100,
+  offset = 0
+): Promise<ChatHistoryResponse> {
+  const params = new URLSearchParams({
+    conversation_id: String(conversationId),
+    limit: String(limit),
+    offset: String(offset),
+  });
+
+  return request<ChatHistoryResponse>(
+    `${API_BASE}/chat/history?${params.toString()}`,
+    { method: "GET" }
+  );
+}
+
 export type SemanticProductResult = {
   score: number;
   product_id?: string;
@@ -294,7 +342,6 @@ export async function logoutSession(): Promise<void> {
   }
 }
 
-// User API endpoints
 export async function fetchUsers(): Promise<User[]> {
   return request<User[]>(`${API_BASE}/users/`, { method: "GET" });
 }
@@ -317,7 +364,6 @@ export async function deleteUser(userId: number): Promise<void> {
   await request<void>(`${API_BASE}/users/${userId}`, { method: "DELETE" });
 }
 
-// Products API endpoints
 export async function importProductsCsv(file: File, onProgress?: (progress: ProductImportProgress) => void): Promise<ProductImportResult> {
   if (onProgress) {
     const token = getSessionToken();
@@ -447,8 +493,12 @@ export async function fetchMarketIntelligence(term: string): Promise<Record<stri
   return request(`${API_BASE}/agents/market-intelligence`, { method: "POST", body: JSON.stringify({ term }) });
 }
 
-export async function askCustomerSupport(question: string, productId?: number): Promise<CustomerSupportAnswer> {
-  return request<CustomerSupportAnswer>(`${API_BASE}/agents/customer-support`, { method: "POST", body: JSON.stringify({ question, product_id: productId || null }) });
+export async function askCustomerSupport(question: string, productId?: number, history: SupportTurn[] = []): Promise<CustomerSupportAnswer> {
+  return request<CustomerSupportAnswer>(`${API_BASE}/agents/customer-support`, { method: "POST", body: JSON.stringify({ question, product_id: productId || null, history }) });
+}
+
+export async function reindexKnowledgeDocument(id: number): Promise<MasterRecord> {
+  return request<MasterRecord>(`${API_BASE}/master-data/knowledge-documents/${id}/reindex`, { method: "POST" });
 }
 
 export async function fetchRisks(): Promise<{ alerts: Array<{ type: string; product_name: string; return_rate: number }> }> {
