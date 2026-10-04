@@ -159,7 +159,7 @@ export default function RagChat() {
             disabled={isLoading}
             style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', background: 'var(--bg-input, #fff)', color: 'inherit' }}
           >
-            <option value="auto">🔍 Automático (Inferir por palabras clave)</option>
+            <option value="general">🔍 General</option>
             <option value="inventario">📦 Inventario</option>
             <option value="ventas">💰 Ventas</option>
             <option value="logistica">🚚 Logística</option>
