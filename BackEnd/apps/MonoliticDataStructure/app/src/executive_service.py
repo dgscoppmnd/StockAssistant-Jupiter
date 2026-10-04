@@ -89,8 +89,13 @@ class ExecutiveService:
             raise ValueError("Agente no disponible")
 
         decision_id = self._record_decision(agent, routed, {"question": question, "product_id": product_id}, result)
-        return {"decision_id": decision_id, "agent": "executive", "routed_agent": routed, "tool": result.get("agent", routed),
-                "result": result, "execution_policy": "read_only; no crea pedidos ni modifica inventario", "created_at": datetime.now(timezone.utc).isoformat()}
+        return {"decision_id": decision_id, 
+                "agent": "executive", 
+                "routed_agent": routed, 
+                "tool": result.get("agent", routed),
+                "result": result, 
+                "execution_policy": "read_only; no crea pedidos ni modifica inventario",
+                "created_at": datetime.now(timezone.utc).isoformat()}
 
     def decisions(self, limit: int = 50) -> list[dict[str, Any]]:
         return self._all("SELECT id, requested_agent, routed_agent, request_data, response_summary, created_at FROM public.agent_decisions ORDER BY id DESC LIMIT %s", (limit,))
@@ -98,9 +103,15 @@ class ExecutiveService:
 
 class AutomationService(ExecutiveService):
     DEFAULT_RULES = (
-        ("stock_reorder_proposals", "Propuestas de reposicion", "Genera propuestas pendientes de aprobacion humana a partir de stock bajo."),
-        ("daily_inventory_report", "Informe diario", "Genera un informe de inventario y movimientos del ultimo dia."),
-        ("risk_alerts", "Alertas de riesgos", "Registra las alertas de riesgo basadas en datos confirmados."),
+        ("stock_reorder_proposals", 
+         "Propuestas de reposicion", 
+         "Genera propuestas pendientes de aprobacion humana a partir de stock bajo."),
+        ("daily_inventory_report",
+          "Informe diario", 
+          "Genera un informe de inventario y movimientos del ultimo dia."),
+        ("risk_alerts", 
+         "Alertas de riesgos", 
+         "Registra las alertas de riesgo basadas en datos confirmados."),
     )
 
     def ensure_default_rules(self) -> None:

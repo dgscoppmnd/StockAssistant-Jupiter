@@ -30,6 +30,7 @@ from src.endpoints.endpointTools import (
     tool_search_products_db,  # Importa la función que busca productos en la base de datos
     tool_upgrade_libraries,  # Importa la función que actualiza librerías del sistema
     tool_send_email,  # Importa la función que envía correos electrónicos
+    tool_get_inventory_risk,
 )
 from src.DataBaseManagement.dbConectionPostgres import get_db_products  # Importa la función de conexión a la BD PostgreSQL
 
@@ -81,6 +82,46 @@ def test_tool_search_products_db_success():  # Define la prueba para una búsque
     mock_cursor.execute.assert_called_once()  # Verifica que la consulta SQL se haya ejecutado una sola vez
     assert mock_cursor.execute.call_args[0][1] == ["%teclado%", "%teclado%", "%teclado%", 5]  # Valida que los parámetros SQL contengan los comodines '%'
 
+
+@patch("src.endpoints.endpointTools.InventoryService")
+def test_tool_get_inventory_risk_returns_relevant_data(mock_inventory_service):
+    mock_connection = MagicMock()
+    mock_service = mock_inventory_service.return_value
+    mock_service.list_stock.return_value = []
+    mock_service.get_executive_dashboard.return_value = {
+        "period_days": 30,
+        "metrics": {"service_level_pct": 95},
+        "priority_purchases": [
+            {"product_name": "Teclado", "priority": "alta"}
+        ],
+        "alerts": [
+            {"product_name": "Teclado", "kind": "riesgo_rotura"}
+        ],
+        "forecast_vs_available": [
+            {"product_name": "Teclado", "available_qty": 2}
+        ],
+        "risk_distribution": [
+            {"label": "Riesgo de rotura", "value": 1}
+        ],
+        "supplier_comparison": [{"name": "Proveedor no necesario"}],
+    }
+
+    result = tool_get_inventory_risk(
+        connection=mock_connection,
+        period_days=30,
+    )
+
+    mock_inventory_service.assert_called_once_with(mock_connection)
+    mock_service.get_executive_dashboard.assert_called_once_with(
+        period_days=30
+    )
+    assert result["alerts"][0]["kind"] == "riesgo_rotura"
+    assert result["priority_purchases"][0]["product_name"] == "Teclado"
+    assert "supplier_comparison" not in result
+
+    mock_service.list_stock.assert_called_once_with()
+    assert result["has_inventory_data"] is False
+    assert result["inventory_records"] == 0
 
 def test_tool_upgrade_libraries_blocked_package():  # Define la prueba para el bloqueo de paquetes no permitidos
     """Prueba que se lance un ValueError si se intenta actualizar una librería no permitida."""

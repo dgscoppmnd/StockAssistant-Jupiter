@@ -69,6 +69,8 @@ class TestProducts:
         mock_row = (
             {
                 "product_id": "PROD_001",
+                "product_name": "Televisor Sony",
+                "description": "Producto electrónico de prueba",
                 "product_category": "Electronic",
                 "brand": "Sony",
                 "sku": "001",

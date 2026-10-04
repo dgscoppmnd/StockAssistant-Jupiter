@@ -1,0 +1,4 @@
+code_cliente,name_client,description,tipo_cliente
+CLI0001,Cliente Demo Uno,Cliente importado desde CSV,Propio
+CLI0002,Cliente Demo Dos,Cliente potencial,Prospecto
+CLI0003,Cliente Demo Tres,Cliente con cuenta activa,Activo

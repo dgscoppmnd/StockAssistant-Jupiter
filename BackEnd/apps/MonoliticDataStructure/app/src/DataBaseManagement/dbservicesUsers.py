@@ -85,12 +85,14 @@ class UserServicesManager:
             "apellido": self._clean_text(User_update.apellido),
             "email": User_update.email,
             "descripcion": self._clean_text(User_update.descripcion),
-            "password": hash_password(User_update.password),
             "status": User_update.status,
             "startline": datetime.combine(User_update.startline, datetime.min.time(), tzinfo=timezone.utc) if User_update.startline else None,
             "deadline": datetime.combine(User_update.deadline, datetime.min.time(), tzinfo=timezone.utc) if User_update.deadline else None,
             "updated_at": datetime.now(timezone.utc),
         }
+
+        if User_update.password is not None:
+            payload["password"] = hash_password(User_update.password)
 
         updated = update_user(User_id, payload, connection=self.db)
         if not updated:

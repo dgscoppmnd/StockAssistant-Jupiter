@@ -11,28 +11,39 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from .config import settings
 from .database import engine, Base
+<<<<<<< HEAD
 from .routes import (
     products, inventory, sales, suppliers, 
     logistics, metrics, analytics, knowledge, ml
 )
+=======
+from .routes import products, inventory, sales, suppliers, logistics, metrics, analytics, knowledge
+>>>>>>> develop
 from endpoints.endpoints import public_router, router as stockassistant_router
-from DataBaseManagement.dbConectionPostgres import init_db, init_products_db, _get_postgres_connection_server
+from DataBaseManagement.dbConectionPostgres import (
+    init_db,
+    init_products_db,
+    _get_postgres_connection_server,
+)
 from executive_service import start_automation_worker, stop_automation_worker
+from knowledge_schema import ensure_knowledge_schema
+from knowledge_worker import start_knowledge_worker
 
-# Crear tablas
+
+import sys
+from pathlib import Path
+
 Base.metadata.create_all(bind=engine)
 LOGGER = logging.getLogger("src.api.main")
 
-# Inicializar app
 app = FastAPI(
     title="Proyecto Jupiter API",
     version="2.0.0",
     description="Integración del backend local con las capacidades operativas de StockAssistant",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
 )
 
-# Configurar CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -45,23 +56,19 @@ uploads_root = Path("/app/data/uploads")
 uploads_root.mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory=str(uploads_root)), name="media")
 
-# =============================================
-# RUTAS PRINCIPALES
-# =============================================
 
 @app.get("/")
 async def root():
-    """Endpoint raíz"""
     return {
         "message": "Proyecto Jupiter API",
         "version": "2.0.0",
         "docs": "/docs",
-        "redoc": "/redoc"
+        "redoc": "/redoc",
     }
+
 
 @app.get("/health")
 async def health_check():
-    """Health check"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
@@ -70,11 +77,19 @@ def on_startup_init_db() -> None:
     LOGGER.info("event=startup_init_db")
     init_db()
     init_products_db()
+    connection = _get_postgres_connection_server()
+    try:
+        ensure_knowledge_schema(connection)
+    finally:
+        connection.close()
+    app.state.knowledge_stop = start_knowledge_worker(_get_postgres_connection_server)
     start_automation_worker(_get_postgres_connection_server)
 
 
 @app.on_event("shutdown")
 def on_shutdown() -> None:
+    if hasattr(app.state, "knowledge_stop"):
+        app.state.knowledge_stop.set()
     stop_automation_worker()
 
 
@@ -86,9 +101,6 @@ async def request_validation_exception_handler(_request, exc: RequestValidationE
         content={"detail": "Bad Request on json body", "errors": exc.errors()},
     )
 
-# =============================================
-# REGISTRAR ROUTERS
-# =============================================
 
 app.include_router(products.router, prefix="/api/v1/products", tags=["Products"])
 app.include_router(inventory.router, prefix="/api/v1/inventory", tags=["Inventory"])
@@ -104,9 +116,5 @@ app.include_router(stockassistant_router, prefix="/api", tags=["Proyecto Jupiter
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "src.api.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True
-    )
+
+    uvicorn.run("src.api.main:app", host="0.0.0.0", port=8000, reload=True)

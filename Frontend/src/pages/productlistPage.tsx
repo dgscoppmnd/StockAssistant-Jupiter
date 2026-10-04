@@ -1,10 +1,11 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BootstrapTable from "react-bootstrap-table-next";
 import paginationFactory from "react-bootstrap-table2-paginator";
-import { createProduct, deleteProduct, fetchProductsPage, importProductsCsv, updateProduct } from "../api";
+import { createProduct, deleteProduct, fetchProductsPage, importProductsCsv, syncProductsQdrant, updateProduct } from "../api";
 import type { Product, ProductCreatePayload, ProductUpdatePayload } from "../types";
 import ProductEditerForm, { type EditorState, emptyEditor } from "./components/productEditerForm";
 import type { ProductImportProgress } from "../utils/productCsvUpload";
+import type { ProductQdrantSyncProgress } from "../utils/productQdrantSync";
 
 function toInputDate(raw?: string | null): string {
   if (!raw) return "";
@@ -80,11 +81,15 @@ export default function ProductlistPage() {
   const [importError, setImportError] = useState("");
   const [importResult, setImportResult] = useState("");
   const [importProgress, setImportProgress] = useState<ProductImportProgress | null>(null);
+  const [syncingQdrant, setSyncingQdrant] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<ProductQdrantSyncProgress | null>(null);
+  const [syncResult, setSyncResult] = useState("");
   const progressLabels = {
-    uploading: "Subiendo archivo (1/3)",
-    validating: "Validando CSV (2/3)",
-    importing: "Importando productos (3/3)",
+    uploading: "Subiendo archivo (1/4)",
+    validating: "Validando CSV (2/4)",
+    importing: "Importando productos (3/4)",
     committing: "Confirmando el guardado",
+    indexing: "Actualizando búsqueda semántica en Qdrant (4/4)",
     complete: "Importación completada",
   };
 
@@ -126,7 +131,10 @@ export default function ProductlistPage() {
     setImporting(true);
     try {
       const result = await importProductsCsv(csvFile, setImportProgress);
-      setImportResult(`Importación completada: ${result.imported} productos importados y ${result.skipped} omitidos por código existente, de ${result.total} productos.`);
+      const vectorStatus = result.index_error
+        ? " No se pudo actualizar Qdrant; los productos sí quedaron guardados."
+        : ` ${result.indexed} productos quedaron disponibles para búsqueda semántica.`;
+      setImportResult(`Importación completada: ${result.imported} productos importados y ${result.skipped} omitidos por código existente, de ${result.total} productos.${vectorStatus}`);
       setCsvFile(null);
       setShowImport(false);
       await loadProducts();
@@ -140,6 +148,22 @@ export default function ProductlistPage() {
       }
     } finally {
       setImporting(false);
+    }
+  };
+
+  const onSyncQdrant = async () => {
+    if (syncingQdrant || importing) return;
+    setSyncingQdrant(true);
+    setSyncProgress(null);
+    setSyncResult("");
+    setError("");
+    try {
+      const result = await syncProductsQdrant(setSyncProgress);
+      setSyncResult(`Qdrant actualizado: ${result.indexed} de ${result.total} productos activos indexados.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo sincronizar Qdrant.");
+    } finally {
+      setSyncingQdrant(false);
     }
   };
 
@@ -191,14 +215,15 @@ export default function ProductlistPage() {
     try {
       const payload = buildPayload(editor);
 
-      if (editor.pk_product) {
-        await updateProduct(editor.pk_product, payload as ProductUpdatePayload);
-      } else {
-        await createProduct(payload);
-      }
+      const saved = editor.pk_product
+        ? await updateProduct(editor.pk_product, payload as ProductUpdatePayload)
+        : await createProduct(payload);
 
       await loadProducts();
       closeModal();
+      if (saved.semantic_indexed === false) {
+        setError("El producto se guardó, pero no se pudo actualizar su vector en Qdrant.");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar el producto");
     } finally {
@@ -298,19 +323,37 @@ export default function ProductlistPage() {
         <button className="primary-btn" onClick={openCreate} type="button">
           + Nuevo producto
         </button>
-        <button className="primary-btn" onClick={() => { setShowImport(!showImport); setCsvFile(null); setImportError(""); setImportProgress(null); }} type="button" disabled={importing} aria-expanded={showImport} aria-controls="product-csv-import">
+        <button className="primary-btn" onClick={() => { setShowImport(!showImport); setCsvFile(null); setImportError(""); setImportProgress(null); }} type="button" disabled={importing || syncingQdrant} aria-expanded={showImport} aria-controls="product-csv-import">
           Importar CSV
+        </button>
+        <button
+          className="primary-btn"
+          disabled={importing || syncingQdrant}
+          onClick={() => void onSyncQdrant()}
+          title="Actualiza la búsqueda semántica con todos los productos activos de PostgreSQL."
+          type="button"
+        >
+          {syncingQdrant ? "Sincronizando Qdrant..." : "Sincronizar Qdrant"}
         </button>
         {error && <p className="error-line" role="alert" style={{ margin: 0 }}>{error} <button type="button" className="chip-btn" disabled={loading} onClick={() => void loadProducts()}>Recargar lista</button></p>}
       </div>
 
       {importResult && <p role="status">{importResult}</p>}
+      {syncResult && <p role="status">{syncResult}</p>}
+      {syncProgress && syncingQdrant && (
+        <div style={{ margin: "16px 0" }}>
+          <p id="qdrant-sync-progress-label" role="status" style={{ marginBottom: 6 }}>
+            Sincronizando Qdrant: {syncProgress.percent}% · {syncProgress.processed.toLocaleString("es-ES")} de {syncProgress.total.toLocaleString("es-ES")} productos
+          </p>
+          <progress aria-labelledby="qdrant-sync-progress-label" max={100} value={syncProgress.percent} style={{ width: "100%", height: 22, accentColor: "#2563eb" }} />
+        </div>
+      )}
       {importProgress && !importError && (
         <div style={{ margin: "16px 0" }}>
           <p id="product-import-progress-label" role="status" style={{ marginBottom: 6 }}>
             {progressLabels[importProgress.stage]}
             {importProgress.stage !== "committing" && `: ${importProgress.percent}%`}
-            {importProgress.stage === "importing" && ` · ${importProgress.processed?.toLocaleString("es-ES")} de ${importProgress.total?.toLocaleString("es-ES")} productos procesados`}
+            {(importProgress.stage === "importing" || importProgress.stage === "indexing") && typeof importProgress.processed === "number" && ` · ${importProgress.processed.toLocaleString("es-ES")} de ${importProgress.total?.toLocaleString("es-ES")} productos procesados`}
           </p>
           <progress aria-labelledby="product-import-progress-label" max={100} value={importProgress.stage === "committing" ? undefined : importProgress.percent} style={{ width: "100%", height: 22, accentColor: "#2563eb" }} />
         </div>

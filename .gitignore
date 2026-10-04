@@ -16,6 +16,8 @@ venv/
 
 #Ignorar los archivos de configuración de vscode
 .vscode/
+.codex
+AGENTS.md
 
 #Ignorar los archivos de configuración 
 .cache/

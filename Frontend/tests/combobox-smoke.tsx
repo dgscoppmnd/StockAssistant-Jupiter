@@ -6,6 +6,15 @@ import SupplierCombobox from "../src/pages/components/SupplierCombobox";
 import type { Product } from "../src/types";
 import "../src/styles.css";
 
+const normalize = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+let requests = 0;
+async function loadOptions(query: string, after = 0) {
+  requests += 1;
+  document.getElementById("request-count")!.textContent = `Consultas: ${requests}. Última: «${query}»`;
+  const matches = products.filter(p => (!after || p.pk_product < after) && normalize(`${p.cdgo_producto_externo} ${p.name_product}`).includes(normalize(query))).reverse();
+  return { items: matches.slice(0, 10), next_cursor: matches.length > 10 ? matches[9].pk_product : null };
+}
+
 const products: Product[] = Array.from({ length: 30 }, (_, i) => ({
   pk_product: i + 1, cdgo_producto_externo: `TEST-${i + 1}`, name_product: `Café ${i + 1}`,
   description_product: null, disabled: false, price: null, unit: 1, final_price: null,
@@ -21,9 +30,10 @@ function Fixture() {
     <h1>Prueba aislada de selectores</h1>
     <p>Buscar «cafe», seleccionar con teclado o ratón y cerrar con Escape. La lista debe superar el contenedor recortado.</p>
     <div style={{ overflow: "hidden", height: 85, border: "1px solid", maxWidth: 400 }}>
-      <ProductCombobox products={products} selectedId={product} disabled={false} loading={false} onSelect={p => setProduct(p.pk_product)} />
+      <ProductCombobox loadOptions={loadOptions} selectedProduct={products.find(p => p.pk_product === product)} selectedId={product} disabled={false} onSelect={p => setProduct(p.pk_product)} />
     </div>
     <p role="status">Producto seleccionado: {product}</p>
+    <p id="request-count">Consultas: 0</p>
     <div style={{ position: "fixed", bottom: 50, width: "min(400px, calc(100vw - 48px))", overflow: "hidden", height: 85 }}>
       <SupplierCombobox suppliers={[{ id: 1, supplier_code: "P-1", name: "Proveedor de prueba" }]} selectedId={supplier}
         creating={false} disabled={false} loading={false} onSelect={s => setSupplier(Number(s.id))} onCreate={setCreated} />

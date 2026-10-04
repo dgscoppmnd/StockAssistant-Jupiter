@@ -9,8 +9,13 @@ from DataBaseManagement.dbConectionPostgres import get_db_products
 from ai_service import AIProviderError, AIService
 from ollama_service import get_system_prompt
 from security import require_api_key
-from .endpointTools import tool_search_products_db, tool_search_products_semantic
 from .endpointWebs import search_web_duckduckgo
+
+from .endpointTools import (
+    tool_get_inventory_risk,
+    tool_search_products_db,
+    tool_search_products_semantic,
+)
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 logger = logging.getLogger("api.endpointAgentes")
@@ -50,6 +55,24 @@ def _infer_tools_from_prompt(prompt: str) -> dict[str, bool]:
                 "encuentra",
                 "recomienda",
                 "similar",
+            ]
+        ),
+        "inventory": any(
+            token in lowered
+            for token in [
+                "stock",
+                "inventario",
+                "existencias",
+                "rotura",
+                "riesgo",
+                "reposición",
+                "reposicion",
+                "reponer",
+                "agotado",
+                "agotarse",
+                "demanda",
+                "disponible",
+                "disponibilidad",
             ]
         ),
     }
@@ -93,7 +116,22 @@ def _primary_provider_response(provider: str, prompt: str, system_prompt: str) -
 
 def _semantic_fallback_response(tool_results: dict[str, Any]) -> dict[str, Any] | None:
     """Construye una respuesta útil cuando no hay proveedor LLM disponible."""
-    products = tool_results.get("semantic_products")
+    semantic_result = tool_results.get("semantic_products")
+    if isinstance(semantic_result, dict):
+        products = semantic_result.get("products")
+        if semantic_result.get("status") == "empty":
+            return {
+                "response": semantic_result.get(
+                    "message",
+                    "No se encontraron productos relacionados en el catálogo.",
+                ),
+                "provider": "qdrant",
+                "model": "semantic-search",
+                "used_fallback": True,
+            }
+    else:
+        products = semantic_result
+
     if not isinstance(products, list) or not products:
         return None
 
@@ -138,6 +176,11 @@ def stockassistant_chat(
         web_results = search_web_duckduckgo(query=web_query, max_results=request.max_web_results)
 
     if request.use_tools:
+        if inferred["inventory"]:
+            tool_results["inventory_risk"] = tool_get_inventory_risk(
+                connection=db_products,
+                period_days=30,
+            )
         if inferred["products"]:
             tool_results["products_db"] = tool_search_products_db(
                 connection=db_products,

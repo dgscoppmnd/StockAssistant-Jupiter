@@ -85,3 +85,9 @@ html_nginx/web/dist/
 # No cargar la carpeta Docs
 docs/*
 !docs/**
+
+# Test artifacts
+.coverage
+.coverage.*
+htmlcov/
+test-results/

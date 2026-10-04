@@ -6,7 +6,6 @@ import {
   createWarehouse,
   fetchInventoryDashboard,
   fetchMasterRecords,
-  fetchProducts,
   transferInventoryStock,
 } from "../api";
 import type {
@@ -19,7 +18,6 @@ import type {
   InventoryWarehouse,
   InventoryWarehousePayload,
   MasterRecord,
-  Product,
 } from "../types";
 import InventoryCrudCard from "./components/InventoryCrudCard";
 import ProductConfigModal from "./components/ProductConfigModal";
@@ -174,9 +172,6 @@ export default function InventoryPage() {
   const [creatingSupplier, setCreatingSupplier] = useState(false);
   const [suppliersLoading, setSuppliersLoading] = useState(true);
   const [suppliersError, setSuppliersError] = useState("");
-  const [products, setProducts] = useState<Product[]>([]);
-  const [productsLoading, setProductsLoading] = useState(true);
-  const [productsError, setProductsError] = useState("");
   const [stockOrderNumber, setStockOrderNumber] = useState("");
   const [stockOrderWarehouseId, setStockOrderWarehouseId] = useState(0);
   const [stockOrderNotes, setStockOrderNotes] = useState("");
@@ -198,20 +193,6 @@ export default function InventoryPage() {
   }, []);
 
   useEffect(() => { void loadSuppliers(); }, [loadSuppliers]);
-
-  const loadProducts = useCallback(async () => {
-    setProductsLoading(true);
-    setProductsError("");
-    try {
-      setProducts(await fetchProducts());
-    } catch (err) {
-      setProductsError(err instanceof Error ? err.message : "No se pudieron cargar los productos.");
-    } finally {
-      setProductsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void loadProducts(); }, [loadProducts]);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -395,9 +376,9 @@ export default function InventoryPage() {
 
   const onSubmitStockOrder = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (busy || suppliersLoading || suppliersError || productsLoading || productsError) return;
+    if (busy || suppliersLoading || suppliersError) return;
     const invalidLine = stockOrderLines.some(
-      (line) => !products.some((product) => product.pk_product === line.product_id) || line.quantity <= 0 || !line.unit_code || line.unit_price === undefined || line.unit_price < 0,
+      (line) => !Number.isInteger(line.product_id) || line.product_id <= 0 || line.quantity <= 0 || !line.unit_code || line.unit_price === undefined || line.unit_price < 0,
     );
 
     if (!stockOrderWarehouseId || !stockOrderSupplier.trim() || (!selectedSupplierId && !creatingSupplier) || invalidLine) {
@@ -532,7 +513,7 @@ export default function InventoryPage() {
                 >
                   Agregar linea
                 </button>
-                <button className="primary-btn" disabled={busy || suppliersLoading || Boolean(suppliersError) || productsLoading || Boolean(productsError) || !dashboard?.warehouses.length} type="submit">
+                <button className="primary-btn" disabled={busy || suppliersLoading || Boolean(suppliersError) || !dashboard?.warehouses.length} type="submit">
                   Confirmar pedido y entrada
                 </button>
               </div>
@@ -610,7 +591,6 @@ export default function InventoryPage() {
             </div>
           </div>}
 
-          {productsError && <p className="error-line" role="alert">{productsError} <button className="chip-btn" type="button" onClick={() => void loadProducts()}>Reintentar</button></p>}
           <div className="stock-order-lines" aria-label="Lineas del pedido">
             <div className="stock-order-line stock-order-line-header" aria-hidden="true">
               <span>Producto · Código y nombre</span>
@@ -621,8 +601,8 @@ export default function InventoryPage() {
             </div>
             {stockOrderLines.map((line) => (
               <div className="stock-order-line" key={line.id}>
-                <ProductCombobox products={products} selectedId={line.product_id}
-                  disabled={busy || Boolean(productsError)} loading={productsLoading}
+                <ProductCombobox selectedId={line.product_id}
+                  disabled={busy}
                   onSelect={(product) => updateStockOrderLine(line.id, {
                     product_id: product.pk_product,
                     unit_code: dashboard?.stock_snapshot.find((item) => item.product_id === product.pk_product)?.base_unit_code ?? "unit",

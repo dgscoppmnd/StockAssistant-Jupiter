@@ -64,6 +64,8 @@ class ProductResponse(BaseModel):
 	last_update: Optional[datetime] = None
 	supplier: Optional[str] = None
 	default_image_url: Optional[str] = None
+	semantic_indexed: Optional[bool] = None
+	semantic_index_error: Optional[str] = None
 
 	class Config:
 		from_attributes = True
