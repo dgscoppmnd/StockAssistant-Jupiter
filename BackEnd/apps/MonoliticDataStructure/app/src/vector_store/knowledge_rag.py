@@ -1,5 +1,7 @@
 from pathlib import Path
-from langchain_chroma import Chroma
+from langchain_qdrant import QdrantVectorStore
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -15,16 +17,18 @@ CURRENT_FILE = Path(__file__).resolve()
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 KNOWLEDGE_DIR = BASE_DIR / "BackEnd/apps/MonoliticDataStructure/app/data/knowledge"
-CHROMA_GUIDE_DIR = BASE_DIR / "BackEnd/apps/MonoliticDataStructure/app/data/chroma_db_ollama"
 
-# Asegurar directorios
-KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
-CHROMA_GUIDE_DIR.mkdir(parents=True, exist_ok=True)
-
-# Configuración de Ollama
+# Configuración de Ollama y Qdrant
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
-OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "llama3.2")         # Usado para redactar respuestas
-OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text") # Usado para generar embeddings
+OLLAMA_CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "llama3.2")
+OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+
+# URL de Qdrant (por defecto en Docker)
+QDRANT_URL = os.getenv("QDRANT_URL", "http://host.docker.internal:6333")
+COLLECTION_NAME = "RAG-Documentation-Qdrant"
+
+# Asegurar directorios locales si usas almacenamiento local de archivos
+KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def infer_zone(content: str) -> str:
@@ -83,22 +87,27 @@ def load_internal_documents(data_dir: Path = KNOWLEDGE_DIR) -> list:
     return documents
 
 
-def get_or_create_vectorstore() -> Chroma:
-    # Usar explícitamente el modelo especializado de embeddings en local
+def get_vectorstore() -> QdrantVectorStore:
+    """Conecta o inicializa Qdrant con los embeddings de Ollama."""
     embeddings = OllamaEmbeddings(
         model=OLLAMA_EMBED_MODEL,
         base_url=OLLAMA_BASE_URL
     )
 
-    if CHROMA_GUIDE_DIR.exists() and any(CHROMA_GUIDE_DIR.iterdir()):
-        print("Cargando VectorStore existente de ChromaDB (Ollama)...")
-        return Chroma(
-            persist_directory=str(CHROMA_GUIDE_DIR),
-            embedding_function=embeddings,
-            collection_name="RAG-Documentation-Ollama",
+    client = QdrantClient(url=QDRANT_URL)
+
+    # Verificar si la colección ya existe y tiene puntos indexados
+    collections = [col.name for col in client.get_collections().collections]
+
+    if COLLECTION_NAME in collections:
+        print(f"Cargando colección existente '{COLLECTION_NAME}' desde Qdrant...")
+        return QdrantVectorStore(
+            client=client,
+            collection_name=COLLECTION_NAME,
+            embedding=embeddings,
         )
 
-    print("Indexando documentos por primera vez con Ollama...")
+    print(f"Indexando documentos por primera vez en Qdrant ({COLLECTION_NAME})...")
     documents = load_internal_documents(KNOWLEDGE_DIR)
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -112,29 +121,57 @@ def get_or_create_vectorstore() -> Chroma:
         d.metadata["chunk_id"] = i
         d.metadata.setdefault("zone", infer_zone(d.page_content))
 
-    guide_store = Chroma.from_documents(
+    # Crear la colección e insertar los documentos en Qdrant
+    vector_store = QdrantVectorStore.from_documents(
         documents=guide_splits,
         embedding=embeddings,
-        persist_directory=str(CHROMA_GUIDE_DIR),
-        collection_name="RAG-Documentation-Ollama",
+        url=QDRANT_URL,
+        collection_name=COLLECTION_NAME,
     )
 
-    return guide_store
+    return vector_store
 
 
 def format_docs(docs):
     return "\n\n".join(
-        f"[Fuente: {doc.metadata.get('source_name', 'Desconocido')}]\n{doc.page_content}"
+        f"[Fuente: {doc.metadata.get('source_name', 'Desconocido')} | Zona: {doc.metadata.get('zone', 'general')}]\n{doc.page_content}"
         for doc in docs
     )
 
 
-def ask_rag(query: str, top_k: int = 3) -> str:
-    """Realiza la búsqueda en ChromaDB y genera una respuesta usando Ollama local."""
-    vectorstore = get_or_create_vectorstore()
+def ask_rag(query: str, top_k: int = 3, target_zone: str = None) -> str:
+    """
+    Realiza la búsqueda en Qdrant aplicando un filtro por zona (metadatos)
+    y genera una respuesta usando Ollama local.
+    """
+    vectorstore = get_vectorstore()
+
+    # Si no se pasa una zona por argumento, la inferimos automáticamente de la pregunta
+    zone_to_filter = target_zone if target_zone else infer_zone(query)
+    
+    qdrant_filter = None
+    # Aplicar filtro en Qdrant solo si la zona detectada es específica
+    if zone_to_filter and zone_to_filter != "general":
+        print(f"Aplicando filtro Qdrant -> zone: '{zone_to_filter}'")
+        qdrant_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="metadata.zone",  # En Qdrant/LangChain los metadatos quedan anidados bajo "metadata."
+                    match=models.MatchValue(value=zone_to_filter),
+                )
+            ]
+        )
+    else:
+        print("Búsqueda global (sin filtro de zona estricto).")
+
+    # Configurar el retriever de LangChain con el filtro de Qdrant
+    search_kwargs = {"k": top_k}
+    if qdrant_filter:
+        search_kwargs["filter"] = qdrant_filter
 
     retriever = vectorstore.as_retriever(
-        search_type="similarity", search_kwargs={"k": top_k}
+        search_type="similarity", 
+        search_kwargs=search_kwargs
     )
 
     # LLM local para generar respuestas

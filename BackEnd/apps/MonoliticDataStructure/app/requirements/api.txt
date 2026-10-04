@@ -37,3 +37,5 @@ langchain_openai
 langchain_core
 langchain_text_splitters
 langchain-ollama
+langchain-qdrant
+qdrant-client

@@ -3,18 +3,21 @@
 import traceback
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 
-# Importación relativa/absoluta según la ubicación del script
-from src.vector_store.knowledge_rag import ask_rag
+# Importamos ask_rag e infer_zone desde el módulo de Qdrant
+from src.vector_store.knowledge_rag import ask_rag, infer_zone
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
 class QueryRequest(BaseModel):
     question: str
     top_k: int = 3
+    target_zone: Optional[str] = None  # Opcional: permite al cliente enviar una zona fija si lo requiere
 
 class QueryResponse(BaseModel):
     answer: str
+
 
 @router.post("/ask", response_model=QueryResponse)
 async def handle_rag_question(request: QueryRequest):
@@ -24,7 +27,17 @@ async def handle_rag_question(request: QueryRequest):
         )
 
     try:
-        answer = ask_rag(query=request.question, top_k=request.top_k)
+        # Si el cliente mandó una zona explícita, la usamos; si no, la inferimos de la pregunta
+        target_zone = request.target_zone if request.target_zone else infer_zone(request.question)
+        print(f"Zona aplicada para la consulta: '{target_zone}'")
+
+        # Llamamos a ask_rag pasando la zona para que aplique el filtro en Qdrant
+        answer = ask_rag(
+            query=request.question, 
+            top_k=request.top_k, 
+            target_zone=target_zone
+        )
+        
         return QueryResponse(answer=answer)
 
     except HTTPException:
