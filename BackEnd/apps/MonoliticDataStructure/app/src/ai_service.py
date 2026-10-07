@@ -76,7 +76,8 @@ class AIService:
             "OLLAMA_URL", "http://host.docker.internal:11434/api/generate"
         ).strip()
         self.ollama_model = os.getenv("OLLAMA_MODEL", "qwen3:14b").strip() or "qwen3:14b"
-        self.ollama_timeout = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "20"))
+        self.ollama_timeout = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "60"))
+        self.ollama_think = os.getenv("OLLAMA_THINK", "false").strip().lower() in {"1", "true", "yes", "on"}
         self.openai_model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini").strip() or "gpt-4.1-mini"
         self.openai_timeout = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "20"))
         self.openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
@@ -101,6 +102,7 @@ class AIService:
             "model": self.ollama_model,
             "prompt": prompt,
             "stream": False,
+            "think": self.ollama_think,
         }
         if system:
             payload["system"] = system

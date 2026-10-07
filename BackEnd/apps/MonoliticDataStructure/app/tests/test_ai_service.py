@@ -1,14 +1,19 @@
 import os
 import unittest
+from unittest.mock import Mock, patch
 
 from ai_service import AIProviderError, AIService, _extract_openai_text
 
 
 class AIServiceTests(unittest.TestCase):
     def tearDown(self):
-        for key in ("AI_PROVIDER", "OPENAI_API_KEY"):
+        for key in (
+            "AI_PROVIDER",
+            "OPENAI_API_KEY",
+            "OLLAMA_TIMEOUT_SECONDS",
+            "OLLAMA_THINK",
+        ):
             os.environ.pop(key, None)
-
     def test_auto_falls_back_to_openai_when_ollama_is_down(self):
         os.environ["AI_PROVIDER"] = "auto"
         os.environ["OPENAI_API_KEY"] = "test-key"
@@ -78,6 +83,38 @@ class AIServiceTests(unittest.TestCase):
         self.assertEqual(status["fallback_provider"], "ollama")
         self.assertTrue(status["providers"]["openai"]["available"])
 
+
+    def test_ollama_uses_operational_defaults(self):
+        service = AIService()
+
+        self.assertEqual(service.ollama_timeout, 60.0)
+        self.assertFalse(service.ollama_think)
+
+    def test_ollama_settings_can_be_overridden(self):
+        os.environ["OLLAMA_TIMEOUT_SECONDS"] = "120"
+        os.environ["OLLAMA_THINK"] = "true"
+
+        service = AIService()
+
+        self.assertEqual(service.ollama_timeout, 120.0)
+        self.assertTrue(service.ollama_think)
+
+    @patch("ai_service.requests.post")
+    def test_ollama_request_sends_think_and_timeout(self, mock_post):
+        response = Mock(status_code=200)
+        response.json.return_value = {
+            "response": "respuesta de prueba",
+            "model": "qwen3:14b",
+            "done": True,
+        }
+        mock_post.return_value = response
+
+        service = AIService()
+        service._call_ollama("hola", None)
+
+        request_options = mock_post.call_args.kwargs
+        self.assertFalse(request_options["json"]["think"])
+        self.assertEqual(request_options["timeout"], 60.0)
 
 if __name__ == "__main__":
     unittest.main()
