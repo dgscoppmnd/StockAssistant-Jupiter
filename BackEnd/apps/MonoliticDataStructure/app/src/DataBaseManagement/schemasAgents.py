@@ -56,6 +56,7 @@ class CustomerSupportRequest(BaseModel):
 class ExecutiveRequest(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
     product_id: Optional[int] = None
+    client_id: Optional[int] = None
     agent: Optional[str] = Field(default="auto", max_length=50)
 
 

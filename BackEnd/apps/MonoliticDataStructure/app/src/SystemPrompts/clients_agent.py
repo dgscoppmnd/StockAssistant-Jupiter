@@ -1,9 +1,6 @@
-from google import genai
-from google.genai import types
+from ai_service import generate_ai
 
 def client_agent(message:str):
-    # Inicializar cliente
-    client = genai.Client()
 
     # Cargar el System Prompt
     SYSTEM_PROMPT_CLIENTS = """# AGENTE ESPECIALIZADO EN GESTIÓN DE CLIENTES Y POSTVENTA (SYSTEM PROMPT)
@@ -38,7 +35,11 @@ def client_agent(message:str):
 
     - Llama a las herramientas solo cuando tengas todos los parámetros requeridos (ej. ID de cliente, número de ticket).
     - Si el cliente solicita revisar su caso o modificar un dato sin aportar información suficiente, no ejecutes la herramienta; solicita primero los parámetros faltantes.
-    - Los resultados devueltos por las herramientas son tu única fuente de verdad. Si la herramienta devuelve un resultado vacío o error, transfórmalo en una respuesta clara al cliente indicando que no se encontraron registros vigentes.
+    - Los datos proporcionados en el contexto son tu única fuente de verdad. Distingue entre una fuente consultada sin resultados y una fuente que no se consultó:
+    - Si una fuente se consultó y no devolvió registros, di que esa consulta no encontró registros en esa fuente.
+    - Si una fuente no aparece en el contexto, di que no fue consultada o que el sistema no proporciona esa información. No afirmes que no existen registros.
+    - No deduzcas que no hay tickets, facturas, pagos o devoluciones a partir de que solo se hayan consultado los datos maestros del cliente.
+    - Describe únicamente las acciones que realmente se realizaron. No digas que derivaste el caso a un gestor ni que se hará otra consulta si esa acción no está disponible en el sistema.
 
     ---
 
@@ -49,17 +50,6 @@ def client_agent(message:str):
     - Estado de la Cuenta / Ticket: Tabla o detalle con la información verificada en el sistema (solo datos reales).
     - Plan de Acción / Diagnóstico: Explicación transparente sobre los pasos tomados o el estado actual de la gestión.
     - Faltantes / Próximos Pasos: Datos requeridos pendientes por parte del cliente o confirmación necesaria para continuar con el trámite."""
-    # Configurar el modelo con el System Prompt
 
-    config = types.GenerateContentConfig(
-        system_instruction=SYSTEM_PROMPT_CLIENTS,
-        temperature=0.2,  # Baja temperatura para respuestas precisas y consistentes
-    )
-
-    # Iniciar chat o generar contenido
-    chat = client.chats.create(
-        model="gemini-2.5-flash",
-        config=config
-    )
-    response = chat.send_message(message)
-    return response.text
+    result = generate_ai(message, SYSTEM_PROMPT_CLIENTS)
+    return result["response"]

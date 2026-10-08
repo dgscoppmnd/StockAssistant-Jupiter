@@ -42,7 +42,13 @@ class ExecutiveService:
         self.connection.commit()
         return decision_id
 
-    def execute(self, question: str, product_id: int | None = None, agent: str | None = None) -> dict[str, Any]:
+    def execute(
+        self,
+        question: str,
+        product_id: int | None = None,
+        agent: str | None = None,
+        client_id: int | None = None,
+    ) -> dict[str, Any]:
         lowered = question.lower()
         requested = (agent or "auto").strip().lower()
         if requested == "auto":
@@ -60,12 +66,16 @@ class ExecutiveService:
                 routed = "purchasing"
             elif any(word in lowered for word in ("stock", "bodega", "inventario")):
                 routed = "stock"
+            elif any(word in lowered for word in ("cliente", "cuenta", "ticket", "incidencia", "postventa")):
+                routed = "clients"
             else:
                 routed = "customer_support"
         else:
             routed = requested
 
-        if routed == "stock":
+        if routed == "clients":
+            result = self.inventory.client_support(question, client_id)
+        elif routed == "stock":
             result = self.inventory.stock_alerts()
         elif routed == "purchasing":
             result = self.inventory.purchase_recommendation(product_id) if product_id else self.inventory.stock_alerts()
@@ -97,7 +107,7 @@ class ExecutiveService:
                 "execution_policy": "read_only; no crea pedidos ni modifica inventario",
                 "created_at": datetime.now(timezone.utc).isoformat()}
 
-    def decisions(self, limit: int = 50) -> list[dict[str, Any]]:
+def decisions(self, limit: int = 50) -> list[dict[str, Any]]:
         return self._all("SELECT id, requested_agent, routed_agent, request_data, response_summary, created_at FROM public.agent_decisions ORDER BY id DESC LIMIT %s", (limit,))
 
 

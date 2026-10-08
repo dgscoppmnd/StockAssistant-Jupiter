@@ -18,7 +18,12 @@ def _automation(db=Depends(get_db_products)) -> AutomationService:
 @router.post("/query")
 def executive_query(payload: ExecutiveRequest, service: ExecutiveService = Depends(_executive)):
     try:
-        return service.execute(payload.question, payload.product_id, payload.agent)
+        return service.execute(
+            payload.question,
+            payload.product_id,
+            payload.agent,
+            payload.client_id,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
