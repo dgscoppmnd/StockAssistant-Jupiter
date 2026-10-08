@@ -10,6 +10,7 @@ export default function ExecutivePage() {
   const [proposals, setProposals] = useState<PurchaseProposal[]>([]);
   const [question, setQuestion] = useState("");
   const [productId, setProductId] = useState("");
+  const [clientId, setClientId] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<ProductOption | null>(null);
   const [answer, setAnswer] = useState<ExecutiveResult | null>(null);
   const [isQuerying, setIsQuerying] = useState(false);
@@ -17,13 +18,17 @@ export default function ExecutivePage() {
   const [status, setStatus] = useState("Cargando coordinación...");
   const [error, setError] = useState("");
   const resultExplanation =
-  answer?.result &&
-  typeof answer.result === "object" &&
-  "explanation" in answer.result &&
-  typeof answer.result.explanation === "string"
-    ? answer.result.explanation
-    : null;
-
+    answer?.result &&
+    typeof answer.result === "object" &&
+    "explanation" in answer.result &&
+    typeof answer.result.explanation === "string"
+      ? answer.result.explanation
+      : answer?.result &&
+          typeof answer.result === "object" &&
+          "answer" in answer.result &&
+          typeof answer.result.answer === "string"
+        ? answer.result.answer
+        : null;
   const load = async () => {
     try {
       const [nextRules, nextRuns, nextProposals] = await Promise.all([fetchAutomationRules(), fetchAutomationRuns(), fetchPurchaseProposals()]);
@@ -53,6 +58,7 @@ const query = async (event: FormEvent<HTMLFormElement>) => {
     const nextAnswer = await askExecutive({
       question: prompt,
       product_id: productId ? Number(productId) : undefined,
+      client_id: clientId ? Number(clientId) : undefined,
     });
     setAnswer(nextAnswer);
     setStatus("Consulta completada.");
@@ -74,6 +80,17 @@ const query = async (event: FormEvent<HTMLFormElement>) => {
   return <div className="grid executive-page">
     <section className="card executive-hero"><p className="section-label">Fase 4 · Agente Ejecutivo</p><h3><SectionIcon kind="executive" />Coordina, explica y deja el control en manos humanas</h3><p>Este agente consulta herramientas verificables y nunca crea pedidos definitivos ni altera inventario.</p><p className="status-line">{status}</p>{error && <p className="error-line">{error}</p>}</section>
     <section className="grid two-columns"><article className="card"><p className="section-label">Consulta ejecutiva</p><h3><SectionIcon kind="route" />Enrutamiento trazable</h3><form className="stack" onSubmit={query}><textarea required disabled={isQuerying} placeholder="Ejemplo: ¿qué productos tienen riesgo de rotura de stock?" value={question} onChange={(event) => setQuestion(event.target.value)} rows={3} />
+      <label className="field-label" style={{ display: "grid", gap: 6 }}>
+        ID de cliente (para consultas de cuenta o postventa)
+        <input
+          type="number"
+          min="1"
+          value={clientId}
+          disabled={isQuerying}
+          onChange={(event) => setClientId(event.target.value)}
+          placeholder="Ejemplo: 42"
+        />
+      </label>
       <ProductCombobox
         label="Producto opcional (código o nombre)"
         selectedProduct={selectedProduct} selectedId={Number(productId)}
@@ -88,7 +105,7 @@ const query = async (event: FormEvent<HTMLFormElement>) => {
       <button className="primary-btn" type="submit" disabled={isQuerying}>{isQuerying ? "Consultando..." : "Consultar al Ejecutivo"}</button></form>{answer && <div className="agent-result">
   <strong>Enrutado a: {answer.routed_agent}</strong>
   <p>Herramienta: {answer.tool}</p>
-  <p>{resultExplanation ?? "Consulta completada. Abre los detalles técnicos para ver el resultado."}</p>
+  <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{resultExplanation ?? "Consulta completada. Abre los detalles técnicos para ver el resultado."}</p>
   <small>{answer.execution_policy}</small>
   <details>
     <summary>Ver detalles técnicos</summary>

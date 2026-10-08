@@ -9,7 +9,7 @@ from psycopg2.extras import Json, RealDictCursor
 
 from ai_service import AIProviderError, generate_ai
 from external_connectors import ExternalSourceError, get_connectors
-
+from SystemPrompts.clients_agent import client_agent
 
 class AgentService:
     def __init__(self, connection: Any):
@@ -23,6 +23,56 @@ class AgentService:
     def _one(self, query: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | None:
         rows = self._all(query, params)
         return rows[0] if rows else None
+
+    def client_support(
+        self, question: str, client_id: int | None = None
+    ) -> dict[str, Any]:
+        if client_id is None:
+            return {
+                "agent": "clients",
+                "client_id": None,
+                "answer": "Para consultar los datos de un cliente, indica su identificador.",
+                "source": "postgresql",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+        client = self._one(
+            """
+            SELECT pk_client, client_code, name, fk_type_client
+            FROM public.clients
+            WHERE pk_client = %s
+            """,
+            (client_id,),
+        )
+        if not client:
+            return {
+                "agent": "clients",
+                "client_id": client_id,
+                "client_name": None,
+                "answer": (
+                    f"No he encontrado ningún cliente con el ID {client_id}. "
+                    "Comprueba el identificador e inténtalo de nuevo."
+                ),
+                "source": "postgresql",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        message = (
+            f"Pregunta: {question}\n"
+            f"Datos del cliente recuperados de PostgreSQL: "
+            f"{json.dumps(client, default=str, ensure_ascii=False)}\n"
+            "Solo hay disponibles estos datos maestros. No hay datos de tickets, "
+            "facturas, pagos ni devoluciones en esta consulta. Si preguntan por "
+            "ellos, indica que no constan en los datos consultados."
+        )
+
+        return {
+            "agent": "clients",
+            "client_id": client_id,
+            "client_name": client["name"],
+            "answer": client_agent(message),
+            "source": "postgresql",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     def _cache_external(self, *, source: str, operation: str, cache_key: str, payload: dict[str, Any], country: str | None, currency: str | None, reference_url: str | None) -> None:
         with self.connection.cursor() as cursor:
