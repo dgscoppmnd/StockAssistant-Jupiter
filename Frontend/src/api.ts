@@ -505,8 +505,16 @@ export async function fetchRisks(): Promise<{ alerts: Array<{ type: string; prod
   return request(`${API_BASE}/agents/risks`, { method: "GET" });
 }
 
-export async function askExecutive(payload: { question: string; product_id?: number; agent?: string }): Promise<ExecutiveResult> {
-  return request<ExecutiveResult>(`${API_BASE}/executive/query`, { method: "POST", body: JSON.stringify(payload) });
+export async function askExecutive(payload: {
+  question: string;
+  product_id?: number;
+  client_id?: number;
+  agent?: string;
+}): Promise<ExecutiveResult> {
+  return request<ExecutiveResult>(`${API_BASE}/executive/query`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function fetchAutomationRules(): Promise<AutomationRule[]> {
