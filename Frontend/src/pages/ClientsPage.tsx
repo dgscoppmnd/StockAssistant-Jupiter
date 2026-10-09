@@ -41,7 +41,7 @@ export default function ClientsPage() {
   };
   const saveClient = async (event: FormEvent) => { event.preventDefault(); setSaving(true); try { if (clientValues.id) await updateMasterRecord("clients", Number(clientValues.id), { client_code: clientValues.client_code, name: clientValues.name, description: clientValues.description, fk_type_client: Number(clientValues.fk_type_client) }); else await createMasterRecord("clients", { client_code: clientValues.client_code, name: clientValues.name, description: clientValues.description, fk_type_client: Number(clientValues.fk_type_client) }); setClientValues({}); await load(); } catch (err) { setError(err instanceof Error ? err.message : "No se pudo guardar el cliente."); } finally { setSaving(false); } };
   const saveAddress = async (event: FormEvent) => { event.preventDefault(); if (!selected) return; setSaving(true); try { const { address_type, id: _associationId, global_address_id: _globalAddressId, ...globalValues } = addressValues; if (editingAddress) { await updateMasterRecord("global-addresses", editingAddress.global_address_id, globalValues); await updateClientAddress(selected.id, editingAddress.id, String(address_type)); } else { const global = await createMasterRecord("global-addresses", globalValues); await addClientAddress(selected.id, global.id, String(address_type)); } setAddressValues({}); setEditingAddress(null); await loadAddresses(selected); await load(); setError(""); } catch (err) { setError(err instanceof Error ? err.message : "No se pudo guardar la dirección."); } finally { setSaving(false); } };
-  const columns = [{ dataField: "id", text: "ID", sort: true }, { dataField: "client_code", text: "Código de cliente", sort: true }, { dataField: "name", text: "Cliente", sort: true }, { dataField: "fk_type_client", text: "Tipo", formatter: (value: number) => types.find((type) => type.id === value)?.name ?? value }, { dataField: "actions", text: "Acciones", isDummyField: true, formatter: (_: unknown, row: MasterRecord) => <div className="actions-row"><button className="chip-btn" onClick={() => setClientValues({ id: row.id, client_code: row.client_code ?? "", name: row.name, description: row.description ?? "", fk_type_client: row.fk_type_client })} type="button">Editar</button><button className="danger-btn" disabled={Boolean(row.is_in_use)} onClick={() => void deleteMasterRecord("clients", row.id).then(load).catch((err) => setError(err.message))} type="button">Borrar</button></div> }];
+  const columns = [{ dataField: "id", text: "ID", sort: true }, { dataField: "client_code", text: "Código de cliente", sort: true }, { dataField: "name", text: "Cliente", sort: true }, { dataField: "fk_type_client", text: "Tipo", formatter: (value: number) => types.find((type) => type.id === value)?.name ?? value }, { dataField: "actions", text: "Acciones", isDummyField: true, formatter: (_: unknown, row: MasterRecord) => <div className="actions-row"><button className="chip-btn" onClick={() => setClientValues({ id: row.id, client_code: row.client_code ?? "", name: row.name, description: row.description ?? "", fk_type_client: row.fk_type_client })} type="button" title="Editar" aria-label="Editar">✏️</button><button className="danger-btn" disabled={Boolean(row.is_in_use)} onClick={() => void deleteMasterRecord("clients", row.id).then(load).catch((err) => setError(err.message))} type="button" title="Borrar" aria-label="Borrar">🗑️</button></div> }];
   return <div className="grid clients-master-detail">
     <section className="card"><div className="actions-row"><div>
       <p className="section-label">Configuración · Clientes</p>
@@ -126,14 +126,18 @@ export default function ClientsPage() {
                   <button className="chip-btn"
                           onClick={() => { setEditingAddress(row);
                                           setAddressValues({ ...row }); }}
-                          type="button">Editar
+                          type="button"
+                          title="Editar"
+                          aria-label="Editar">✏️
                   </button>
                   <button className="danger-btn"
                     onClick={() => void deleteClientAddress(selected.id, row.id).then(async () => {
                                                                                           await loadAddresses(selected);
                                                                                           await load();
                                                                                         }).catch((err) => setError(err.message))}
-                    type="button">Quitar</button>
+                    type="button"
+                    title="Quitar"
+                    aria-label="Quitar">🗑️</button>
                 </div>
               }]}
             classes="users-table master-data-table"
