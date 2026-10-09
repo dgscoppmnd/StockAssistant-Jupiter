@@ -122,7 +122,7 @@ export type UserUpdatePayload = {
   apellido: string;
   email: string;
   descripcion: string;
-  password?: string;
+  password: string;
   status: number;
   startline?: string | null;
   deadline?: string | null;
@@ -148,8 +148,6 @@ export type Product = {
   last_update: string | null;
   supplier: string | null;
   default_image_url?: string | null;
-  semantic_indexed?: boolean | null;
-  semantic_index_error?: string | null;
 };
 
 export type ProductPage = {
@@ -336,14 +334,7 @@ export type PurchaseRecommendation = {
 
 export type SalesForecast = { product_id: number; product_name: string; forecast_qty: number; daily_average: number; horizon_days: number; trend: string };
 export type FinancialSummary = { revenue: number; cost: number; margin: number; margin_percent: number; currency_basis: string };
-export type CustomerSupportAnswer = {
-  answer: string;
-  sources: Array<{ title: string; source: string; expires_at?: string | null; page?: number | null; score?: number; excerpt?: string; citation?: string }>;
-  stock: Array<{ warehouse: string; available_qty: number; unit: string }>;
-  ai?: { provider: string; model: string; used_fallback: boolean } | null;
-  ingestion_warnings?: string[];
-};
-export type SupportTurn = { role: "user" | "assistant"; content: string };
+export type CustomerSupportAnswer = { answer: string; sources: Array<{ title: string; source: string; expires_at?: string | null }>; stock: Array<{ warehouse: string; available_qty: number; unit: string }> };
 
 export type AutomationRule = { id: number; code: string; name: string; description: string; is_active: boolean; interval_minutes: number; last_run_at?: string | null };
 export type AutomationRun = { id: number; rule_code: string; initiated_by: string; status: string; started_at: string; completed_at?: string | null };
@@ -351,49 +342,6 @@ export type PurchaseProposal = { id: number; product_name: string; warehouse_nam
 export type ExecutiveResult = { decision_id: number; routed_agent: string; tool: string; execution_policy: string; result: Record<string, unknown> };
 
 export type MasterRecord = { id: number; created_at?: string; updated_at?: string; [key: string]: unknown };
-export type MasterField = { key: string; label: string; type?: "text" | "number" | "decimal" | "textarea" | "checkbox" | "select" | "file"; required?: boolean; placeholder?: string; options?: Array<{ value: string; label: string }> };
+export type MasterField = { key: string; label: string; type?: "text" | "number" | "decimal" | "textarea" | "checkbox" | "select"; required?: boolean; placeholder?: string; options?: Array<{ value: string; label: string }> };
 
 export type ClientAddress = { id: number; global_address_id: number; address_type: string; address_line_1: string; address_line_2?: string | null; city: string; state_province?: string | null; postal_code?: string | null; country_code: string; country_name?: string | null; contact_name?: string | null; contact_phone?: string | null; contact_email?: string | null; notes?: string | null };
-
-
-export type ChatProvider = "openai" | "ollama";
-
-export type ChatRequest = {
-  prompt: string;
-  conversation_id?: number | null;
-  provider: ChatProvider;
-  agent_key?: string;
-};
-
-export type ChatResponse = {
-  response: string;
-  provider: string;
-  model: string;
-  used_fallback: boolean;
-  conversation_id: number;
-};
-
-export type ChatConversation = {
-  id: number;
-  agent_key: string;
-  title: string | null;
-  created_at: string;
-  updated_at: string;
-  message_count?: number;
-};
-
-export type ChatMessage = {
-  id: number;
-  role: "user" | "assistant";
-  content: string;
-  created_at: string;
-};
-
-export type ChatConversationListResponse = {
-  conversations: ChatConversation[];
-};
-
-export type ChatHistoryResponse = {
-  conversation: ChatConversation;
-  messages: ChatMessage[];
-};

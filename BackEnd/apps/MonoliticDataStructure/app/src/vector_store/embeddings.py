@@ -3,13 +3,7 @@
 from functools import lru_cache
 from typing import Iterable, List
 
-<<<<<<< HEAD
 from ..api.config import settings
-=======
-from sentence_transformers import SentenceTransformer
-
-from api.config import settings
->>>>>>> develop
 
 
 @lru_cache(maxsize=1)

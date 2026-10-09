@@ -50,14 +50,6 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       STOCKASSISTANT_SESSION_SECRET: ${STOCKASSISTANT_SESSION_SECRET:-proyecto-jupiter-dev-secret}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434/api/generate}
-      AI_PROVIDER: ${AI_PROVIDER:-auto}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:14b}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
-      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-local}
-      RAG_OLLAMA_EMBEDDING_MODEL: ${RAG_OLLAMA_EMBEDDING_MODEL:-embeddinggemma}
-      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
-      RAG_MIN_SCORE: ${RAG_MIN_SCORE:-0.5}
-      RAG_OCR_LANGUAGES: ${RAG_OCR_LANGUAGES:-spa+eng}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       SERPAPI_API_KEY: ${SERPAPI_API_KEY:-}
       STOCKASSISTANT_SESSION_TTL_MINUTES: ${STOCKASSISTANT_SESSION_TTL_MINUTES:-120}
@@ -71,13 +63,8 @@ services:
       PYTHONPATH: /app/src:/app
     volumes:
       - ../src:/app/src
-      - ./init-scripts/init.sql:/app/docker/init-scripts/init.sql:ro
       - ../data:/app/data
-<<<<<<< HEAD
       - ../../../../../ml_factory:/app/ml_factory
-=======
-      - ../data/knowledge:/app/data/knowledge
->>>>>>> develop
     command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"

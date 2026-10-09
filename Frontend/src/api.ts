@@ -15,7 +15,6 @@ import type {
   PurchaseRecommendation,
   StockAlert,
   CustomerSupportAnswer,
-  SupportTurn,
   FinancialSummary,
   SalesForecast,
   AutomationRule,
@@ -36,16 +35,9 @@ import type {
   User,
   UserCreatePayload,
   UserUpdatePayload,
-  ChatConversationListResponse,
-  ChatHistoryResponse,
-  ChatRequest,
-  ChatResponse,
 } from "./types";
 
 import { uploadProductCsv, type ProductImportProgress, type ProductImportResult } from "./utils/productCsvUpload";
-import { runProductQdrantSync, type ProductQdrantSyncProgress, type ProductQdrantSyncResult } from "./utils/productQdrantSync";
-import { uploadClientCsv, type ClientImportProgress, type ClientImportResult } from "./utils/clientCsvUpload";
-import { uploadSupplierCsv, type SupplierImportProgress, type SupplierImportResult } from "./utils/supplierCsvUpload";
 
 const API_BASE = "/api";
 const API_KEY_STORAGE_KEY = "stockassistant-api-key";
@@ -196,49 +188,6 @@ export async function analyzeWithStockAssistantAgent(payload: AgentChatRequest):
   });
 }
 
-export async function sendChatMessage(
-  payload: ChatRequest
-): Promise<ChatResponse> {
-  return request<ChatResponse>(`${API_BASE}/chat`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-}
-
-
-export async function fetchChatConversations(
-  limit = 50,
-  offset = 0
-): Promise<ChatConversationListResponse> {
-  const params = new URLSearchParams({
-    limit: String(limit),
-    offset: String(offset),
-  });
-
-  return request<ChatConversationListResponse>(
-    `${API_BASE}/chat/history?${params.toString()}`,
-    { method: "GET" }
-  );
-}
-
-
-export async function fetchChatHistory(
-  conversationId: number,
-  limit = 100,
-  offset = 0
-): Promise<ChatHistoryResponse> {
-  const params = new URLSearchParams({
-    conversation_id: String(conversationId),
-    limit: String(limit),
-    offset: String(offset),
-  });
-
-  return request<ChatHistoryResponse>(
-    `${API_BASE}/chat/history?${params.toString()}`,
-    { method: "GET" }
-  );
-}
-
 export type SemanticProductResult = {
   score: number;
   product_id?: string;
@@ -342,6 +291,7 @@ export async function logoutSession(): Promise<void> {
   }
 }
 
+// User API endpoints
 export async function fetchUsers(): Promise<User[]> {
   return request<User[]>(`${API_BASE}/users/`, { method: "GET" });
 }
@@ -364,6 +314,7 @@ export async function deleteUser(userId: number): Promise<void> {
   await request<void>(`${API_BASE}/users/${userId}`, { method: "DELETE" });
 }
 
+// Products API endpoints
 export async function importProductsCsv(file: File, onProgress?: (progress: ProductImportProgress) => void): Promise<ProductImportResult> {
   if (onProgress) {
     const token = getSessionToken();
@@ -378,17 +329,6 @@ export async function importProductsCsv(file: File, onProgress?: (progress: Prod
   return request(`${API_BASE}/products/import-csv`, { method: "POST", body: formData });
 }
 
-export async function syncProductsQdrant(
-  onProgress: (progress: ProductQdrantSyncProgress) => void,
-): Promise<ProductQdrantSyncResult> {
-  const token = getSessionToken();
-  const key = token ? "" : getApiKey();
-  const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
-  else if (key) headers["X-API-Key"] = key;
-  return runProductQdrantSync(headers, onProgress);
-}
-
 export async function fetchProducts(): Promise<Product[]> {
   return request<Product[]>(`${API_BASE}/products/`, { method: "GET" });
 }
@@ -398,7 +338,7 @@ export async function fetchProductsPage(page: number, pageSize: number, signal?:
 }
 
 export async function searchProductOptions(query: string, after = 0, signal?: AbortSignal): Promise<ProductOptions> {
-  const params = new URLSearchParams({ q: query, after: String(after), limit: "10" });
+  const params = new URLSearchParams({ q: query, after: String(after), limit: "25" });
   return request<ProductOptions>(`${API_BASE}/products/options?${params}`, { method: "GET", signal });
 }
 
@@ -493,12 +433,8 @@ export async function fetchMarketIntelligence(term: string): Promise<Record<stri
   return request(`${API_BASE}/agents/market-intelligence`, { method: "POST", body: JSON.stringify({ term }) });
 }
 
-export async function askCustomerSupport(question: string, productId?: number, history: SupportTurn[] = []): Promise<CustomerSupportAnswer> {
-  return request<CustomerSupportAnswer>(`${API_BASE}/agents/customer-support`, { method: "POST", body: JSON.stringify({ question, product_id: productId || null, history }) });
-}
-
-export async function reindexKnowledgeDocument(id: number): Promise<MasterRecord> {
-  return request<MasterRecord>(`${API_BASE}/master-data/knowledge-documents/${id}/reindex`, { method: "POST" });
+export async function askCustomerSupport(question: string, productId?: number): Promise<CustomerSupportAnswer> {
+  return request<CustomerSupportAnswer>(`${API_BASE}/agents/customer-support`, { method: "POST", body: JSON.stringify({ question, product_id: productId || null }) });
 }
 
 export async function fetchRisks(): Promise<{ alerts: Array<{ type: string; product_name: string; return_rate: number }> }> {
@@ -533,34 +469,6 @@ export async function fetchMasterRecords(resource: string): Promise<MasterRecord
   return request<MasterRecord[]>(`${API_BASE}/master-data/${encodeURIComponent(resource)}`, { method: "GET" });
 }
 
-export async function importClientsCsv(file: File, onProgress?: (progress: ClientImportProgress) => void): Promise<ClientImportResult> {
-  if (onProgress) {
-    const token = getSessionToken();
-    const key = token ? "" : getApiKey();
-    const headers: Record<string, string> = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
-    else if (key) headers["X-API-Key"] = key;
-    return uploadClientCsv(file, headers, onProgress);
-  }
-  const formData = new FormData();
-  formData.append("file", file);
-  return request(`${API_BASE}/master-data/clients/import-csv`, { method: "POST", body: formData });
-}
-
-export async function importSuppliersCsv(file: File, onProgress?: (progress: SupplierImportProgress) => void): Promise<SupplierImportResult> {
-  if (onProgress) {
-    const token = getSessionToken();
-    const key = token ? "" : getApiKey();
-    const headers: Record<string, string> = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
-    else if (key) headers["X-API-Key"] = key;
-    return uploadSupplierCsv(file, headers, onProgress);
-  }
-  const formData = new FormData();
-  formData.append("file", file);
-  return request(`${API_BASE}/master-data/suppliers/import-csv`, { method: "POST", body: formData });
-}
-
 export async function createMasterRecord(resource: string, values: Record<string, unknown>): Promise<MasterRecord> {
   return request<MasterRecord>(`${API_BASE}/master-data/${encodeURIComponent(resource)}`, { method: "POST", body: JSON.stringify({ values }) });
 }
@@ -581,12 +489,3 @@ export async function fetchSupplierAddresses(supplierId: number): Promise<import
 export async function addSupplierAddress(supplierId: number, globalAddressId: number, addressType: string): Promise<void> { await request(`${API_BASE}/master-data/suppliers/${supplierId}/addresses`, { method: "POST", body: JSON.stringify({ global_address_id: globalAddressId, address_type: addressType }) }); }
 export async function updateSupplierAddress(supplierId: number, addressId: number, addressType: string): Promise<void> { await request(`${API_BASE}/master-data/suppliers/${supplierId}/addresses/${addressId}`, { method: "PUT", body: JSON.stringify({ global_address_id: 0, address_type: addressType }) }); }
 export async function deleteSupplierAddress(supplierId: number, addressId: number): Promise<void> { await request<void>(`${API_BASE}/master-data/suppliers/${supplierId}/addresses/${addressId}`, { method: "DELETE" }); }
-
-export async function saveKnowledgeDocument(values: Record<string, unknown>, recordId?: number): Promise<MasterRecord> {
-  const { archivo, ...metadata } = values;
-  const form = new FormData();
-  form.append("values", JSON.stringify(metadata));
-  if (archivo instanceof File) form.append("file", archivo);
-  const path = recordId === undefined ? "knowledge-documents/with-file" : `knowledge-documents/${recordId}/with-file`;
-  return request<MasterRecord>(`${API_BASE}/master-data/${path}`, { method: recordId === undefined ? "POST" : "PUT", body: form });
-}

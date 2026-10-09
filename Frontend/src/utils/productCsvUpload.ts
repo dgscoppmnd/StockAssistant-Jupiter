@@ -1,12 +1,6 @@
-export type ProductImportResult = {
-  imported: number;
-  skipped: number;
-  total: number;
-  indexed: number;
-  index_error?: string | null;
-};
+export type ProductImportResult = { imported: number; skipped: number; total: number };
 export type ProductImportProgress = {
-  stage: "uploading" | "validating" | "importing" | "committing" | "indexing" | "complete";
+  stage: "uploading" | "validating" | "importing" | "committing" | "complete";
   percent: number;
   processed?: number;
   total?: number;
@@ -40,7 +34,7 @@ export function uploadProductCsv(
           serverStarted = true;
           if (event.detail) {
             failure = event.detail;
-          } else if (["validating", "importing", "committing", "indexing", "complete"].includes(event.stage)) {
+          } else if (["validating", "importing", "committing", "complete"].includes(event.stage)) {
             if (event.stage === "complete") result = event.result;
             onProgress(event);
           }

@@ -3,36 +3,10 @@ name: Integration
 on:
   workflow_dispatch:
   pull_request:
-    branches:
-      - develop
-      - master
 
 jobs:
   integrate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: admin
-          POSTGRES_PASSWORD: admin123
-          POSTGRES_DB: supply_chain
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U admin -d supply_chain"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      DB_HOST: localhost
-      DB_PORT: "5432"
-      DB_USER: admin
-      DB_PASSWORD: admin123
-      DB_NAME: supply_chain
 
     permissions:
       contents: read
@@ -41,77 +15,53 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: |
-            BackEnd/apps/MonoliticDataStructure/app/requirements/api.txt
-            BackEnd/apps/MonoliticDataStructure/app/requirements/dev.txt
+          python-version: '3.10'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r BackEnd/apps/MonoliticDataStructure/app/requirements/dev.txt
-
-      - name: Initialize test database
-        env:
-          PGPASSWORD: admin123
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
-          psql \
-            -h localhost \
-            -p 5432 \
-            -U admin \
-            -d supply_chain \
-            -f BackEnd/apps/MonoliticDataStructure/app/docker/init-scripts/init.sql
-
-      - name: Prepare upload directory for tests
-        run: |
-          sudo install -d -o "$(id -un)" -g "$(id -gn)" /app/data/uploads
-          test -w /app/data/uploads
-
-      - name: Run backend tests
+          pip install -r requirements.txt
+          
+      - name: Run tests and save exit code
         id: tests
-        working-directory: BackEnd/apps/MonoliticDataStructure/app
         run: |
-          mkdir -p test-results
-          set +e
-          PYTHONPATH=".:src" pytest tests/ \
-            --capture=tee-sys \
-            --cov=src \
-            --cov-report=term \
-            --junitxml=test-results/results.xml \
-            2>&1 | tee test-results/results.log
-          test_exit=${PIPESTATUS[0]}
-          echo "exit_code=$test_exit" >> "$GITHUB_OUTPUT"
-          exit "$test_exit"
-
-      - name: Comment test results on PR
+            mkdir -p test-results
+            PYTHONPATH=src pytest unit_tests/ --capture=tee-sys --cov=model --cov-report=term --cov-report=html --junitxml=test-results/results.xml > test-results/results.log
+      
+      - name: Comment test results and coverage on PR
         uses: actions/github-script@v7
-        if: always() && github.event_name == 'pull_request'
+        if: always()
         with:
           script: |
             const fs = require('fs');
-            const resultsPath = 'BackEnd/apps/MonoliticDataStructure/app/test-results/results.log';
-
-            if (!fs.existsSync(resultsPath)) {
-              core.warning('Test results were not generated.');
+            const results = fs.readFileSync('test-results/results.log', 'utf8');
+            const truncated = results.length > 65000 ? results.slice(0, 65000) + '\n...TRUNCATED...' : results;
+            
+            // Obtener el número del PR usando context.payload
+            let prNumber = null;
+            
+            if (context.payload.pull_request) {
+              prNumber = context.payload.pull_request.number;
+            } else if (context.payload.issue) {
+              prNumber = context.payload.issue.number;
+            }
+            
+            if (!prNumber) {
+              console.log('No PR/Issue number found. Event name:', context.eventName);
+              console.log('Available in payload:', Object.keys(context.payload));
               return;
             }
-
-            const results = fs.readFileSync(resultsPath, 'utf8');
-            const truncated = results.length > 65000
-              ? results.slice(0, 65000) + '\n...TRUNCATED...'
-              : results;
-
+            
+            console.log(`Posting comment to PR/Issue #${prNumber}`);
+            
             await github.rest.issues.createComment({
-              issue_number: context.payload.pull_request.number,
+              issue_number: prNumber,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `### Backend test results\n\n\`\`\`\n${truncated}\n\`\`\``
+              body: `### 🧪 Test Results with Coverage\n\n\`\`\`\n${truncated}\n\`\`\``
             });
