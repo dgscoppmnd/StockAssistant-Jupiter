@@ -13,6 +13,7 @@ venv/
 
 #Ignorar los achivos ambiente virtual python si es intalado en linux o mac
 .venv/
+.venv-mlfactory
 
 #Ignorar los archivos de configuración de vscode
 .vscode/
