@@ -174,7 +174,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
-    if (sessionToken && (response.status === 401 || response.status === 403)) {
+    if (sessionToken && (response.status === 401 || (response.status === 403 && !url.startsWith("/api/sales")))) {
       clearSessionToken();
     }
     const detail = typeof parsed === "string" ? parsed : parsed === null ? "" : JSON.stringify(parsed, null, 2);
@@ -187,6 +187,31 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 export async function analyzeWithSystemPrompt(prompt: string): Promise<AnalyzeResponse> {
   const url = `${API_BASE}/analyze-system?prompt=${encodeURIComponent(prompt)}`;
   return request<AnalyzeResponse>(url, { method: "POST", headers: { "Content-Type": "application/json" } });
+}
+
+export function fetchSalesPermissions(): Promise<{ permissions: import("./types").SalesPermission[] }> {
+  return request("/api/sales/permissions");
+}
+export function searchSalesClients(q: string, page = 1, signal?: AbortSignal): Promise<import("./types").SalesClient[]> {
+  return request(`/api/sales/clients?q=${encodeURIComponent(q)}&page=${page}`, { signal });
+}
+export function fetchSalesDocuments(kind: import("./types").SalesKind, filters: Record<string, string | number>, signal?: AbortSignal): Promise<import("./types").SalesPage> {
+  const query = new URLSearchParams(Object.entries(filters).filter(([,value]) => value !== "").map(([key,value]) => [key,String(value)]));
+  return request(`/api/sales/${kind}?${query}`, { signal });
+}
+export function fetchSalesDocument(kind: import("./types").SalesKind, id: number, signal?: AbortSignal): Promise<import("./types").SalesDocument> {
+  return request(`/api/sales/${kind}/${id}`, { signal });
+}
+export function saveSalesOrder(payload: import("./types").SalesOrderDraft, id?: number): Promise<import("./types").SalesResult> {
+  return request(`/api/sales/orders${id ? `/${id}` : ""}`, { method: id ? "PUT" : "POST", body: JSON.stringify(payload) });
+}
+export function saveSalesInvoice(payload: import("./types").SalesInvoiceDraft, id?: number): Promise<import("./types").SalesResult> {
+  return request(`/api/sales/invoices${id ? `/${id}` : ""}`, { method: id ? "PUT" : "POST", body: JSON.stringify(payload) });
+}
+export function salesAction(kind: import("./types").SalesKind, id: number, action: string, payload: object): Promise<import("./types").SalesResult> {
+  return request(`/api/sales/${kind}/${id}${action === "delete" ? "" : `/${action}`}`, {
+    method: action === "delete" ? "DELETE" : "POST", body: JSON.stringify(payload),
+  });
 }
 
 export async function analyzeWithStockAssistantAgent(payload: AgentChatRequest): Promise<AgentChatResponse> {

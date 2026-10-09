@@ -9,6 +9,7 @@ from typing import Any, Generator
 
 import psycopg2
 from .product_search import SEARCH_INDEX_SQL
+from sales_schema import sales_schema_sql
 
 logger = logging.getLogger("api.db")
 
@@ -67,8 +68,12 @@ def _get_postgres_connection_server(host: str = "postgres", db_name: str | None 
     resolved_port = int(_get_env("POSTGRES_PORT", "DB_PORT", default="5432"))
     resolved_db = db_name or _database_name()
     resolved_user = _get_env("POSTGRES_USER_NAME", "DB_USER", "POSTGRES_USER", default="admin")
-    resolved_password = _get_env("POSTGRES_PASSWORD_VALUE", "DB_PASSWORD", "POSTGRES_PASSWORD", default="admin123")
-    return _connect_with_retries(resolved_host, resolved_port, resolved_db, resolved_user, resolved_password)
+    resolved_password = _get_env(
+        "POSTGRES_PASSWORD_VALUE", "DB_PASSWORD", "POSTGRES_PASSWORD", default="admin123"
+    )
+    return _connect_with_retries(
+        resolved_host, resolved_port, resolved_db, resolved_user, resolved_password
+    )
 
 
 @contextmanager
@@ -666,6 +671,7 @@ def init_products_db() -> None:
         Path(__file__).with_name("schema_extensions.sql").read_text(encoding="utf-8"),
         "CREATE EXTENSION IF NOT EXISTS pg_trgm",
         SEARCH_INDEX_SQL,
+        sales_schema_sql(),
     ]
 
     with db_context() as connection:

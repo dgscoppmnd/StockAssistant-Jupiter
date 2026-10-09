@@ -90,6 +90,44 @@ export type User = {
 
 export type AuthUser = Omit<User, "password">;
 
+export type SalesPermission = "read" | "create" | "edit" | "delete" | "reserve" | "dispatch" | "invoice" | "void" | "return";
+export type SalesKind = "orders" | "invoices";
+export type SalesLine = {
+  sales_order_line_id?: number;
+  id: number; product_id: number; description_snapshot: string; unit_code: string;
+  requested_qty: number; reserved_qty: number; dispatched_qty: number; invoiced_qty: number;
+  canceled_qty: number; returned_qty: number; pending_qty: number;
+  unit_price: number; discount_percent: number; tax_percent: number;
+  unit_snapshot?: string; line_subtotal?: number; line_tax?: number; line_total?: number;
+};
+export type SalesDocument = {
+  id: number; number?: string; sales_order_number?: string; invoice_number?: string;
+  sales_order_id?: number; order_number?: string; status: string; client_id?: number;
+  customer_name: string; warehouse_id: number; currency_code: string;
+  order_date?: string; invoice_date?: string; due_date?: string | null;
+  reference?: string | null; notes?: string | null; subtotal: number; tax_total: number; total: number;
+  customer_snapshot?: { name: string; address: Record<string, unknown>; client_id?: number };
+  address_snapshot?: Record<string, unknown>; correction_of_id?: number | null; void_reason?: string;
+  lines: SalesLine[];
+  invoices?: Array<{ id: number; invoice_number: string; status: string; total: number }>;
+  dispatches?: Array<{ id: number; dispatch_number: string; status: string }>;
+  returns?: Array<{ id: number; return_number: string; reason: string }>;
+  events?: Array<{ id: number; action: string; user_name: string; created_at: string }>;
+};
+export type SalesPage = { items: SalesDocument[]; total: number; page: number; size: number };
+export type SalesClient = { id: number; name: string; client_code?: string | null };
+export type SalesDraftLine = { product_id: number; quantity: number; unit_code: string; unit_price: number; discount_percent: number; tax_percent: number };
+export type SalesOrderDraft = {
+  operation_key: string; client_id: number; warehouse_id: number;
+  address_association_id?: number | null; order_date: string; currency_code: string;
+  reference?: string; notes?: string; lines: SalesDraftLine[];
+};
+export type SalesOperation = { operation_key: string; reason?: string; lines: Array<{ line_id: number; quantity: number }> };
+export type SalesInvoiceDraft = SalesOperation & {
+  sales_order_id: number; invoice_date: string; due_date?: string | null; reference?: string; notes?: string;
+};
+export type SalesResult = { id: number; invoice_id?: number; correction_id?: number; deleted?: boolean };
+
 export type GoogleLoginPayload = {
   credential: string;
 };

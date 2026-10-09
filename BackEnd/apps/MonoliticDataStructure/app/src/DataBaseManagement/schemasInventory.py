@@ -161,6 +161,7 @@ class InventoryOperationResponse(BaseModel):
     document_number: str
     operation_key: str
     movement_ids: list[int]
+    invoice_id: Optional[int] = None
     provider: Optional[str] = None
     model: Optional[str] = None
 
