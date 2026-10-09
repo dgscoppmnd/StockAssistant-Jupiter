@@ -17,6 +17,8 @@ import LoginPage from "./pages/LoginPage";
 import HeaderMain from "./pages/components/headerMain";
 import ChatHistoryPage from "./pages/ChatHistoryPage";
 import RagChat from "./pages/RagChat";
+import SalesOrdersPage from "./pages/SalesOrdersPage";
+import SalesInvoicesPage from "./pages/SalesInvoicesPage";
 
 type ThemeMode = "night" | "day";
 
@@ -28,6 +30,15 @@ type MenuGroup = {
 };
 
 const groups: MenuGroup[] = [
+  {
+    key: "sales",
+    label: "Ventas",
+    icon: <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2 12h12l2-8H7M9 21h1m7 0h1" fill="none" stroke="currentColor" strokeWidth="2" /></svg>,
+    children: [
+      { to: "/ventas/pedidos", label: "Pedidos de venta" },
+      { to: "/ventas/facturas", label: "Facturas de venta" },
+    ],
+  },
   {
     key: "dashboard",
     label: "Resumen",
@@ -212,6 +223,8 @@ function PortalShell({
 
         <section className="page-area">
           <Routes>
+            <Route path="/ventas/pedidos" element={<SalesOrdersPage />} />
+            <Route path="/ventas/facturas" element={<SalesInvoicesPage />} />
             <Route path="/" element={<Navigate replace to="/dashboard" />} />
             <Route path="/dashboard" element={<ExecutiveDashboardPage />} />
             <Route path="/jupiter" element={<StockAssistantPage />} />

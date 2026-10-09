@@ -1099,4 +1099,78 @@ CREATE TRIGGER knowledge_chunk_retired AFTER DELETE ON public.knowledge_chunks
     FOR EACH ROW EXECUTE FUNCTION public.retire_knowledge_vector();
 -- END RAG SCHEMA
 
+-- BEGIN SALES MODULE
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS sales_permissions TEXT[] NOT NULL
+    DEFAULT ARRAY['read','create','edit','delete','reserve','dispatch','invoice','void','return'];
+
+ALTER TABLE public.sales_orders ADD COLUMN IF NOT EXISTS client_id BIGINT REFERENCES public.clients(pk_client) ON DELETE RESTRICT;
+ALTER TABLE public.sales_orders ADD COLUMN IF NOT EXISTS address_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE public.sales_orders ADD COLUMN IF NOT EXISTS order_date DATE NOT NULL DEFAULT CURRENT_DATE;
+ALTER TABLE public.sales_orders ADD COLUMN IF NOT EXISTS reference TEXT;
+ALTER TABLE public.sales_orders ADD COLUMN IF NOT EXISTS currency_code CHAR(3) NOT NULL DEFAULT 'EUR';
+ALTER TABLE public.sales_orders ADD COLUMN IF NOT EXISTS subtotal NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE public.sales_orders ADD COLUMN IF NOT EXISTS tax_total NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE public.sales_orders ADD COLUMN IF NOT EXISTS total NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE public.sales_order_lines ADD COLUMN IF NOT EXISTS description_snapshot TEXT;
+ALTER TABLE public.sales_order_lines ADD COLUMN IF NOT EXISTS discount_percent NUMERIC(7,4) NOT NULL DEFAULT 0;
+ALTER TABLE public.sales_order_lines ADD COLUMN IF NOT EXISTS tax_percent NUMERIC(7,4) NOT NULL DEFAULT 0;
+
+ALTER TABLE public.sales_invoices ADD COLUMN IF NOT EXISTS invoice_date DATE NOT NULL DEFAULT CURRENT_DATE;
+ALTER TABLE public.sales_invoices ADD COLUMN IF NOT EXISTS due_date DATE;
+ALTER TABLE public.sales_invoices ADD COLUMN IF NOT EXISTS reference TEXT;
+ALTER TABLE public.sales_invoices ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.sales_invoices ADD COLUMN IF NOT EXISTS customer_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE public.sales_invoices ADD COLUMN IF NOT EXISTS currency_code CHAR(3) NOT NULL DEFAULT 'EUR';
+ALTER TABLE public.sales_invoices ADD COLUMN IF NOT EXISTS subtotal NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE public.sales_invoices ADD COLUMN IF NOT EXISTS tax_total NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE public.sales_invoices ADD COLUMN IF NOT EXISTS total NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE public.sales_invoices ADD COLUMN IF NOT EXISTS correction_of_id BIGINT REFERENCES public.sales_invoices(id) ON DELETE RESTRICT;
+ALTER TABLE public.sales_invoices ADD COLUMN IF NOT EXISTS void_reason TEXT;
+
+ALTER TABLE public.sales_invoice_lines ADD COLUMN IF NOT EXISTS description_snapshot TEXT;
+ALTER TABLE public.sales_invoice_lines ADD COLUMN IF NOT EXISTS unit_snapshot TEXT;
+ALTER TABLE public.sales_invoice_lines ADD COLUMN IF NOT EXISTS unit_price NUMERIC(18,4) NOT NULL DEFAULT 0;
+ALTER TABLE public.sales_invoice_lines ADD COLUMN IF NOT EXISTS discount_percent NUMERIC(7,4) NOT NULL DEFAULT 0;
+ALTER TABLE public.sales_invoice_lines ADD COLUMN IF NOT EXISTS tax_percent NUMERIC(7,4) NOT NULL DEFAULT 0;
+ALTER TABLE public.sales_invoice_lines ADD COLUMN IF NOT EXISTS exchange_rate NUMERIC(18,6) NOT NULL DEFAULT 1;
+ALTER TABLE public.sales_invoice_lines ADD COLUMN IF NOT EXISTS exchange_rate_date DATE;
+ALTER TABLE public.sales_invoice_lines ADD COLUMN IF NOT EXISTS line_subtotal NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE public.sales_invoice_lines ADD COLUMN IF NOT EXISTS line_tax NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE public.sales_invoice_lines ADD COLUMN IF NOT EXISTS line_total NUMERIC(18,2) NOT NULL DEFAULT 0;
+
+-- Snapshot legacy invoices once; subsequent catalogue changes must not rewrite them.
+UPDATE public.sales_invoice_lines il SET
+    description_snapshot = p.name_product, unit_snapshot = u.code,
+    unit_price = ol.unit_price, exchange_rate = ol.exchange_rate,
+    exchange_rate_date = ol.exchange_rate_date,
+    line_subtotal = ROUND(il.invoiced_qty * ol.unit_price, 2),
+    line_total = ROUND(il.invoiced_qty * ol.unit_price, 2)
+FROM public.sales_order_lines ol, public.productos p, public.inventory_units u
+WHERE il.sales_order_line_id = ol.id AND il.product_id = p.pk_product
+  AND il.base_unit_id = u.id AND il.description_snapshot IS NULL;
+UPDATE public.sales_invoices i SET
+    customer_snapshot = jsonb_build_object('name', o.customer_name, 'address', o.address_snapshot),
+    currency_code = COALESCE((SELECT l.currency_code FROM public.sales_order_lines l
+                              WHERE l.sales_order_id = o.id ORDER BY l.id LIMIT 1), o.currency_code),
+    subtotal = COALESCE((SELECT SUM(line_subtotal) FROM public.sales_invoice_lines WHERE invoice_id = i.id), 0),
+    tax_total = COALESCE((SELECT SUM(line_tax) FROM public.sales_invoice_lines WHERE invoice_id = i.id), 0),
+    total = COALESCE((SELECT SUM(line_total) FROM public.sales_invoice_lines WHERE invoice_id = i.id), 0)
+FROM public.sales_orders o WHERE i.sales_order_id = o.id AND i.customer_snapshot = '{}'::jsonb;
+
+CREATE TABLE IF NOT EXISTS public.sales_document_events (
+    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    document_type TEXT NOT NULL CHECK (document_type IN ('order','invoice')),
+    document_id BIGINT NOT NULL,
+    action TEXT NOT NULL,
+    operation_key VARCHAR(120) NOT NULL UNIQUE,
+    payload_hash TEXT NOT NULL,
+    user_id BIGINT REFERENCES public.users(id) ON DELETE SET NULL,
+    user_name TEXT NOT NULL,
+    result JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_sales_events_document ON public.sales_document_events(document_type, document_id, id);
+CREATE INDEX IF NOT EXISTS ix_sales_orders_filters ON public.sales_orders(order_date DESC, client_id, status, id);
+CREATE INDEX IF NOT EXISTS ix_sales_invoices_filters ON public.sales_invoices(invoice_date DESC, status, sales_order_id, id);
+-- END SALES MODULE
 COMMIT;
