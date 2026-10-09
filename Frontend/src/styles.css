@@ -1930,3 +1930,23 @@ body[data-theme="day"] .chat-message-assistant {
 .support-chat-message.assistant { align-self: stretch; }
 .support-chat-message details { margin-top: 8px; }
 .support-chat-message summary { cursor: pointer; }
+.sales-modal { width: min(1100px, 96vw); max-height: 90vh; overflow-y: auto; }
+.sales-fields { border: 0; padding: 0; min-width: 0; }
+.sales-line-editor { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border-color, #667085); border-radius: 8px; }
+.sales-line-values { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: .75rem; margin-top: .75rem; align-items: end; }
+.sales-line-values label, .sales-fields label, .sales-filters label { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+.sales-operation-line { display: grid !important; grid-template-columns: minmax(0, 1fr) 140px; gap: 1rem; align-items: center; margin: .5rem 0; }
+.sales-document-detail table { min-width: 800px; }
+@media (max-width: 600px) {
+  .sales-operation-line { grid-template-columns: 1fr; }
+  .sales-modal { padding: 1rem; }
+}
+@media print {
+  .sidebar, .content-area > header, .sales-no-print { display: none !important; }
+  body, .app-shell, .content-area, .page-area, .sales-page, .sales-invoice-print, .sales-invoice-print article {
+    display: block !important; background: white !important; color: black !important; margin: 0 !important; padding: 0 !important;
+    box-shadow: none !important; width: 100% !important;
+  }
+  .sales-invoice-print .users-table-wrapper { overflow: visible !important; }
+  .sales-invoice-print table { min-width: 0; width: 100%; font-size: 10pt; color: black; }
+}

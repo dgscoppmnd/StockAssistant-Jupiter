@@ -60,9 +60,13 @@ class InventoryService:
             raise InventoryError(f"Producto con ID {product_id} no encontrado", 404)
         return row
 
-    def _get_or_create_currency(self, iso_code: str | None, fallback_label: str | None = None) -> dict[str, Any]:
+    def _get_or_create_currency(
+        self, iso_code: str | None, fallback_label: str | None = None
+    ) -> dict[str, Any]:
         code = (iso_code or fallback_label or "EUR").strip().upper()
-        row = self._fetchone("SELECT * FROM public.inventory_currencies WHERE iso_code = %s", (code,))
+        row = self._fetchone(
+            "SELECT * FROM public.inventory_currencies WHERE iso_code = %s", (code,)
+        )
         if row:
             return row
         self._fetchone(
@@ -74,10 +78,15 @@ class InventoryService:
             """,
             (code, code),
         )
-        return self._fetchone("SELECT * FROM public.inventory_currencies WHERE iso_code = %s", (code,)) or {}
+        return (
+            self._fetchone("SELECT * FROM public.inventory_currencies WHERE iso_code = %s", (code,))
+            or {}
+        )
 
     def _get_unit(self, code: str) -> dict[str, Any]:
-        row = self._fetchone("SELECT * FROM public.inventory_units WHERE code = %s", (code.strip().lower(),))
+        row = self._fetchone(
+            "SELECT * FROM public.inventory_units WHERE code = %s", (code.strip().lower(),)
+        )
         if not row:
             raise InventoryError(f"Unidad {code} no configurada", 400)
         return row
@@ -110,17 +119,27 @@ class InventoryService:
         if created:
             created["base_unit_code"] = default_unit["code"]
             return created
-        return self._fetchone(
-            """
+        return (
+            self._fetchone(
+                """
             SELECT c.*, u.code AS base_unit_code
             FROM public.product_inventory_config c
             JOIN public.inventory_units u ON u.id = c.base_unit_id
             WHERE c.product_id = %s
             """,
-            (product_id,),
-        ) or {}
+                (product_id,),
+            )
+            or {}
+        )
 
-    def configure_product(self, product_id: int, base_unit_code: str, reorder_point: Decimal, reorder_quantity: Decimal, allow_negative_stock: bool) -> dict[str, Any]:
+    def configure_product(
+        self,
+        product_id: int,
+        base_unit_code: str,
+        reorder_point: Decimal,
+        reorder_quantity: Decimal,
+        allow_negative_stock: bool,
+    ) -> dict[str, Any]:
         self._get_product(product_id)
         unit = self._get_unit(base_unit_code)
         with self.transaction():
@@ -144,7 +163,9 @@ class InventoryService:
         row["base_unit_code"] = unit["code"]
         return row
 
-    def create_warehouse(self, code: str, name: str, description: str | None, is_active: bool) -> dict[str, Any]:
+    def create_warehouse(
+        self, code: str, name: str, description: str | None, is_active: bool
+    ) -> dict[str, Any]:
         with self.transaction():
             row = self._fetchone(
                 """
@@ -181,7 +202,9 @@ class InventoryService:
             raise InventoryError("No se pudo bloquear la existencia", 500)
         return row
 
-    def _convert_to_base_qty(self, product_id: int, quantity: Decimal, unit_code: str) -> tuple[Decimal, dict[str, Any]]:
+    def _convert_to_base_qty(
+        self, product_id: int, quantity: Decimal, unit_code: str
+    ) -> tuple[Decimal, dict[str, Any]]:
         config = self._get_product_inventory_config(product_id)
         input_unit = self._get_unit(unit_code)
         if input_unit["id"] == config["base_unit_id"]:
@@ -251,14 +274,20 @@ class InventoryService:
         )
         return int(row["id"]) if row else 0
 
-    def _apply_physical_delta(self, product_id: int, warehouse_id: int, delta: Decimal, allow_negative: bool) -> None:
+    def _apply_physical_delta(
+        self, product_id: int, warehouse_id: int, delta: Decimal, allow_negative: bool
+    ) -> None:
         stock = self._lock_stock(product_id, warehouse_id)
         next_qty = Decimal(str(stock["physical_qty"])) + delta
         reserved = Decimal(str(stock["reserved_qty"]))
         if not allow_negative and next_qty < 0:
-            raise InventoryError(f"Stock insuficiente para el producto {product_id} en bodega {warehouse_id}", 409)
+            raise InventoryError(
+                f"Stock insuficiente para el producto {product_id} en bodega {warehouse_id}", 409
+            )
         if next_qty - reserved < 0 and not allow_negative:
-            raise InventoryError(f"El stock disponible quedaria negativo para el producto {product_id}", 409)
+            raise InventoryError(
+                f"El stock disponible quedaria negativo para el producto {product_id}", 409
+            )
         self._execute(
             """
             UPDATE public.inventory_stock_levels
@@ -268,14 +297,18 @@ class InventoryService:
             (next_qty, stock["id"]),
         )
 
-    def _apply_reserved_delta(self, product_id: int, warehouse_id: int, delta: Decimal, allow_negative: bool) -> None:
+    def _apply_reserved_delta(
+        self, product_id: int, warehouse_id: int, delta: Decimal, allow_negative: bool
+    ) -> None:
         stock = self._lock_stock(product_id, warehouse_id)
         physical = Decimal(str(stock["physical_qty"]))
         next_reserved = Decimal(str(stock["reserved_qty"])) + delta
         if next_reserved < 0:
             raise InventoryError(f"La reserva del producto {product_id} no puede ser negativa", 409)
         if not allow_negative and physical - next_reserved < 0:
-            raise InventoryError(f"Stock disponible insuficiente para reservar el producto {product_id}", 409)
+            raise InventoryError(
+                f"Stock disponible insuficiente para reservar el producto {product_id}", 409
+            )
         self._execute(
             """
             UPDATE public.inventory_stock_levels
@@ -287,7 +320,9 @@ class InventoryService:
 
     def _get_or_create_supplier(self, name: str, supplier_code: str | None) -> dict[str, Any]:
         normalized_name = name.strip()
-        row = self._fetchone("SELECT * FROM public.inventory_suppliers WHERE name = %s", (normalized_name,))
+        row = self._fetchone(
+            "SELECT * FROM public.inventory_suppliers WHERE name = %s", (normalized_name,)
+        )
         if row:
             return row
         row = self._fetchone(
@@ -352,8 +387,9 @@ class InventoryService:
         )
 
     def get_dashboard(self) -> dict[str, Any]:
-        summary = self._fetchone(
-            """
+        summary = (
+            self._fetchone(
+                """
             SELECT
                 (SELECT COUNT(*) FROM public.productos) AS total_products,
                 (SELECT COUNT(*) FROM public.inventory_warehouses) AS total_warehouses,
@@ -367,7 +403,9 @@ class InventoryService:
                     WHERE (s.physical_qty - s.reserved_qty) <= c.reorder_point
                 ), 0) AS low_stock_items
             """
-        ) or {}
+            )
+            or {}
+        )
         summary["warehouses"] = self.list_warehouses()
         summary["recent_movements"] = self.list_movements(limit=12)
         summary["stock_snapshot"] = self.list_stock()
@@ -375,8 +413,9 @@ class InventoryService:
 
     def get_executive_dashboard(self, period_days: int = 30) -> dict[str, Any]:
         """Return auditable operational indicators without fabricating unavailable supplier data."""
-        service_level = self._fetchone(
-            """
+        service_level = (
+            self._fetchone(
+                """
             SELECT CASE WHEN COALESCE(SUM(requested_qty), 0) > 0
                 THEN ROUND((SUM(dispatched_qty) / SUM(requested_qty)) * 100, 2)
             END AS value
@@ -384,10 +423,13 @@ class InventoryService:
             JOIN public.sales_orders so ON so.id = sol.sales_order_id
             WHERE so.created_at >= CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
             """,
-            (period_days,),
-        ) or {}
-        turnover = self._fetchone(
-            """
+                (period_days,),
+            )
+            or {}
+        )
+        turnover = (
+            self._fetchone(
+                """
             SELECT CASE WHEN stock.total_stock > 0
                 THEN ROUND(COALESCE(dispatches.dispatched_units, 0) / stock.total_stock, 4)
             END AS value
@@ -399,16 +441,21 @@ class InventoryService:
                   AND created_at >= CURRENT_TIMESTAMP - (%s * INTERVAL '1 day')
             ) dispatches
             """,
-            (period_days,),
-        ) or {}
-        excess = self._fetchone(
-            """
+                (period_days,),
+            )
+            or {}
+        )
+        excess = (
+            self._fetchone(
+                """
             SELECT COALESCE(SUM(GREATEST((s.physical_qty - s.reserved_qty) - (c.reorder_point + c.reorder_quantity), 0)), 0) AS units,
                    COUNT(*) FILTER (WHERE (s.physical_qty - s.reserved_qty) > (c.reorder_point + c.reorder_quantity)) AS items
             FROM public.inventory_stock_levels s
             JOIN public.product_inventory_config c ON c.product_id = s.product_id
             """
-        ) or {}
+            )
+            or {}
+        )
         priorities = self._fetchall(
             """
             SELECT s.product_id, p.name_product AS product_name, w.name AS warehouse_name,
@@ -449,12 +496,15 @@ class InventoryService:
         for row in alerts:
             is_stockout = row["available_qty"] <= row["reorder_point"]
             row["kind"] = "riesgo_rotura" if is_stockout else "sobrestock"
-            row["severity"] = "alta" if row["available_qty"] <= 0 else ("media" if is_stockout else "baja")
+            row["severity"] = (
+                "alta" if row["available_qty"] <= 0 else ("media" if is_stockout else "baja")
+            )
             available_qty_fmt = f"{row['available_qty']:,.0f}"
             reorder_point_fmt = f"{row['reorder_point']:,.0f}"
             row["message"] = (
                 f"Disponible {available_qty_fmt} {row['base_unit_code']} frente a punto de reposición {reorder_point_fmt}"
-                if is_stockout else f"Disponible {available_qty_fmt} {row['base_unit_code']} por encima del nivel objetivo"
+                if is_stockout
+                else f"Disponible {available_qty_fmt} {row['base_unit_code']} por encima del nivel objetivo"
             )
 
         evolution = self._fetchall(
@@ -503,8 +553,14 @@ class InventoryService:
             """
         )
         risk_distribution = [
-            {"label": "Riesgo de rotura", "value": sum(1 for row in alerts if row["kind"] == "riesgo_rotura")},
-            {"label": "Sobrestock", "value": sum(1 for row in alerts if row["kind"] == "sobrestock")},
+            {
+                "label": "Riesgo de rotura",
+                "value": sum(1 for row in alerts if row["kind"] == "riesgo_rotura"),
+            },
+            {
+                "label": "Sobrestock",
+                "value": sum(1 for row in alerts if row["kind"] == "sobrestock"),
+            },
             {"label": "Sin alerta", "value": max(0, len(self.list_stock()) - len(alerts))},
         ]
         return {
@@ -528,9 +584,17 @@ class InventoryService:
 
     def confirm_receipt(self, payload: dict[str, Any]) -> dict[str, Any]:
         operation_key = payload.get("operation_key") or f"receipt-{uuid4().hex}"
-        existing = self._fetchone("SELECT * FROM public.goods_receipts WHERE operation_key = %s", (operation_key,))
+        existing = self._fetchone(
+            "SELECT * FROM public.goods_receipts WHERE operation_key = %s", (operation_key,)
+        )
         if existing and existing["status"] == "confirmado":
-            movement_ids = [row["id"] for row in self._fetchall("SELECT id FROM public.inventory_movements WHERE document_type = 'goods_receipt' AND document_id = %s ORDER BY id", (existing["id"],))]
+            movement_ids = [
+                row["id"]
+                for row in self._fetchall(
+                    "SELECT id FROM public.inventory_movements WHERE document_type = 'goods_receipt' AND document_id = %s ORDER BY id",
+                    (existing["id"],),
+                )
+            ]
             return {
                 "status": "already_confirmed",
                 "document_type": "goods_receipt",
@@ -540,8 +604,12 @@ class InventoryService:
                 "movement_ids": movement_ids,
             }
 
-        supplier = self._get_or_create_supplier(payload["supplier_name"], payload.get("supplier_code"))
-        warehouse = self._fetchone("SELECT * FROM public.inventory_warehouses WHERE id = %s", (payload["warehouse_id"],))
+        supplier = self._get_or_create_supplier(
+            payload["supplier_name"], payload.get("supplier_code")
+        )
+        warehouse = self._fetchone(
+            "SELECT * FROM public.inventory_warehouses WHERE id = %s", (payload["warehouse_id"],)
+        )
         if not warehouse:
             raise InventoryError("Bodega no encontrada", 404)
 
@@ -585,8 +653,12 @@ class InventoryService:
 
             for line in payload["lines"]:
                 product = self._get_product(line["product_id"])
-                base_qty, config = self._convert_to_base_qty(line["product_id"], Decimal(str(line["quantity"])), line["unit_code"])
-                currency = self._get_or_create_currency(line.get("currency_code"), product.get("currency"))
+                base_qty, config = self._convert_to_base_qty(
+                    line["product_id"], Decimal(str(line["quantity"])), line["unit_code"]
+                )
+                currency = self._get_or_create_currency(
+                    line.get("currency_code"), product.get("currency")
+                )
                 po_line = self._fetchone(
                     """
                     INSERT INTO public.purchase_order_lines (
@@ -631,7 +703,12 @@ class InventoryService:
                         line.get("exchange_rate_date") or date.today(),
                     ),
                 )
-                self._apply_physical_delta(product["pk_product"], warehouse["id"], base_qty, bool(config["allow_negative_stock"]))
+                self._apply_physical_delta(
+                    product["pk_product"],
+                    warehouse["id"],
+                    base_qty,
+                    bool(config["allow_negative_stock"]),
+                )
                 movement_ids.append(
                     self._insert_movement(
                         movement_type="receipt",
@@ -661,8 +738,14 @@ class InventoryService:
 
     def transfer_stock(self, payload: dict[str, Any]) -> dict[str, Any]:
         operation_key = payload.get("operation_key") or f"transfer-{uuid4().hex}"
-        source = self._fetchone("SELECT * FROM public.inventory_warehouses WHERE id = %s", (payload["source_warehouse_id"],))
-        destination = self._fetchone("SELECT * FROM public.inventory_warehouses WHERE id = %s", (payload["destination_warehouse_id"],))
+        source = self._fetchone(
+            "SELECT * FROM public.inventory_warehouses WHERE id = %s",
+            (payload["source_warehouse_id"],),
+        )
+        destination = self._fetchone(
+            "SELECT * FROM public.inventory_warehouses WHERE id = %s",
+            (payload["destination_warehouse_id"],),
+        )
         if not source or not destination:
             raise InventoryError("Bodega de origen o destino no encontrada", 404)
         if source["id"] == destination["id"]:
@@ -690,9 +773,21 @@ class InventoryService:
             )
             for line in payload["lines"]:
                 self._get_product(line["product_id"])
-                base_qty, config = self._convert_to_base_qty(line["product_id"], Decimal(str(line["quantity"])), line["unit_code"])
-                self._apply_physical_delta(line["product_id"], source["id"], -base_qty, bool(config["allow_negative_stock"]))
-                self._apply_physical_delta(line["product_id"], destination["id"], base_qty, bool(config["allow_negative_stock"]))
+                base_qty, config = self._convert_to_base_qty(
+                    line["product_id"], Decimal(str(line["quantity"])), line["unit_code"]
+                )
+                self._apply_physical_delta(
+                    line["product_id"],
+                    source["id"],
+                    -base_qty,
+                    bool(config["allow_negative_stock"]),
+                )
+                self._apply_physical_delta(
+                    line["product_id"],
+                    destination["id"],
+                    base_qty,
+                    bool(config["allow_negative_stock"]),
+                )
                 transfer_line = self._fetchone(
                     """
                     INSERT INTO public.inventory_transfer_lines (
@@ -749,7 +844,9 @@ class InventoryService:
 
     def reserve_stock(self, payload: dict[str, Any]) -> dict[str, Any]:
         operation_key = payload.get("operation_key") or f"reserve-{uuid4().hex}"
-        warehouse = self._fetchone("SELECT * FROM public.inventory_warehouses WHERE id = %s", (payload["warehouse_id"],))
+        warehouse = self._fetchone(
+            "SELECT * FROM public.inventory_warehouses WHERE id = %s", (payload["warehouse_id"],)
+        )
         if not warehouse:
             raise InventoryError("Bodega no encontrada", 404)
         order = None
@@ -773,9 +870,18 @@ class InventoryService:
             )
             for line in payload["lines"]:
                 product = self._get_product(line["product_id"])
-                base_qty, config = self._convert_to_base_qty(line["product_id"], Decimal(str(line["quantity"])), line["unit_code"])
-                currency = self._get_or_create_currency(line.get("currency_code"), product.get("currency"))
-                self._apply_reserved_delta(line["product_id"], warehouse["id"], base_qty, bool(config["allow_negative_stock"]))
+                base_qty, config = self._convert_to_base_qty(
+                    line["product_id"], Decimal(str(line["quantity"])), line["unit_code"]
+                )
+                currency = self._get_or_create_currency(
+                    line.get("currency_code"), product.get("currency")
+                )
+                self._apply_reserved_delta(
+                    line["product_id"],
+                    warehouse["id"],
+                    base_qty,
+                    bool(config["allow_negative_stock"]),
+                )
                 order_line = self._fetchone(
                     """
                     INSERT INTO public.sales_order_lines (
@@ -808,7 +914,14 @@ class InventoryService:
                     VALUES (%s, %s, %s, %s, %s, 0, 'confirmado', %s)
                     RETURNING *
                     """,
-                    (order["id"], order_line["id"], line["product_id"], warehouse["id"], base_qty, operation_key),
+                    (
+                        order["id"],
+                        order_line["id"],
+                        line["product_id"],
+                        warehouse["id"],
+                        base_qty,
+                        operation_key,
+                    ),
                 )
                 movement_ids.append(
                     self._insert_movement(
@@ -839,7 +952,9 @@ class InventoryService:
 
     def dispatch_sales_order(self, payload: dict[str, Any]) -> dict[str, Any]:
         operation_key = payload.get("operation_key") or f"dispatch-{uuid4().hex}"
-        order = self._fetchone("SELECT * FROM public.sales_orders WHERE id = %s", (payload["sales_order_id"],))
+        order = self._fetchone(
+            "SELECT * FROM public.sales_orders WHERE id = %s", (payload["sales_order_id"],)
+        )
         if not order:
             raise InventoryError("Pedido de venta no encontrado", 404)
         warehouse_id = payload["warehouse_id"]
@@ -889,16 +1004,37 @@ class InventoryService:
                     (order["id"], line["product_id"]),
                 )
                 if not order_line:
-                    raise InventoryError(f"El producto {line['product_id']} no pertenece al pedido", 404)
-                base_qty, config = self._convert_to_base_qty(line["product_id"], Decimal(str(line["quantity"])), line["unit_code"])
+                    raise InventoryError(
+                        f"El producto {line['product_id']} no pertenece al pedido", 404
+                    )
+                base_qty, config = self._convert_to_base_qty(
+                    line["product_id"], Decimal(str(line["quantity"])), line["unit_code"]
+                )
                 reserved_qty = Decimal(str(order_line["reserved_qty"]))
                 if reserved_qty < base_qty:
-                    raise InventoryError(f"No hay reserva suficiente para el producto {line['product_id']}", 409)
-                self._apply_reserved_delta(line["product_id"], warehouse_id, -base_qty, bool(config["allow_negative_stock"]))
-                self._apply_physical_delta(line["product_id"], warehouse_id, -base_qty, bool(config["allow_negative_stock"]))
+                    raise InventoryError(
+                        f"No hay reserva suficiente para el producto {line['product_id']}", 409
+                    )
+                self._apply_reserved_delta(
+                    line["product_id"],
+                    warehouse_id,
+                    -base_qty,
+                    bool(config["allow_negative_stock"]),
+                )
+                self._apply_physical_delta(
+                    line["product_id"],
+                    warehouse_id,
+                    -base_qty,
+                    bool(config["allow_negative_stock"]),
+                )
                 next_dispatched = Decimal(str(order_line["dispatched_qty"])) + base_qty
                 next_reserved = reserved_qty - base_qty
-                next_pending = max(Decimal("0"), Decimal(str(order_line["requested_qty"])) - next_dispatched - Decimal(str(order_line["canceled_qty"])))
+                next_pending = max(
+                    Decimal("0"),
+                    Decimal(str(order_line["requested_qty"]))
+                    - next_dispatched
+                    - Decimal(str(order_line["canceled_qty"])),
+                )
                 self._execute(
                     """
                     UPDATE public.sales_order_lines
@@ -909,7 +1045,13 @@ class InventoryService:
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = %s
                     """,
-                    (next_reserved, next_dispatched, next_dispatched, next_pending, order_line["id"]),
+                    (
+                        next_reserved,
+                        next_dispatched,
+                        next_dispatched,
+                        next_pending,
+                        order_line["id"],
+                    ),
                 )
                 dispatch_line = self._fetchone(
                     """
@@ -919,7 +1061,13 @@ class InventoryService:
                     VALUES (%s, %s, %s, %s, %s)
                     RETURNING *
                     """,
-                    (dispatch["id"], order_line["id"], line["product_id"], base_qty, config["base_unit_id"]),
+                    (
+                        dispatch["id"],
+                        order_line["id"],
+                        line["product_id"],
+                        base_qty,
+                        config["base_unit_id"],
+                    ),
                 )
                 self._fetchone(
                     """
@@ -929,7 +1077,13 @@ class InventoryService:
                     VALUES (%s, %s, %s, %s, %s)
                     RETURNING id
                     """,
-                    (invoice["id"], order_line["id"], line["product_id"], base_qty, config["base_unit_id"]),
+                    (
+                        invoice["id"],
+                        order_line["id"],
+                        line["product_id"],
+                        base_qty,
+                        config["base_unit_id"],
+                    ),
                 )
                 movement_ids.append(
                     self._insert_movement(
@@ -948,12 +1102,19 @@ class InventoryService:
                         user_name=payload["user_name"],
                     )
                 )
-            self._execute("UPDATE public.sales_orders SET status = 'parcial', updated_at = CURRENT_TIMESTAMP WHERE id = %s", (order["id"],))
+            from sales_service import capture_legacy_invoice
+
+            capture_legacy_invoice(self, invoice["id"])
+            self._execute(
+                "UPDATE public.sales_orders SET status = 'parcial', updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                (order["id"],),
+            )
 
         return {
             "status": "confirmed",
             "document_type": "sales_dispatch",
             "document_id": dispatch["id"],
+            "invoice_id": invoice["id"],
             "document_number": dispatch["dispatch_number"],
             "operation_key": operation_key,
             "movement_ids": movement_ids,
@@ -961,7 +1122,9 @@ class InventoryService:
 
     def cancel_sales_order(self, payload: dict[str, Any]) -> dict[str, Any]:
         operation_key = payload.get("operation_key") or f"cancel-{uuid4().hex}"
-        order = self._fetchone("SELECT * FROM public.sales_orders WHERE id = %s", (payload["sales_order_id"],))
+        order = self._fetchone(
+            "SELECT * FROM public.sales_orders WHERE id = %s", (payload["sales_order_id"],)
+        )
         if not order:
             raise InventoryError("Pedido de venta no encontrado", 404)
         lines = self._fetchall(
@@ -981,7 +1144,12 @@ class InventoryService:
                 dispatched_qty = Decimal(str(line["dispatched_qty"]))
                 returned_qty = Decimal(str(line["returned_qty"]))
                 if reserved_qty > 0:
-                    self._apply_reserved_delta(line["product_id"], payload["warehouse_id"], -reserved_qty, bool(config["allow_negative_stock"]))
+                    self._apply_reserved_delta(
+                        line["product_id"],
+                        payload["warehouse_id"],
+                        -reserved_qty,
+                        bool(config["allow_negative_stock"]),
+                    )
                     movement_ids.append(
                         self._insert_movement(
                             movement_type="reservation_release",
@@ -1001,7 +1169,12 @@ class InventoryService:
                     )
                 restore_qty = dispatched_qty - returned_qty
                 if restore_qty > 0:
-                    self._apply_physical_delta(line["product_id"], payload["warehouse_id"], restore_qty, bool(config["allow_negative_stock"]))
+                    self._apply_physical_delta(
+                        line["product_id"],
+                        payload["warehouse_id"],
+                        restore_qty,
+                        bool(config["allow_negative_stock"]),
+                    )
                     movement_ids.append(
                         self._insert_movement(
                             movement_type="cancel_after_dispatch",
@@ -1031,7 +1204,10 @@ class InventoryService:
                     """,
                     (requested, line["id"]),
                 )
-            self._execute("UPDATE public.sales_orders SET status = 'cancelado', updated_at = CURRENT_TIMESTAMP WHERE id = %s", (order["id"],))
+            self._execute(
+                "UPDATE public.sales_orders SET status = 'cancelado', updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                (order["id"],),
+            )
 
         return {
             "status": "confirmed",
@@ -1044,7 +1220,9 @@ class InventoryService:
 
     def process_return(self, payload: dict[str, Any]) -> dict[str, Any]:
         operation_key = payload.get("operation_key") or f"return-{uuid4().hex}"
-        order = self._fetchone("SELECT * FROM public.sales_orders WHERE id = %s", (payload["sales_order_id"],))
+        order = self._fetchone(
+            "SELECT * FROM public.sales_orders WHERE id = %s", (payload["sales_order_id"],)
+        )
         if not order:
             raise InventoryError("Pedido de venta no encontrado", 404)
         movement_ids: list[int] = []
@@ -1079,12 +1257,26 @@ class InventoryService:
                     (order["id"], line["product_id"]),
                 )
                 if not order_line:
-                    raise InventoryError(f"El producto {line['product_id']} no pertenece al pedido", 404)
-                base_qty, config = self._convert_to_base_qty(line["product_id"], Decimal(str(line["quantity"])), line["unit_code"])
-                dispatchable = Decimal(str(order_line["dispatched_qty"])) - Decimal(str(order_line["returned_qty"]))
+                    raise InventoryError(
+                        f"El producto {line['product_id']} no pertenece al pedido", 404
+                    )
+                base_qty, config = self._convert_to_base_qty(
+                    line["product_id"], Decimal(str(line["quantity"])), line["unit_code"]
+                )
+                dispatchable = Decimal(str(order_line["dispatched_qty"])) - Decimal(
+                    str(order_line["returned_qty"])
+                )
                 if base_qty > dispatchable:
-                    raise InventoryError(f"La devolucion supera lo despachado para el producto {line['product_id']}", 409)
-                self._apply_physical_delta(line["product_id"], payload["warehouse_id"], base_qty, bool(config["allow_negative_stock"]))
+                    raise InventoryError(
+                        f"La devolucion supera lo despachado para el producto {line['product_id']}",
+                        409,
+                    )
+                self._apply_physical_delta(
+                    line["product_id"],
+                    payload["warehouse_id"],
+                    base_qty,
+                    bool(config["allow_negative_stock"]),
+                )
                 next_returned = Decimal(str(order_line["returned_qty"])) + base_qty
                 self._execute(
                     """
@@ -1103,7 +1295,13 @@ class InventoryService:
                     VALUES (%s, %s, %s, %s, %s)
                     RETURNING *
                     """,
-                    (sales_return["id"], order_line["id"], line["product_id"], base_qty, config["base_unit_id"]),
+                    (
+                        sales_return["id"],
+                        order_line["id"],
+                        line["product_id"],
+                        base_qty,
+                        config["base_unit_id"],
+                    ),
                 )
                 movement_ids.append(
                     self._insert_movement(
@@ -1122,7 +1320,10 @@ class InventoryService:
                         user_name=payload["user_name"],
                     )
                 )
-            self._execute("UPDATE public.sales_orders SET status = 'parcial', updated_at = CURRENT_TIMESTAMP WHERE id = %s", (order["id"],))
+            self._execute(
+                "UPDATE public.sales_orders SET status = 'parcial', updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                (order["id"],),
+            )
 
         return {
             "status": "confirmed",
