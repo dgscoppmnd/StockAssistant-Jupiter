@@ -84,3 +84,12 @@ docs/
 !BackEnd/apps/MonoliticDataStructure/app/
 !BackEnd/apps/MonoliticDataStructure/app/docs/
 !BackEnd/apps/MonoliticDataStructure/app/docs/**
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+infra/**/backend.hcl
+crash.log
+infra/rds-global-bundle.pem

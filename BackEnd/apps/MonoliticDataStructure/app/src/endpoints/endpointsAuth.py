@@ -2,8 +2,9 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 
+from login_throttle import client_ip, ensure_not_locked, record_failure, record_success
 from DataBaseManagement.dbConectionPostgres import get_db_users
 from DataBaseManagement.dbManagementUsers import get_user_by_email, get_user_by_id, update_user
 from DataBaseManagement.schemasUsers import AuthSessionResponse, GoogleLoginRequest, PasswordLoginRequest, UserPublicResponse
@@ -51,15 +52,20 @@ def login_with_google(payload: GoogleLoginRequest, db=Depends(get_db_users)):
 
 
 @router.post("/password", response_model=AuthSessionResponse)
-def login_with_password(payload: PasswordLoginRequest, db=Depends(get_db_users)):
+def login_with_password(payload: PasswordLoginRequest, request: Request, db=Depends(get_db_users)):
     email = payload.email.strip().lower()
     if not email or not payload.password:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email and password are required")
 
+    ip = client_ip(request)
+    ensure_not_locked(db, email, ip)
+
     user = get_user_by_email(email, connection=db)
     stored_password = str(user.get("password") or "") if user else ""
     if not user or not verify_password(payload.password, stored_password):
+        record_failure(db, email, ip)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+    record_success(db, email)
 
     now = datetime.now(timezone.utc)
     updates: dict[str, Any] = {

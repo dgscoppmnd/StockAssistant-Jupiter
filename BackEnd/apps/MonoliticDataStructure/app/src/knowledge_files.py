@@ -1,11 +1,17 @@
 """Persistent source files for future knowledge ingestion."""
+import os
 import re
 from pathlib import Path
 from uuid import uuid4
 
+import file_storage
 from master_data_service import MasterDataError
 
-KNOWLEDGE_DIR = Path(__file__).resolve().parents[1] / "data" / "knowledge"
+_IS_LAMBDA = bool(os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+KNOWLEDGE_DIR = Path(
+    os.getenv("KNOWLEDGE_DIR")
+    or ("/tmp/knowledge" if _IS_LAMBDA else Path(__file__).resolve().parents[1] / "data" / "knowledge")
+)
 MAX_FILE_SIZE = 20 * 1024 * 1024
 SUPPORTED_SUFFIXES = {".txt", ".pdf", ".md"}
 
@@ -19,7 +25,11 @@ def resolve_file(name: str) -> Path:
         raise ValueError("Nombre de archivo no válido")
     root = KNOWLEDGE_DIR.resolve()
     path = (root / name).resolve()
-    if path.parent != root or path.suffix.lower() not in SUPPORTED_SUFFIXES or not path.is_file():
+    if path.parent != root or path.suffix.lower() not in SUPPORTED_SUFFIXES:
+        raise ValueError("No se encuentra el archivo adjunto en la base de conocimiento")
+    if not path.is_file() and file_storage.bucket():
+        file_storage.download(f"knowledge/{name}", path)
+    if not path.is_file():
         raise ValueError("No se encuentra el archivo adjunto en la base de conocimiento")
     return path
 
@@ -53,6 +63,11 @@ def store_file(upload) -> Path:
                     raise ValueError("binary content")
             except (UnicodeError, ValueError) as exc:
                 raise MasterDataError("TXT y MD deben contener texto UTF-8") from exc
+        if file_storage.bucket():
+            try:
+                file_storage.upload(path, f"knowledge/{path.name}")
+            except Exception as exc:
+                raise MasterDataError("No se pudo guardar el archivo", 500) from exc
         return path
     except Exception:
         path.unlink(missing_ok=True)
@@ -71,9 +86,14 @@ def save_document(service, values: dict, upload=None, record_id: int | None = No
         values["archivo"] = path.name
     try:
         if record_id is None:
-            return service.create("knowledge-documents", values)
-        return service.update("knowledge-documents", record_id, values)
+            result = service.create("knowledge-documents", values)
+        else:
+            result = service.update("knowledge-documents", record_id, values)
     except Exception:
         if path:
             path.unlink(missing_ok=True)
+            if file_storage.bucket():
+                file_storage.delete(f"knowledge/{path.name}")
         raise
+    file_storage.trigger_indexing()
+    return result

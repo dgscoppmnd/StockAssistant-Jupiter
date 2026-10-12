@@ -1,0 +1,20 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3vectors:PutVectors",
+        "s3vectors:GetVectors",
+        "s3vectors:DeleteVectors",
+        "s3vectors:QueryVectors",
+        "s3vectors:ListVectors",
+        "s3vectors:GetIndex"
+      ],
+      "Resource": [
+        "arn:aws:s3vectors:eu-west-1:118645514410:bucket/stockassistant-vectors",
+        "arn:aws:s3vectors:eu-west-1:118645514410:bucket/stockassistant-vectors/index/*"
+      ]
+    }
+  ]
+}
