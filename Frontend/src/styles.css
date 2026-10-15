@@ -1381,6 +1381,13 @@ body[data-theme="day"] .inventory-stat-card {
   color: var(--cyan);
 }
 
+.inventory-stat-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .inventory-list,
 .inventory-table {
   display: grid;
