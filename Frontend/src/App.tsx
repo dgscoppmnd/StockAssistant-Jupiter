@@ -31,6 +31,16 @@ type MenuGroup = {
 
 const groups: MenuGroup[] = [
   {
+    key: "dashboard",
+    label: "Resumen",
+    icon: <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10h3v10H4Zm6 0V4h4v16h-4Zm7 0v-7h3v7h-3Z" fill="currentColor" /></svg>,
+    children: [
+      { to: "/dashboard", label: "Resumen ejecutivo" },
+      { to: "/agentes", label: "Alertas, análisis y agentes de compras" },
+      { to: "/ejecutivo", label: "Compras y automatizaciones" },
+    ]
+  },  
+  {
     key: "sales",
     label: "Ventas",
     icon: <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2 12h12l2-8H7M9 21h1m7 0h1" fill="none" stroke="currentColor" strokeWidth="2" /></svg>,
@@ -38,17 +48,6 @@ const groups: MenuGroup[] = [
       { to: "/ventas/pedidos", label: "Pedidos de venta" },
       { to: "/ventas/facturas", label: "Facturas de venta" },
     ],
-  },
-  {
-    key: "dashboard",
-    label: "Resumen",
-    icon: <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10h3v10H4Zm6 0V4h4v16h-4Zm7 0v-7h3v7h-3Z" fill="currentColor" /></svg>,
-    children: [
-      { to: "/dashboard", label: "Resumen ejecutivo" },
-      { to: "/agentes", label: "Alertas y análisis" },
-      { to: "/ejecutivo", label: "Compras y automatizaciones" },
-    
-    ]
   },
   {
     key: "jupiter",
@@ -59,13 +58,9 @@ const groups: MenuGroup[] = [
       </svg>
     ),
     children: [
-      { to: "/dashboard", label: "Dashboard ejecutivo" },
       { to: "/jupiter", label: "Chat OpenAI + Ollama" },
       { to: "/rag", label: "Asistente RAG" },
       { to: "/chat", label: "Chat con memoria" },
-      { to: "/agentes", label: "Agentes de compras y stock" },
-      { to: "/ejecutivo", label: "Centro Ejecutivo y automatizaciones" },
-      { to: "/users", label: "Usuarios" }
     ]
   },
   {
@@ -90,7 +85,6 @@ const groups: MenuGroup[] = [
       </svg>
     ),
     children: [
-      { to: "/configuracion", label: "Estado de integraciones" },
       { to: "/maestros/unidades", label: "Unidades de medida" },
       { to: "/maestros/monedas", label: "Monedas" },
       { to: "/maestros/bodegas", label: "Bodegas" },
@@ -100,7 +94,9 @@ const groups: MenuGroup[] = [
       { to: "/maestros/direcciones-globales", label: "Direcciones globales" },
       { to: "/maestros/conversiones", label: "Conversiones de unidad" },
       { to: "/maestros/conocimiento", label: "Base de conocimiento" },
-      { to: "/setup", label: "Configuracion de stockassistant" }
+      { to: "/users", label: "Usuarios" },      
+      { to: "/setup", label: "Configuracion de stockassistant" },
+      { to: "/configuracion", label: "Estado de integraciones" },
     ]
   }
 ];
@@ -223,9 +219,9 @@ function PortalShell({
 
         <section className="page-area">
           <Routes>
+            <Route path="/" element={<Navigate replace to="/dashboard" />} />
             <Route path="/ventas/pedidos" element={<SalesOrdersPage />} />
             <Route path="/ventas/facturas" element={<SalesInvoicesPage />} />
-            <Route path="/" element={<Navigate replace to="/dashboard" />} />
             <Route path="/dashboard" element={<ExecutiveDashboardPage />} />
             <Route path="/jupiter" element={<StockAssistantPage />} />
             <Route path="/chat" element={<ChatHistoryPage />} />
