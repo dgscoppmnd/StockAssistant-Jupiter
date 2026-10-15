@@ -4,6 +4,9 @@ import type { ExternalSourceStatus, FinancialSummary, ProductOption, PurchaseRec
 import SectionIcon from "./components/SectionIcon";
 import ProductCombobox from "./components/ProductCombobox";
 import CustomerSupportChat from "./components/CustomerSupportChat";
+import PurchaseRecommendationInfo from "./components/PurchaseRecommendationInfo";
+import ReviewBatchInfo from "./components/ReviewBatchInfo";
+import MarketTrendsInfo from "./components/MarketTrendsInfo";
 
 export default function AgentsOperationsPage() {
   const [sources, setSources] = useState<ExternalSourceStatus[]>([]);
@@ -81,7 +84,7 @@ export default function AgentsOperationsPage() {
     </section>
     <section className="grid two-columns">
       <article className="card"><p className="section-label">Agente de compras</p>
-        <h3><SectionIcon kind="cart" />Recomendacion con evidencia</h3>
+        <div className="routing-info-heading"><h3><SectionIcon kind="cart" />Recomendación con evidencia</h3><PurchaseRecommendationInfo /></div>
         <form className="stack" onSubmit={recommend}>
           <ProductCombobox selectedProduct={selectedProduct} selectedId={Number(productId)}
             disabled={analyzing}
@@ -103,7 +106,7 @@ export default function AgentsOperationsPage() {
         </div>}
       </article>
       <article className="card"><p className="section-label">Agente de valoraciones</p>
-        <h3><SectionIcon kind="review" />Procesar lote</h3>
+        <div className="routing-info-heading"><h3><SectionIcon kind="review" />Procesar lote</h3><ReviewBatchInfo /></div>
         <form className="stack" onSubmit={submitReviews}>
           <ProductCombobox selectedProduct={selectedReviewProduct} selectedId={Number(reviewProductId)}
             disabled={processingReviews}
@@ -119,7 +122,7 @@ export default function AgentsOperationsPage() {
     </section>
     <section className="grid two-columns">
       <CustomerSupportChat />
-      <article className="card"><p className="section-label">Inteligencia de mercado</p><h3><SectionIcon kind="market" />Tendencias autorizadas</h3><form className="stack" onSubmit={analyzeMarket}><input required placeholder="Termino de busqueda" value={term} onChange={(event) => setTerm(event.target.value)} /><button className="chip-btn" type="submit">Consultar SerpAPI Trends</button></form>{market && <div className="agent-result"><p>{market.data ? "Datos de tendencia recibidos." : "La fuente no esta disponible."}</p><small>Fuente: {String((market.source as { name?: string })?.name ?? "sin fuente")}</small></div>}</article>
+      <article className="card"><p className="section-label">Inteligencia de mercado</p><div className="routing-info-heading"><h3><SectionIcon kind="market" />Tendencias autorizadas</h3><MarketTrendsInfo /></div><form className="stack" onSubmit={analyzeMarket}><input required placeholder="Termino de busqueda" value={term} onChange={(event) => setTerm(event.target.value)} /><button className="chip-btn" type="submit">Consultar SerpAPI Trends</button></form>{market && <div className="agent-result"><p>{market.data ? "Datos de tendencia recibidos." : "La fuente no esta disponible."}</p><small>Fuente: {String((market.source as { name?: string })?.name ?? "sin fuente")}</small></div>}</article>
     </section>
   </div>;
 }

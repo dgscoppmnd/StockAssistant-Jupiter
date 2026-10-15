@@ -11,6 +11,9 @@ from typing import Any
 import requests
 
 from knowledge_errors import KnowledgeError
+from vector_store.s3vectors_store import S3VectorsStore, use_s3_vectors
+
+S3_FILTER_IDS_PER_QUERY = 50
 
 
 logger = logging.getLogger("api.knowledge_vectors")
@@ -240,6 +243,15 @@ class KnowledgeVectors:
         self.spec = spec
         collection_hash = hashlib.sha256(spec.identifier.encode("utf-8")).hexdigest()[:16]
         self.collection = f"jupiter_documents_{collection_hash}"
+        self.s3 = None
+        if use_s3_vectors():
+            self.s3 = S3VectorsStore(os.getenv("S3_VECTORS_DOCUMENTS_INDEX", "documents"))
+
+    def _s3_call(self, action):
+        try:
+            return action()
+        except Exception as exc:  # errores de boto3/botocore
+            raise KnowledgeError("El índice semántico S3 Vectors no está disponible.") from exc
 
     def request(
         self,
@@ -267,6 +279,18 @@ class KnowledgeVectors:
         if not points:
             return
         _validate_vectors([point["vector"] for point in points], len(points), self.spec.provider)
+        if self.s3:
+            self._s3_call(
+                lambda: self.s3.put(
+                    {
+                        "key": str(point["id"]),
+                        "vector": point["vector"],
+                        "metadata": {"chunk_id": str(point["id"])},
+                    }
+                    for point in points
+                )
+            )
+            return
         if self.request("GET", allow_missing=True) is None:
             try:
                 self.request(
@@ -278,12 +302,17 @@ class KnowledgeVectors:
         self.request("PUT", "/points?wait=true", {"points": points})
 
     def delete(self, ids: list[str]) -> None:
+        if ids and self.s3:
+            self._s3_call(lambda: self.s3.delete([str(i) for i in ids]))
+            return
         if ids and self.request("GET", allow_missing=True) is not None:
             self.request("POST", "/points/delete?wait=true", {"points": ids})
 
     def search(self, query_vector: list[float], ids: list[str]) -> list[dict[str, Any]]:
         if not ids:
             return []
+        if self.s3:
+            return self._search_s3(query_vector, ids)
         result = self.request(
             "POST",
             "/points/query",
@@ -296,3 +325,17 @@ class KnowledgeVectors:
             },
         )
         return result["points"]
+
+    def _search_s3(self, query_vector: list[float], ids: list[str]) -> list[dict[str, Any]]:
+        threshold = float(os.getenv("RAG_MIN_SCORE", "0.5"))
+        hits: list[dict[str, Any]] = []
+        for start in range(0, len(ids), S3_FILTER_IDS_PER_QUERY):
+            group = [str(i) for i in ids[start : start + S3_FILTER_IDS_PER_QUERY]]
+            found = self._s3_call(
+                lambda group=group: self.s3.query(
+                    query_vector, 8, {"chunk_id": {"$in": group}}
+                )
+            )
+            hits.extend({"id": hit["key"], "score": hit["score"]} for hit in found)
+        hits = [hit for hit in hits if hit["score"] >= threshold]
+        return sorted(hits, key=lambda hit: hit["score"], reverse=True)[:8]

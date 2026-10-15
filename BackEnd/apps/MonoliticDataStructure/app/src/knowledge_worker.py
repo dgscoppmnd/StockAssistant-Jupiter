@@ -31,6 +31,51 @@ def notify_knowledge_worker():
     _wake.set()
 
 
+def process_pending(connection_factory, stop=None):
+    """Una pasada: limpia vectores retirados e indexa documentos pendientes."""
+    connection = None
+    try:
+        connection = connection_factory()
+        try:
+            cleanup_retired_vectors(connection)
+        except Exception:
+            connection.rollback()
+            logging.getLogger("api.knowledge").warning("event=knowledge_vector_cleanup_pending")
+        with connection.cursor() as cursor:
+            requested_spec = configured_embedding_spec()
+            if requested_spec is None:
+                cursor.execute(
+                    """UPDATE public.knowledge_documents d
+                    SET index_status = 'pending', index_progress = 0, index_error = NULL
+                    WHERE index_status = 'available' AND NOT EXISTS
+                    (SELECT 1 FROM public.knowledge_chunks c WHERE c.document_id = d.id)"""
+                )
+            else:
+                cursor.execute(
+                    """UPDATE public.knowledge_documents d
+                    SET index_status = 'pending', index_progress = 0, index_error = NULL
+                    WHERE index_status = 'available' AND NOT EXISTS
+                    (SELECT 1 FROM public.knowledge_chunks c WHERE c.document_id = d.id
+                     AND c.embedding_provider = %s AND c.embedding_model = %s)""",
+                    (requested_spec.provider, requested_spec.model),
+                )
+            cursor.execute(
+                """SELECT id FROM public.knowledge_documents WHERE index_status IN ('pending', 'processing')
+                AND is_active AND (expires_at IS NULL OR expires_at > clock_timestamp()) ORDER BY id LIMIT 20"""
+            )
+            ids = [row[0] for row in cursor.fetchall()]
+        connection.commit()
+        for document_id in ids:
+            if stop is not None and stop.is_set():
+                break
+            KnowledgeService(connection).index(document_id)
+    except Exception:
+        logging.getLogger("api.knowledge").warning("event=knowledge_worker_unavailable")
+    finally:
+        if connection is not None:
+            connection.close()
+
+
 def start_knowledge_worker(connection_factory):
     """Inicia el worker que recupera pendientes y reindexa perfiles desactualizados."""
     stop = threading.Event()
@@ -38,49 +83,7 @@ def start_knowledge_worker(connection_factory):
     def run():
         while not stop.is_set():
             _wake.clear()
-            connection = None
-            try:
-                connection = connection_factory()
-                try:
-                    cleanup_retired_vectors(connection)
-                except Exception:
-                    connection.rollback()
-                    logging.getLogger("api.knowledge").warning(
-                        "event=knowledge_vector_cleanup_pending"
-                    )
-                with connection.cursor() as cursor:
-                    requested_spec = configured_embedding_spec()
-                    if requested_spec is None:
-                        cursor.execute(
-                            """UPDATE public.knowledge_documents d
-                            SET index_status = 'pending', index_progress = 0, index_error = NULL
-                            WHERE index_status = 'available' AND NOT EXISTS
-                            (SELECT 1 FROM public.knowledge_chunks c WHERE c.document_id = d.id)"""
-                        )
-                    else:
-                        cursor.execute(
-                            """UPDATE public.knowledge_documents d
-                            SET index_status = 'pending', index_progress = 0, index_error = NULL
-                            WHERE index_status = 'available' AND NOT EXISTS
-                            (SELECT 1 FROM public.knowledge_chunks c WHERE c.document_id = d.id
-                             AND c.embedding_provider = %s AND c.embedding_model = %s)""",
-                            (requested_spec.provider, requested_spec.model),
-                        )
-                    cursor.execute(
-                        """SELECT id FROM public.knowledge_documents WHERE index_status IN ('pending', 'processing')
-                        AND is_active AND (expires_at IS NULL OR expires_at > clock_timestamp()) ORDER BY id LIMIT 20"""
-                    )
-                    ids = [row[0] for row in cursor.fetchall()]
-                connection.commit()
-                for document_id in ids:
-                    if stop.is_set():
-                        break
-                    KnowledgeService(connection).index(document_id)
-            except Exception:
-                logging.getLogger("api.knowledge").warning("event=knowledge_worker_unavailable")
-            finally:
-                if connection is not None:
-                    connection.close()
+            process_pending(connection_factory, stop)
             if stop.is_set():
                 return
             _wake.wait(5)

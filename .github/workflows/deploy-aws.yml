@@ -1,0 +1,137 @@
+name: Deploy AWS
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "BackEnd/apps/MonoliticDataStructure/app/**"
+      - "Frontend/**"
+      - ".github/workflows/deploy-aws.yml"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Qué desplegar"
+        type: choice
+        options: [all, backend, frontend]
+        default: all
+
+concurrency:
+  group: deploy-aws
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  FUNCTION_NAME: stockassistant-api
+  ECR_REPOSITORY: stockassistant-api
+  BACKEND_DIR: BackEnd/apps/MonoliticDataStructure/app
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.f.outputs.backend }}
+      frontend: ${{ steps.f.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: f
+        with:
+          filters: |
+            backend:
+              - "BackEnd/apps/MonoliticDataStructure/app/**"
+              - ".github/workflows/deploy-aws.yml"
+            frontend:
+              - "Frontend/**"
+              - ".github/workflows/deploy-aws.yml"
+
+  backend:
+    needs: changes
+    if: >-
+      (github.event_name == 'push' && needs.changes.outputs.backend == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target != 'frontend')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build y push (linux/amd64, tag = SHA)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.BACKEND_DIR }}
+          file: ${{ env.BACKEND_DIR }}/Dockerfile.lambda
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
+          push: true
+          build-args: |
+            REQUIREMENTS_FILE=requirements/lambda.txt
+            APP_MODULE=src.api.main:app
+          tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Actualizar Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name "$FUNCTION_NAME" \
+            --image-uri "${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}" \
+            --query LastUpdateStatus --output text
+          aws lambda wait function-updated --function-name "$FUNCTION_NAME"
+
+      - name: Smoke test
+        run: |
+          # Sin API key: 401/403 prueba que la Lambda arranca y responde; 5xx rompe el job
+          code=$(curl -s -m 90 -o /dev/null -w "%{http_code}" "https://${{ vars.CLOUDFRONT_DOMAIN }}/api/v1/products/?limit=1")
+          echo "HTTP $code"
+          case "$code" in 200|401|403) ;; *) exit 1 ;; esac
+
+  frontend:
+    needs: changes
+    if: >-
+      (github.event_name == 'push' && needs.changes.outputs.frontend == 'true') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target != 'backend')
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: Frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: Frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Build (Google client id público desde SSM)
+        run: |
+          export VITE_GOOGLE_CLIENT_ID="$(aws ssm get-parameter --name /stockassistant/prod/google_client_id --with-decryption --query Parameter.Value --output text)"
+          npm run build
+
+      - name: Sync a S3
+        run: aws s3 sync dist "s3://${{ vars.FRONTEND_BUCKET }}" --delete
+
+      - name: Invalidar CloudFront
+        run: aws cloudfront create-invalidation --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" --paths "/*"

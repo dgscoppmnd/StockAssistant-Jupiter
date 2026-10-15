@@ -162,6 +162,12 @@ class AIService:
         if response.status_code >= 500:
             raise AIProviderError("OpenAI server error", provider="openai", retryable=True)
         if response.status_code >= 400:
+            logger.warning(
+                "event=openai_rejected status=%s model=%s body=%s",
+                response.status_code,
+                self.openai_model,
+                response.text[:500],
+            )
             raise AIProviderError("OpenAI request rejected", provider="openai", retryable=False)
 
         data = response.json()

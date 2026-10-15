@@ -13,6 +13,7 @@ venv/
 
 #Ignorar los achivos ambiente virtual python si es intalado en linux o mac
 .venv/
+.venv-mlfactory
 
 #Ignorar los archivos de configuración de vscode
 .vscode/
@@ -83,3 +84,12 @@ docs/
 !BackEnd/apps/MonoliticDataStructure/app/
 !BackEnd/apps/MonoliticDataStructure/app/docs/
 !BackEnd/apps/MonoliticDataStructure/app/docs/**
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+infra/**/backend.hcl
+crash.log
+infra/rds-global-bundle.pem

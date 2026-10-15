@@ -20,6 +20,7 @@ import type {
   MasterRecord,
 } from "../types";
 import InventoryCrudCard from "./components/InventoryCrudCard";
+import InventoryCardInfo from "./components/InventoryCardInfo";
 import ProductConfigModal from "./components/ProductConfigModal";
 import SectionIcon from "./components/SectionIcon";
 import SupplierCombobox from "./components/SupplierCombobox";
@@ -468,26 +469,26 @@ export default function InventoryPage() {
     <div className="grid">
       <section className="card">
         <p className="section-label">Inventario · Dashboard operativo</p>
-        <h3><SectionIcon kind="warehouse" />Visibilidad de stock por bodega</h3>
+        <div className="routing-info-heading"><h3><SectionIcon kind="warehouse" />Visibilidad de stock por bodega</h3><InventoryCardInfo topic="overview" /></div>
         <div className="quick-row">
           <div className="inventory-stat-card">
-            <span>Productos</span>
+            <div className="inventory-stat-heading"><span>Productos</span><InventoryCardInfo topic="products" /></div>
             <strong>{formatQuantity(dashboard?.total_products ?? 0, 0)}</strong>
           </div>
           <div className="inventory-stat-card">
-            <span>Bodegas</span>
+            <div className="inventory-stat-heading"><span>Bodegas</span><InventoryCardInfo topic="warehousesCount" /></div>
             <strong>{formatQuantity(dashboard?.total_warehouses ?? 0, 0)}</strong>
           </div>
           <div className="inventory-stat-card">
-            <span>Stock fisico</span>
+            <div className="inventory-stat-heading"><span>Stock físico</span><InventoryCardInfo topic="physical" /></div>
             <strong>{formatQuantity(dashboard?.total_stock_units ?? 0, 0)}</strong>
           </div>
           <div className="inventory-stat-card">
-            <span>Disponible</span>
+            <div className="inventory-stat-heading"><span>Disponible</span><InventoryCardInfo topic="available" /></div>
             <strong>{formatQuantity(dashboard?.total_available_units ?? 0, 0)}</strong>
           </div>
           <div className="inventory-stat-card">
-            <span>Bajo minimo</span>
+            <div className="inventory-stat-heading"><span>Bajo mínimo</span><InventoryCardInfo topic="low" /></div>
             <strong>{formatQuantity(dashboard?.low_stock_items ?? 0, 0)}</strong>
           </div>
         </div>
@@ -500,6 +501,7 @@ export default function InventoryPage() {
           className="stock-order-card"
           sectionLabel="Reposicion de inventario"
           title="Crear pedido de stock"
+          titleInfo={<InventoryCardInfo topic="receipt" />}
           titleIcon={<SectionIcon kind="cart" />}
           description="Al confirmarlo, se registra la recepcion, se crea la orden de compra y se actualiza el stock de la bodega."
           onSubmit={onSubmitStockOrder}
@@ -658,6 +660,7 @@ export default function InventoryPage() {
           className="stock-order-card"
           sectionLabel="Reposicion de inventario"
           title="Listado de pedidos de stock"
+          titleInfo={<InventoryCardInfo topic="orders" />}
           titleIcon={<SectionIcon kind="movement" />}
           description="Resumen de recepciones procesadas recientemente desde el dashboard de inventario."
           table={{
@@ -675,6 +678,7 @@ export default function InventoryPage() {
         <InventoryCrudCard<InventoryWarehouse & { description: string }>
           sectionLabel="Setup minimo"
           title="Listado de bodegas"
+          titleInfo={<InventoryCardInfo topic="warehouses" />}
           titleIcon={<SectionIcon kind="warehouse" />}
           description="Bodegas activas e historico reciente."
           headerAction={
@@ -702,6 +706,7 @@ export default function InventoryPage() {
         <InventoryCrudCard<ProductConfigRow>
           sectionLabel="Producto base"
           title="Listado de configuraciones"
+          titleInfo={<InventoryCardInfo topic="config" />}
           titleIcon={<SectionIcon kind="operations" />}
           description="Vista consolidada de unidad base, punto de pedido y stock disponible por producto."
           headerAction={
@@ -729,6 +734,7 @@ export default function InventoryPage() {
         <InventoryCrudCard<MovementTableRow>
           sectionLabel="Movimientos"
           title="Ultimos registros"
+          titleInfo={<InventoryCardInfo topic="movements" />}
           titleIcon={<SectionIcon kind="movement" />}
           table={{
             keyField: "id",
@@ -741,7 +747,7 @@ export default function InventoryPage() {
         >
           <div>
             <p className="section-label">Operaciones</p>
-            <h3><SectionIcon kind="operations" />Acciones rapidas de prueba</h3>
+            <div className="routing-info-heading"><h3><SectionIcon kind="operations" />Acciones rápidas de prueba</h3><InventoryCardInfo topic="quick" /></div>
             <p className="muted">
               Usan el primer producto y las primeras bodegas visibles para validar recepcion y transferencia minima.
             </p>
@@ -792,6 +798,7 @@ export default function InventoryPage() {
         <InventoryCrudCard<SnapshotTableRow>
           sectionLabel="Stock disponible"
           title="Snapshot por producto y bodega"
+          titleInfo={<InventoryCardInfo topic="snapshot" />}
           titleIcon={<SectionIcon kind="stock" />}
           table={{
             keyField: "id",

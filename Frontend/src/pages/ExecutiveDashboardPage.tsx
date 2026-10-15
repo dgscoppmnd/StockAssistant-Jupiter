@@ -3,6 +3,7 @@ import { analyzeWithStockAssistantAgent, fetchExecutiveDashboard } from "../api"
 import { useAuth } from "../auth";
 import type { ExecutiveDashboard } from "../types";
 import SectionIcon from "./components/SectionIcon";
+import DashboardAssistantInfo from "./components/DashboardAssistantInfo";
 
 type ChatMessage = { role: "user" | "assistant"; text: string; createdAt: string };
 const HISTORY_KEY = "stockassistant-stock-assistant-history";
@@ -111,7 +112,7 @@ export default function ExecutiveDashboardPage() {
           <article className="card"><p className="section-label">Estado</p><h3><SectionIcon kind="risk" />Distribución de riesgos</h3><ShortChart title="Distribución de riesgos" items={(data?.risk_distribution ?? []).map((item) => ({ ...item }))} first="value" /></article>
           <article className="card"><p className="section-label">Proveedores</p><h3><SectionIcon kind="supplier" />Coste, cumplimiento y lead time</h3>{data?.supplier_comparison.length ? <div className="supplier-list">{data.supplier_comparison.map((supplier) => <div key={supplier.name}><strong>{supplier.name}</strong><span>Sin histórico de coste, fecha comprometida o lead time.</span></div>)}</div> : <EmptyChart title="Comparativa de proveedores" />}</article>
         </div>
-        <article className="dashboard-ai-cta"><div><p className="section-label">Recomendación IA</p><h3>Convierte las alertas en un plan de compra justificable.</h3><p>Consulta a Stock Assistant usando el mismo agente de StockAssistant. La respuesta indica sus fuentes cuando existan.</p></div><button className="primary-btn" onClick={() => document.getElementById("stock-assistant-input")?.focus()} type="button">Analizar con Stock Assistant</button></article>
+        <article className="dashboard-ai-cta"><div><p className="section-label">Recomendación IA</p><div className="routing-info-heading"><h3>Convierte las alertas en un plan de compra justificable.</h3><DashboardAssistantInfo /></div><p>Consulta a Stock Assistant usando el mismo agente de StockAssistant. La respuesta indica sus fuentes cuando existan.</p></div><button className="primary-btn" onClick={() => document.getElementById("stock-assistant-input")?.focus()} type="button">Analizar con Stock Assistant</button></article>
       </div>
       <aside className="dashboard-side">
         <article className="card dashboard-alerts"><p className="section-label"><SectionIcon kind="alert" />Alertas inteligentes</p><h3>Qué requiere atención</h3>{alerts.length ? alerts.slice(0, 6).map((alert, index) => <div className={`alert-item ${alert.severity}`} key={index}><span>{String(alert.kind).replace(/_/g, " ")}</span><strong>{String(alert.product_name)}</strong><p>{String(alert.message)}</p></div>) : <p className="muted">No hay alertas activas con la configuración actual.</p>}</article>
