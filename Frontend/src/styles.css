@@ -1050,6 +1050,84 @@ body[data-theme="day"] .users-table tbody tr:hover td {
   box-shadow: inset 0 0 0 1px rgba(0, 123, 208, 0.16);
 }
 
+.product-list-table {
+  table-layout: fixed;
+}
+
+.product-list-table thead th {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+  vertical-align: middle;
+}
+
+.product-list-table tbody td {
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.product-text-preview {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: help;
+}
+
+.product-text-preview > span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.product-text-preview-link {
+  color: var(--cyan);
+}
+
+.product-text-preview:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.product-text-popup {
+  position: fixed;
+  z-index: 1100;
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 24px));
+  overflow: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #0d1728;
+  color: var(--text-main);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.product-text-popup a {
+  color: var(--cyan);
+}
+
+body[data-theme="day"] .product-text-popup {
+  background: #fff;
+}
+
+.product-text-popup-hint {
+  display: block;
+  margin-top: 10px;
+  font-size: 0.75rem;
+}
+
 .users-table .actions-cell {
   display: flex;
   align-items: center;
