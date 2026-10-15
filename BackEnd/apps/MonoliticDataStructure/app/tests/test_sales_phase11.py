@@ -42,7 +42,7 @@ class SalesIntegrationTests(unittest.TestCase):
             with connection:
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        Path("/app/docker/init-scripts/init.sql").read_text(encoding="utf-8")
+                        (Path(__file__).resolve().parents[1] / "docker" / "init-scripts" / "init.sql").read_text(encoding="utf-8")
                     )
                     cursor.execute(sales_schema_sql())
             connection.close()
