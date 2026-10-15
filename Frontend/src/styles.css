@@ -1168,18 +1168,24 @@ body[data-theme="day"] .product-modal {
   flex-shrink: 0;
   width: 32px;
   height: 32px;
-  padding: 5px;
-  border: 1px solid var(--line-strong);
+  padding: 8px;
+  border: 0;
   border-radius: 50%;
-  background: var(--bg-1);
+  background: transparent;
   color: var(--text-soft);
   cursor: pointer;
+  vertical-align: middle;
+  transition: color 150ms ease, background-color 150ms ease;
 }
 
-.routing-info-button:hover { color: var(--text-main); }
-.routing-info-button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
-.routing-info-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.routing-info-button:hover { color: var(--text-main); background-color: var(--line); }
+.routing-info-button:focus-visible { color: var(--text-main); outline: 2px solid var(--text-soft); outline-offset: 2px; }
+.routing-info-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 .routing-info-button .routing-info-dot { fill: currentColor; stroke: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .routing-info-button { transition: none; }
+}
 
 .routing-info-dialog {
   margin: auto;
