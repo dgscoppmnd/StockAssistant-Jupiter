@@ -672,6 +672,7 @@ def init_products_db() -> None:
         "CREATE EXTENSION IF NOT EXISTS pg_trgm",
         SEARCH_INDEX_SQL,
         sales_schema_sql(),
+        Path(__file__).with_name("automation_schema.sql").read_text(encoding="utf-8"),
     ]
 
     with db_context() as connection:

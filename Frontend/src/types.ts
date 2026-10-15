@@ -385,7 +385,7 @@ export type SupportTurn = { role: "user" | "assistant"; content: string };
 
 export type AutomationRule = { id: number; code: string; name: string; description: string; is_active: boolean; interval_minutes: number; last_run_at?: string | null };
 export type AutomationRun = { id: number; rule_code: string; initiated_by: string; status: string; started_at: string; completed_at?: string | null };
-export type PurchaseProposal = { id: number; product_name: string; warehouse_name: string; suggested_qty: number; base_unit_code: string; status: string; justification: string; created_at: string };
+export type PurchaseProposal = { id: number; source?: string; product_name: string; warehouse_name: string; suggested_qty: number; base_unit_code: string; status: string; justification: string; created_at: string };
 export type ExecutiveResult = { decision_id: number; routed_agent: string; tool: string; execution_policy: string; result: Record<string, unknown> };
 
 export type MasterRecord = { id: number; created_at?: string; updated_at?: string; [key: string]: unknown };
