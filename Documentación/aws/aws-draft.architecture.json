@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "StockAssistant Jupiter - AWS (borrador ~$55/mes)",
+    "output": "aws-draft.html",
+    "locale": "en",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    { "id": "users", "type": "external", "label": "Navegador", "sublabel": "React SPA", "pos": [40, 300], "size": [120, 60] },
+    { "id": "google", "type": "security", "label": "Google Identity", "sublabel": "GSI login", "pos": [40, 110], "size": [140, 64] },
+    { "id": "cf", "type": "cloud", "label": "CloudFront", "sublabel": "Route 53 + ACM TLS", "pos": [250, 300], "size": [150, 60] },
+    { "id": "s3fe", "type": "cloud", "label": "S3 frontend", "sublabel": "Vite build (OAC)", "pos": [250, 440], "size": [150, 60] },
+    { "id": "api", "type": "backend", "label": "FastAPI", "sublabel": "EC2 t4g.medium :8000", "pos": [500, 300], "size": [160, 60], "tag": "Docker + workers" },
+    { "id": "qdrant", "type": "database", "label": "Qdrant", "sublabel": "vectors :6333 (EBS)", "pos": [500, 160], "size": [160, 60] },
+    { "id": "ssm", "type": "security", "label": "SSM Parameter Store", "sublabel": "API keys, secrets", "pos": [500, 440], "size": [160, 60] },
+    { "id": "rds", "type": "database", "label": "RDS PostgreSQL", "sublabel": "db.t4g.micro :5432", "pos": [790, 160], "size": [150, 60] },
+    { "id": "s3up", "type": "cloud", "label": "S3 uploads", "sublabel": "uploads + knowledge", "pos": [790, 440], "size": [150, 60] },
+    { "id": "llm", "type": "external", "label": "OpenAI / Bedrock", "sublabel": "LLM chat + RAG", "pos": [1030, 300], "size": [150, 60] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "AWS Region: eu-west-1", "wraps": ["cf", "s3fe", "api", "qdrant", "ssm", "rds", "s3up"] },
+    { "kind": "security-group", "label": "EC2 SG: solo CloudFront", "wraps": ["api", "qdrant"] }
+  ],
+  "connections": [
+    { "id": "users-to-cf", "from": "users", "to": "cf", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "users-to-google", "from": "users", "to": "google", "label": "sign-in", "variant": "security", "fromSide": "top", "toSide": "bottom" },
+    { "id": "cf-to-s3", "from": "cf", "to": "s3fe", "label": "static", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelDy": 58 },
+    { "id": "cf-to-api", "from": "cf", "to": "api", "label": "/api/*, /media/*" },
+    { "id": "api-to-qdrant", "from": "api", "to": "qdrant", "label": "search", "fromSide": "top", "toSide": "bottom" },
+    { "id": "api-to-ssm", "from": "api", "to": "ssm", "label": "secrets", "variant": "dashed", "fromSide": "bottom", "toSide": "top", "labelDy": 58 },
+    { "id": "api-to-rds", "from": "api", "to": "rds", "label": "SQL" },
+    { "id": "api-to-s3up", "from": "api", "to": "s3up", "label": "files", "variant": "dashed" },
+    { "id": "api-to-llm", "from": "api", "to": "llm", "label": "chat / RAG", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Borde", "items": ["CloudFront como unico punto de entrada", "Sin ALB ni NAT para ahorrar coste"] },
+    { "dot": "emerald", "title": "Aplicacion", "items": ["FastAPI + Qdrant en una EC2", "Postgres gestionado en RDS micro"] },
+    { "dot": "rose", "title": "Coste", "items": ["~$52-55/mes con credito de $60", "Alerta en AWS Budgets a $50"] }
+  ]
+}

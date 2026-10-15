@@ -2,6 +2,7 @@ import logging
 import json
 import os
 import uuid
+import file_storage
 from itertools import islice
 from pathlib import Path
 from starlette.concurrency import run_in_threadpool
@@ -48,7 +49,10 @@ router = APIRouter()
 logger = logging.getLogger("api.endpointsProducts")
 
 PRODUCT_IMAGE_MAX_BYTES = int(os.getenv("PRODUCT_IMAGE_MAX_BYTES", str(100 * 1024 * 1024)))
-PRODUCT_IMAGE_UPLOAD_DIR = Path("/app/data/uploads/products")
+PRODUCT_IMAGE_UPLOAD_DIR = Path(
+	os.getenv("PRODUCT_IMAGE_UPLOAD_DIR")
+	or ("/tmp/uploads/products" if os.getenv("AWS_LAMBDA_FUNCTION_NAME") else "/app/data/uploads/products")
+)
 ALLOWED_IMAGE_CONTENT_TYPES: dict[str, str] = {
 	"image/png": ".png",
 	"image/jpeg": ".jpg",
@@ -225,6 +229,17 @@ async def subir_imagen_producto(
 		await file.close()
 
 	public_url = f"/api/media/products/{stored_filename}"
+	if file_storage.bucket():
+		try:
+			await run_in_threadpool(file_storage.upload, stored_path, f"products/{stored_filename}", content_type)
+		except Exception as exc:
+			logger.exception("event=upload_product_image_s3_error filename=%s", file.filename)
+			raise HTTPException(
+				status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+				detail="No se pudo guardar la imagen",
+			) from exc
+		finally:
+			stored_path.unlink(missing_ok=True)
 	created_image = insert_product_image(
 		{
 			"product_id": product_id,
@@ -316,6 +331,8 @@ def borrar_imagen_producto(product_id: int, image_id: int, db=Depends(get_db_pro
 
 	if storage_path.exists():
 		storage_path.unlink(missing_ok=True)
+	if file_storage.bucket() and image.get("stored_filename"):
+		file_storage.delete(f"products/{image['stored_filename']}")
 
 	if image.get("is_default"):
 		next_image = get_product_images_by_product_id(product_id, connection=db)

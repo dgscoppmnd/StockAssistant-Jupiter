@@ -5,6 +5,8 @@ los productos gestionados desde el frontend
 (``name_product``/``description_product``).
 """
 
+from __future__ import annotations
+
 import argparse
 import hashlib
 import logging
@@ -12,16 +14,26 @@ from pathlib import Path
 from itertools import islice
 from typing import Dict, Iterable, Iterator, List
 
-import pandas as pd
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointIdsList, PointStruct, VectorParams
+try:
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import Distance, PointIdsList, PointStruct, VectorParams
+except ImportError:  # en Lambda no se incluye qdrant_client
+    QdrantClient = None
 
 from api.config import settings
 from .embeddings import encode_texts
+from .s3vectors_store import S3VectorsStore, truncate_metadata, use_s3_vectors
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_CSV = Path(__file__).resolve().parents[2] / "data" / "generated" / "products.csv"
+PRODUCT_METADATA_LIMITS = {"description": 200, "product_name": 120}
+
+
+def _products_store() -> S3VectorsStore:
+    import os
+
+    return S3VectorsStore(os.getenv("S3_VECTORS_PRODUCTS_INDEX", "products"))
 
 
 def _first_value(product: Dict[str, object], *keys: str, default: object = "") -> object:
@@ -114,6 +126,22 @@ def iter_upsert_product_records(
     """Actualiza productos por lotes y comunica el total tras cada upsert."""
     if batch_size < 1:
         raise ValueError("batch_size debe ser mayor que cero")
+    if use_s3_vectors() and client is None:
+        store = _products_store()
+        total = 0
+        for batch in _batches(products, batch_size):
+            vectors = encode_texts([product_text(product) for product in batch])
+            store.put(
+                {
+                    "key": stable_point_id(product_point_key(product)),
+                    "vector": vector,
+                    "metadata": truncate_metadata(product_payload(product), PRODUCT_METADATA_LIMITS),
+                }
+                for product, vector in zip(batch, vectors)
+            )
+            total += len(batch)
+            yield total
+        return
     own_client = client is None
     qdrant = client or get_client()
     total = 0
@@ -155,6 +183,9 @@ def upsert_product_records(
 
 def delete_product_record(pk_product: int, client: QdrantClient | None = None) -> None:
     """Elimina el vector asociado a un producto operativo, si existe."""
+    if use_s3_vectors() and client is None:
+        _products_store().delete([stable_point_id(f"operational:{pk_product}")])
+        return
     own_client = client is None
     qdrant = client or get_client()
     try:
@@ -174,6 +205,8 @@ def delete_product_record(pk_product: int, client: QdrantClient | None = None) -
 
 def index_products(csv_path: Path, batch_size: int = 128) -> int:
     """Indexa productos por lotes y devuelve el número de puntos escritos."""
+    import pandas as pd
+
     def rows() -> Iterator[Dict[str, object]]:
         for dataframe_batch in pd.read_csv(csv_path, chunksize=batch_size):
             yield from dataframe_batch.to_dict("records")

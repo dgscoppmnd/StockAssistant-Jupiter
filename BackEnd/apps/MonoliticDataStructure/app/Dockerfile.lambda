@@ -1,0 +1,37 @@
+ARG REQUIREMENTS_FILE=requirements/smoke.txt
+ARG APP_MODULE=lambda.smoke_app:app
+
+FROM python:3.11-slim
+
+ARG REQUIREMENTS_FILE
+ARG APP_MODULE
+
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0 /lambda-adapter /opt/extensions/lambda-adapter
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Bundle de CA de RDS para sslmode=verify-full
+ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /opt/rds-global-bundle.pem
+# Lambda ejecuta como usuario sin privilegios: el fichero debe ser legible por todos
+RUN chmod 0644 /opt/rds-global-bundle.pem
+
+WORKDIR /var/task
+
+COPY ${REQUIREMENTS_FILE} /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+COPY . /var/task
+
+ENV PORT=8000 \
+    APP_MODULE=${APP_MODULE} \
+    AWS_LWA_PORT=8000 \
+    AWS_LWA_INVOKE_MODE=response_stream \
+    AWS_LWA_READINESS_CHECK_PATH=/health \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/var/task:/var/task/src \
+    PGSSLMODE=verify-full \
+    PGSSLROOTCERT=/opt/rds-global-bundle.pem
+
+CMD exec uvicorn $APP_MODULE --host 0.0.0.0 --port $PORT

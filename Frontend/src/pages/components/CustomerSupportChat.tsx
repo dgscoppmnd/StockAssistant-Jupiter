@@ -3,6 +3,7 @@ import { askCustomerSupport } from "../../api";
 import type { CustomerSupportAnswer, ProductOption, SupportTurn } from "../../types";
 import ProductCombobox from "./ProductCombobox";
 import SectionIcon from "./SectionIcon";
+import CustomerSupportInfo from "./CustomerSupportInfo";
 
 type ChatMessage = SupportTurn & { result?: CustomerSupportAnswer; failed?: boolean };
 
@@ -34,7 +35,7 @@ export default function CustomerSupportChat() {
 
   return <article className="card">
     <p className="section-label">Atención al cliente · RAG</p>
-    <h3><SectionIcon kind="assistant" />Asistente con fuentes vigentes</h3>
+    <div className="routing-info-heading"><h3><SectionIcon kind="assistant" />Asistente con fuentes vigentes</h3><CustomerSupportInfo /></div>
     <p className="muted">Consulta los documentos procesados de Base de conocimiento. Puedes añadir un producto para consultar su stock actual.</p>
     <label>Producto opcional</label>
     <ProductCombobox selectedProduct={product} selectedId={product?.pk_product ?? 0} disabled={pending}

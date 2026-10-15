@@ -1,8 +1,12 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { askExecutive, fetchAutomationRules, fetchAutomationRuns, fetchPurchaseProposals, runAutomationRule, updateAutomationRule } from "../api";
-import type { AutomationRule, AutomationRun, ExecutiveResult, ProductOption, PurchaseProposal } from "../types";
+import type { AutomationRule, AutomationRun, ExecutiveResult, ProductOption, PurchaseProposal, SalesClient } from "../types";
+import ClientCombobox from "./components/ClientCombobox";
 import ProductCombobox from "./components/ProductCombobox";
 import SectionIcon from "./components/SectionIcon";
+import ExecutiveRoutingInfo from "./components/ExecutiveRoutingInfo";
+import ExecutiveAutomationInfo from "./components/ExecutiveAutomationInfo";
+import ExecutiveRunsInfo from "./components/ExecutiveRunsInfo";
 
 export default function ExecutivePage() {
   const [rules, setRules] = useState<AutomationRule[]>([]);
@@ -10,7 +14,7 @@ export default function ExecutivePage() {
   const [proposals, setProposals] = useState<PurchaseProposal[]>([]);
   const [question, setQuestion] = useState("");
   const [productId, setProductId] = useState("");
-  const [clientId, setClientId] = useState("");
+  const [selectedClient, setSelectedClient] = useState<SalesClient | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ProductOption | null>(null);
   const [answer, setAnswer] = useState<ExecutiveResult | null>(null);
   const [isQuerying, setIsQuerying] = useState(false);
@@ -58,7 +62,7 @@ const query = async (event: FormEvent<HTMLFormElement>) => {
     const nextAnswer = await askExecutive({
       question: prompt,
       product_id: productId ? Number(productId) : undefined,
-      client_id: clientId ? Number(clientId) : undefined,
+      client_id: selectedClient?.id,
     });
     setAnswer(nextAnswer);
     setStatus("Consulta completada.");
@@ -79,18 +83,12 @@ const query = async (event: FormEvent<HTMLFormElement>) => {
 
   return <div className="grid executive-page">
     <section className="card executive-hero"><p className="section-label">Fase 4 · Agente Ejecutivo</p><h3><SectionIcon kind="executive" />Coordina, explica y deja el control en manos humanas</h3><p>Este agente consulta herramientas verificables y nunca crea pedidos definitivos ni altera inventario.</p><p className="status-line">{status}</p>{error && <p className="error-line">{error}</p>}</section>
-    <section className="grid two-columns"><article className="card"><p className="section-label">Consulta ejecutiva</p><h3><SectionIcon kind="route" />Enrutamiento trazable</h3><form className="stack" onSubmit={query}><textarea required disabled={isQuerying} placeholder="Ejemplo: ¿qué productos tienen riesgo de rotura de stock?" value={question} onChange={(event) => setQuestion(event.target.value)} rows={3} />
-      <label className="field-label" style={{ display: "grid", gap: 6 }}>
-        ID de cliente (para consultas de cuenta o postventa)
-        <input
-          type="number"
-          min="1"
-          value={clientId}
-          disabled={isQuerying}
-          onChange={(event) => setClientId(event.target.value)}
-          placeholder="Ejemplo: 42"
-        />
-      </label>
+    <section className="grid two-columns"><article className="card"><p className="section-label">Consulta ejecutiva</p><div className="routing-info-heading"><h3><SectionIcon kind="route" />Enrutamiento trazable</h3><ExecutiveRoutingInfo /></div><form className="stack" onSubmit={query}><textarea required disabled={isQuerying} placeholder="Ejemplo: ¿qué productos tienen riesgo de rotura de stock?" value={question} onChange={(event) => setQuestion(event.target.value)} rows={3} />
+      <ClientCombobox selected={selectedClient} disabled={isQuerying} onSelect={(client) => {
+        setSelectedClient(client);
+        setError("");
+      }} />
+      {selectedClient && <button className="chip-btn" type="button" disabled={isQuerying} onClick={() => setSelectedClient(null)}>Quitar cliente</button>}
       <ProductCombobox
         label="Producto opcional (código o nombre)"
         selectedProduct={selectedProduct} selectedId={Number(productId)}
@@ -113,7 +111,7 @@ const query = async (event: FormEvent<HTMLFormElement>) => {
   </details>
 </div>}</article>
       <article className="card"><p className="section-label">Propuestas de compra</p><h3><SectionIcon kind="approval" />Aprobación humana obligatoria</h3><div className="inventory-list">{proposals.map((proposal) => <div className="inventory-list-item" key={proposal.id}><strong>{proposal.product_name}</strong><span>{proposal.suggested_qty} {proposal.base_unit_code} · {proposal.warehouse_name}</span><small>{proposal.status}: {proposal.justification}</small></div>)}{!proposals.length && <p className="muted">No hay propuestas pendientes.</p>}</div></article></section>
-    <section className="card"><p className="section-label">Automatizaciones del backend</p><h3><SectionIcon kind="automation" />Activar, ejecutar y auditar</h3><div className="inventory-table">{rules.map((rule) => <div className="inventory-table-row executive-rule" key={rule.id}><span><strong>{rule.name}</strong><small>{rule.description}</small></span><span>{rule.is_active ? "Activa" : "Pausada"}</span><span><button className="chip-btn" onClick={() => void toggle(rule)} type="button">{rule.is_active ? "Pausar" : "Activar"}</button><button className="primary-btn" onClick={() => void run(rule.id)} type="button">Ejecutar</button></span></div>)}</div></section>
-    <section className="card"><p className="section-label">Auditoria</p><h3><SectionIcon kind="audit" />Ultimas ejecuciones</h3><div className="inventory-table">{runs.map((run) => <div className="inventory-table-row" key={run.id}><span>{run.rule_code}</span><span>{run.status}</span><span>{new Date(run.started_at).toLocaleString()}</span></div>)}{!runs.length && <p className="muted">Aun no hay ejecuciones auditadas.</p>}</div></section>
+    <section className="card"><p className="section-label">Automatizaciones del backend</p><div className="routing-info-heading"><h3><SectionIcon kind="automation" />Activar, ejecutar y auditar</h3><ExecutiveAutomationInfo /></div><div className="inventory-table">{rules.map((rule) => <div className="inventory-table-row executive-rule" key={rule.id}><span><strong>{rule.name}</strong><small>{rule.description}</small></span><span>{rule.is_active ? "Activa" : "Pausada"}</span><span><button className="chip-btn" onClick={() => void toggle(rule)} type="button">{rule.is_active ? "Pausar" : "Activar"}</button><button className="primary-btn" onClick={() => void run(rule.id)} type="button">Ejecutar</button></span></div>)}</div></section>
+    <section className="card"><p className="section-label">Auditoría</p><div className="routing-info-heading"><h3><SectionIcon kind="audit" />Últimas ejecuciones</h3><ExecutiveRunsInfo /></div><div className="inventory-table">{runs.map((run) => <div className="inventory-table-row" key={run.id}><span>{run.rule_code}</span><span>{run.status}</span><span>{new Date(run.started_at).toLocaleString()}</span></div>)}{!runs.length && <p className="muted">Aún no hay ejecuciones auditadas.</p>}</div></section>
   </div>;
 }
