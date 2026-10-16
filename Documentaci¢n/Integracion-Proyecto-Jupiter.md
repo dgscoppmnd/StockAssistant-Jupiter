@@ -24,7 +24,7 @@ La base configurada es `supply_chain`. El esquema original conserva `products`, 
 
 El esquema operativo utiliza `productos`, `inventory_*`, documentos de compra/venta, reseñas y conocimiento. Ambos grupos se mantienen en la misma base, respetando sus identificadores y contratos de API. No se presupone equivalencia entre los identificadores alfanuméricos del catálogo analítico y los numéricos del catálogo operativo, ni se introduce una sincronización automática entre ambos.
 
-Se incorporan `agent_decisions`, `automation_rules`, `automation_runs` y `purchase_proposals`, con sus relaciones e índices. `docker/init-scripts/init.sql` contiene el esquema completo y la cuenta inicial dentro de una transacción. Puede aplicarse a una base existente; no elimina tablas ni registros. Al reaplicarlo, restablece las credenciales y el estado activo del administrador solicitado. El inicio del backend también crea las tablas operativas faltantes.
+Se incorporan `agent_decisions`, `automation_rules`, `automation_runs` y `purchase_proposals`, con sus relaciones e índices. `docker/init-scripts/init.sql` contiene el esquema completo y la cuenta inicial dentro de una transacción. Puede aplicarse a una base existente; no elimina tablas ni registros. Al reaplicarlo, conserva las credenciales y el estado activo de los usuarios existentes. El inicio del backend también crea las tablas operativas faltantes.
 
 La migración se aplicó a la base local después de crear el respaldo:
 
@@ -101,7 +101,7 @@ Se conserva el nombre físico `globlal_addresses` utilizado por el contrato de o
 
 También se incorporan el índice único de código externo de producto, la vista de productos recientes y el trigger de fechas. Antes de crear el índice se comprobó que no había códigos externos duplicados. `proms` mantiene sus columnas locales y añade `nombre`, `prom`, `status` e `id_prom` calculado a partir de `id`, haciendo compatible el contrato del backend de referencia sin perder los registros existentes.
 
-El bloque nuevo se encuentra igualmente en `src/DataBaseManagement/schema_extensions.sql`, que el backend ejecuta al inicializar sus tablas. Su contenido está incluido en `docker/init-scripts/init.sql`. Los tipos iniciales se insertan sin sobrescribir etiquetas que el usuario haya editado.
+El bloque comercial está integrado en `docker/init-scripts/init.sql`, la fuente única que ejecuta el backend al inicializar sus tablas. Los tipos iniciales se insertan sin sobrescribir etiquetas que el usuario haya editado.
 
 No se importan cambios de propietario, conexiones a otras bases, n8n, TaskManager, Gantt ni costes o registros de horas. Se mantienen las correcciones locales de autenticación y del trabajador de automatizaciones. Los selectores de inventario reutilizaban nombres CSS del registro de horas; se adaptaron a nombres propios de inventario y se retiraron los estilos de los módulos excluidos.
 

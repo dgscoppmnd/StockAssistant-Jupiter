@@ -187,7 +187,7 @@ docker compose -f $compose exec -T postgres psql -U admin -d supply_chain -v ON_
 docker compose -f $compose up -d --build
 ```
 
-Reaplicar `init.sql` restablece las credenciales y el estado activo del administrador inicial. Consulta las [notas de integración](Documentación/Integracion-Proyecto-Jupiter.md) antes de migrar datos existentes.
+Reaplicar `init.sql` conserva las credenciales y el estado de los usuarios existentes. Consulta las [notas de integración](Documentación/Integracion-Proyecto-Jupiter.md) antes de migrar datos existentes.
 
 ### Actualizar solo las columnas del catálogo analítico
 

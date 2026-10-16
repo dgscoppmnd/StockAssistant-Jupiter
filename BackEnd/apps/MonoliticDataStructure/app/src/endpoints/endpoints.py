@@ -14,6 +14,7 @@ from .endpointsInventory import router as inventory_router
 from .endpointsAgentsIntelligence import router as intelligence_agents_router
 from .endpointsCommercialAgents import router as commercial_agents_router
 from .endpointsExecutive import router as executive_router
+from .endpointsAutomation import router as automation_router
 from .endpointsMasterData import router as master_data_router
 from .endpointsChat import router as chat_router
 from .endpointRag import router as rag_router
@@ -38,6 +39,7 @@ router.include_router(inventory_router)
 router.include_router(intelligence_agents_router)
 router.include_router(commercial_agents_router)
 router.include_router(executive_router)
+router.include_router(automation_router)
 router.include_router(master_data_router)
 router.include_router(sales_router)
 

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from DataBaseManagement.dbConectionPostgres import get_db_products
 from DataBaseManagement.schemasAgents import AutomationStateRequest, ExecutiveRequest
 from executive_service import AutomationService, ExecutiveService
+from .endpointsAutomation import service as authenticated_automation, permit
 
 router = APIRouter(prefix="/executive", tags=["executive"])
 
@@ -11,8 +12,9 @@ def _executive(db=Depends(get_db_products)) -> ExecutiveService:
     return ExecutiveService(db)
 
 
-def _automation(db=Depends(get_db_products)) -> AutomationService:
-    return AutomationService(db)
+def _automation(service=Depends(authenticated_automation)) -> AutomationService:
+    permit(service, 'read')
+    return service
 
 
 @router.post("/query")
@@ -40,14 +42,16 @@ def automation_rules(service: AutomationService = Depends(_automation)):
 
 @router.put("/automations/{rule_id}")
 def update_automation(rule_id: int, payload: AutomationStateRequest, service: AutomationService = Depends(_automation)):
+    permit(service, 'activate')
     try:
-        return service.set_rule_active(rule_id, payload.is_active)
+        return service.set_rule_active(rule_id, payload.is_active, service.user['email'])
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/automations/{rule_id}/run")
 def run_automation(rule_id: int, service: AutomationService = Depends(_automation)):
+    permit(service, 'activate')
     try:
         return service.run_rule(rule_id)
     except ValueError as exc:

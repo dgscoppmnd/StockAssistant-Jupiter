@@ -1,0 +1,51 @@
+{
+  "server": {
+    "database": "supply_chain",
+    "version": "15.14",
+    "checked_at": "2026-10-15 17:49:24.626845+00:00",
+    "read_only": "on"
+  },
+  "source_sha256": "4cf66ec74c8b76a1d0ad70a34e642c030434aec88f3cf594c4af7edc9c25489b",
+  "expected_counts": {
+    "tables": 66,
+    "columns": 619,
+    "constraints": 230,
+    "explicit_indexes": 41,
+    "views": 4,
+    "functions": 5,
+    "triggers": 8
+  },
+  "actual_counts": {
+    "tables": 66,
+    "columns": 619,
+    "constraints": 230,
+    "indexes": 139,
+    "views": 4,
+    "functions": 5,
+    "triggers": 8,
+    "extensions": 4
+  },
+  "differences": {
+    "tables_missing_in_database": [],
+    "tables_missing_in_sql": [],
+    "columns_missing_in_database": [],
+    "columns_missing_in_sql": [],
+    "column_differences": [],
+    "constraints_missing_in_database": [],
+    "constraints_missing_in_sql": [],
+    "indexes_missing_in_database": [],
+    "indexes_extra_in_database": [],
+    "index_definition_differences": [],
+    "views_missing_in_database": [],
+    "views_extra_in_database": [],
+    "view_definition_differences": [],
+    "functions_missing_in_database": [],
+    "functions_extra_in_database": [],
+    "function_body_differences": [],
+    "triggers_missing_in_database": [],
+    "triggers_extra_in_database": [],
+    "trigger_definition_differences": [],
+    "extensions_missing_in_database": []
+  },
+  "scope": "Offline declaration analysis; PostgreSQL metadata read-only. No init.sql execution. View bodies, ownership, privileges and data rows not semantically compared."
+}
