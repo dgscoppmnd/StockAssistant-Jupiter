@@ -16,16 +16,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from .config import settings
-from .database import engine, Base
 from .routes import products, inventory, sales, suppliers, logistics, metrics, analytics, knowledge
 from endpoints.endpoints import public_router, router as stockassistant_router
 from DataBaseManagement.dbConectionPostgres import (
     init_db,
-    init_products_db,
     _get_postgres_connection_server,
 )
 from executive_service import start_automation_worker, stop_automation_worker
-from knowledge_schema import ensure_knowledge_schema
 import file_storage
 from knowledge_worker import process_pending, start_knowledge_worker
 from security import require_api_key
@@ -38,8 +35,6 @@ from pathlib import Path
 # Lambda: FS de solo lectura salvo /tmp, sin hilos persistentes y usuario sin DDL
 IS_LAMBDA = bool(os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
 
-if not IS_LAMBDA:
-    Base.metadata.create_all(bind=engine)
 LOGGER = logging.getLogger("src.api.main")
 
 app = FastAPI(
@@ -85,12 +80,6 @@ def on_startup_init_db() -> None:
         return
     LOGGER.info("event=startup_init_db")
     init_db()
-    init_products_db()
-    connection = _get_postgres_connection_server()
-    try:
-        ensure_knowledge_schema(connection)
-    finally:
-        connection.close()
     app.state.knowledge_stop = start_knowledge_worker(_get_postgres_connection_server)
     start_automation_worker(_get_postgres_connection_server)
 

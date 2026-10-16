@@ -1,0 +1,569 @@
+{
+  "server": {
+    "database": "supply_chain",
+    "version": "15.14",
+    "checked_at": "2026-10-15 17:37:22.248319+00:00",
+    "read_only": "on"
+  },
+  "source_sha256": "8f74dbded90a67153fcd021b3944c26d44e00de8cf534dfedbdd21ae40bcf22f",
+  "expected_counts": {
+    "tables": 66,
+    "columns": 619,
+    "constraints": 230,
+    "explicit_indexes": 41,
+    "views": 4,
+    "functions": 5,
+    "triggers": 8
+  },
+  "actual_counts": {
+    "tables": 66,
+    "columns": 619,
+    "constraints": 191,
+    "indexes": 137,
+    "views": 4,
+    "functions": 5,
+    "triggers": 8,
+    "extensions": 4
+  },
+  "differences": {
+    "tables_missing_in_database": [],
+    "tables_missing_in_sql": [],
+    "columns_missing_in_database": [],
+    "columns_missing_in_sql": [],
+    "column_differences": [
+      {
+        "column": "products.created_at",
+        "differences": {
+          "default_expr": {
+            "init_sql": "CURRENT_TIMESTAMP",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "products.updated_at",
+        "differences": {
+          "default_expr": {
+            "init_sql": "CURRENT_TIMESTAMP",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "suppliers.created_at",
+        "differences": {
+          "default_expr": {
+            "init_sql": "CURRENT_TIMESTAMP",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "suppliers.updated_at",
+        "differences": {
+          "default_expr": {
+            "init_sql": "CURRENT_TIMESTAMP",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "warehouses.created_at",
+        "differences": {
+          "default_expr": {
+            "init_sql": "CURRENT_TIMESTAMP",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "warehouses.updated_at",
+        "differences": {
+          "default_expr": {
+            "init_sql": "CURRENT_TIMESTAMP",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "inventory.product_id",
+        "differences": {
+          "not_null": {
+            "init_sql": true,
+            "postgres": false
+          }
+        }
+      },
+      {
+        "column": "inventory.warehouse_id",
+        "differences": {
+          "not_null": {
+            "init_sql": true,
+            "postgres": false
+          }
+        }
+      },
+      {
+        "column": "inventory.current_stock",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "inventory.reorder_level",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "inventory.safety_stock",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "inventory.inventory_turnover",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "inventory.stockout_risk",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "inventory.overstock_risk",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "inventory.inventory_optimization_score",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "inventory.operational_risk_score",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "inventory.created_at",
+        "differences": {
+          "default_expr": {
+            "init_sql": "CURRENT_TIMESTAMP",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "inventory.updated_at",
+        "differences": {
+          "default_expr": {
+            "init_sql": "CURRENT_TIMESTAMP",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "sales.product_id",
+        "differences": {
+          "not_null": {
+            "init_sql": true,
+            "postgres": false
+          }
+        }
+      },
+      {
+        "column": "sales.units_sold",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "sales.daily_demand",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "sales.monthly_demand",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "sales.seasonal_demand_index",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "sales.revenue_usd",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "sales.profit_usd",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "sales.demand_forecast",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "sales.predicted_reorder_quantity",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "sales.created_at",
+        "differences": {
+          "default_expr": {
+            "init_sql": "CURRENT_TIMESTAMP",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "logistics.product_id",
+        "differences": {
+          "not_null": {
+            "init_sql": true,
+            "postgres": false
+          }
+        }
+      },
+      {
+        "column": "logistics.supplier_id",
+        "differences": {
+          "not_null": {
+            "init_sql": true,
+            "postgres": false
+          }
+        }
+      },
+      {
+        "column": "logistics.warehouse_id",
+        "differences": {
+          "not_null": {
+            "init_sql": true,
+            "postgres": false
+          }
+        }
+      },
+      {
+        "column": "logistics.shipping_cost_usd",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "logistics.delivery_time_days",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "logistics.on_time_delivery_rate",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "logistics.supply_disruption_risk",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "logistics.supply_chain_efficiency",
+        "differences": {
+          "default_expr": {
+            "init_sql": "0",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "logistics.created_at",
+        "differences": {
+          "default_expr": {
+            "init_sql": "CURRENT_TIMESTAMP",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "logistics.updated_at",
+        "differences": {
+          "default_expr": {
+            "init_sql": "CURRENT_TIMESTAMP",
+            "postgres": null
+          }
+        }
+      },
+      {
+        "column": "supply_chain_metrics.product_id",
+        "differences": {
+          "not_null": {
+            "init_sql": true,
+            "postgres": false
+          }
+        }
+      },
+      {
+        "column": "supply_chain_metrics.created_at",
+        "differences": {
+          "default_expr": {
+            "init_sql": "CURRENT_TIMESTAMP",
+            "postgres": null
+          }
+        }
+      }
+    ],
+    "constraints_missing_in_database": [
+      {
+        "table": "agent_action_proposals",
+        "definition": "CHECK ( action IN ( 'replenish' , 'transfer' , 'suspend_reorder' , 'promotion' , 'supplier_return' ) )"
+      },
+      {
+        "table": "agent_action_proposals",
+        "definition": "CHECK ( status IN ( 'pending_approval' , 'approved' , 'executed' , 'rejected' , 'obsolete' ) )"
+      },
+      {
+        "table": "inventory",
+        "definition": "CHECK ( inventory_turnover >= 0 )"
+      },
+      {
+        "table": "inventory",
+        "definition": "CHECK ( safety_stock >= 0 )"
+      },
+      {
+        "table": "inventory",
+        "definition": "CHECK ( current_stock >= 0 )"
+      },
+      {
+        "table": "inventory",
+        "definition": "UNIQUE ( product_id , warehouse_id )"
+      },
+      {
+        "table": "inventory",
+        "definition": "CHECK ( stockout_risk >= 0 AND stockout_risk <= 100 )"
+      },
+      {
+        "table": "inventory",
+        "definition": "CHECK ( operational_risk_score >= 0 AND operational_risk_score <= 100 )"
+      },
+      {
+        "table": "inventory",
+        "definition": "CHECK ( inventory_optimization_score >= 0 AND inventory_optimization_score <= 100 )"
+      },
+      {
+        "table": "inventory",
+        "definition": "CHECK ( overstock_risk >= 0 AND overstock_risk <= 100 )"
+      },
+      {
+        "table": "inventory",
+        "definition": "CHECK ( reorder_level >= 0 )"
+      },
+      {
+        "table": "logistics",
+        "definition": "CHECK ( on_time_delivery_rate >= 0 AND on_time_delivery_rate <= 100 )"
+      },
+      {
+        "table": "logistics",
+        "definition": "CHECK ( supply_chain_efficiency >= 0 AND supply_chain_efficiency <= 100 )"
+      },
+      {
+        "table": "logistics",
+        "definition": "UNIQUE ( product_id , supplier_id , warehouse_id )"
+      },
+      {
+        "table": "logistics",
+        "definition": "CHECK ( delivery_time_days >= 0 )"
+      },
+      {
+        "table": "logistics",
+        "definition": "CHECK ( shipping_cost_usd >= 0 )"
+      },
+      {
+        "table": "logistics",
+        "definition": "CHECK ( supply_disruption_risk >= 0 AND supply_disruption_risk <= 100 )"
+      },
+      {
+        "table": "products",
+        "definition": "CHECK ( product_cost_usd >= 0 )"
+      },
+      {
+        "table": "products",
+        "definition": "CHECK ( selling_price_usd >= 0 )"
+      },
+      {
+        "table": "sales",
+        "definition": "CHECK ( monthly_demand >= 0 )"
+      },
+      {
+        "table": "sales",
+        "definition": "CHECK ( year >= 2000 )"
+      },
+      {
+        "table": "sales",
+        "definition": "CHECK ( month BETWEEN 1 AND 12 )"
+      },
+      {
+        "table": "sales",
+        "definition": "CHECK ( quarter BETWEEN 1 AND 4 )"
+      },
+      {
+        "table": "sales",
+        "definition": "CHECK ( predicted_reorder_quantity >= 0 )"
+      },
+      {
+        "table": "sales",
+        "definition": "CHECK ( demand_forecast >= 0 )"
+      },
+      {
+        "table": "sales",
+        "definition": "CHECK ( revenue_usd >= 0 )"
+      },
+      {
+        "table": "sales",
+        "definition": "CHECK ( daily_demand >= 0 )"
+      },
+      {
+        "table": "sales",
+        "definition": "CHECK ( units_sold >= 0 )"
+      },
+      {
+        "table": "suppliers",
+        "definition": "CHECK ( lead_time_days >= 0 )"
+      },
+      {
+        "table": "suppliers",
+        "definition": "CHECK ( supplier_rating >= 0 AND supplier_rating <= 5 )"
+      },
+      {
+        "table": "suppliers",
+        "definition": "CHECK ( supplier_performance_score >= 0 AND supplier_performance_score <= 100 )"
+      },
+      {
+        "table": "suppliers",
+        "definition": "CHECK ( sustainability_score >= 0 AND sustainability_score <= 100 )"
+      },
+      {
+        "table": "supply_chain_metrics",
+        "definition": "CHECK ( inventory_optimization_score >= 0 AND inventory_optimization_score <= 100 )"
+      },
+      {
+        "table": "supply_chain_metrics",
+        "definition": "CHECK ( supplier_performance_score >= 0 AND supplier_performance_score <= 100 )"
+      },
+      {
+        "table": "supply_chain_metrics",
+        "definition": "CHECK ( supply_chain_efficiency >= 0 AND supply_chain_efficiency <= 100 )"
+      },
+      {
+        "table": "supply_chain_metrics",
+        "definition": "CHECK ( sustainability_score >= 0 AND sustainability_score <= 100 )"
+      },
+      {
+        "table": "supply_chain_metrics",
+        "definition": "CHECK ( operational_risk_score >= 0 AND operational_risk_score <= 100 )"
+      },
+      {
+        "table": "warehouses",
+        "definition": "CHECK ( storage_capacity >= 0 )"
+      },
+      {
+        "table": "warehouses",
+        "definition": "CHECK ( utilization_rate >= 0 AND utilization_rate <= 100 )"
+      }
+    ],
+    "constraints_missing_in_sql": [],
+    "indexes_missing_in_database": [],
+    "indexes_extra_in_database": [],
+    "index_definition_differences": [],
+    "views_missing_in_database": [],
+    "views_extra_in_database": [],
+    "view_definition_differences": [],
+    "functions_missing_in_database": [],
+    "functions_extra_in_database": [],
+    "function_body_differences": [],
+    "triggers_missing_in_database": [],
+    "triggers_extra_in_database": [],
+    "trigger_definition_differences": [],
+    "extensions_missing_in_database": []
+  },
+  "scope": "Offline declaration analysis; PostgreSQL metadata read-only. No init.sql execution. View bodies, ownership, privileges and data rows not semantically compared."
+}

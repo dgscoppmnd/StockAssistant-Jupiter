@@ -105,7 +105,6 @@ class DatabaseTests(unittest.TestCase):
             c = cls.connect()
             with c.cursor() as q:
                 q.execute(Path(os.getenv('TEST_INIT_SQL','/app/docker/init-scripts/init.sql')).read_text(encoding='utf-8'))
-                q.execute(Path('/app/src/DataBaseManagement/automation_schema.sql').read_text(encoding='utf-8'))
             c.commit();c.close()
         except Exception:
             cls.tearDownClass();raise

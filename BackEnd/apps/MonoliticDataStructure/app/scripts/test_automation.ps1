@@ -1,7 +1,7 @@
 param([string]$Container = 'proyecto_jupiter_api')
 $ErrorActionPreference = 'Stop'
 $automationTestRoot = Join-Path $PSScriptRoot '../tests'
-foreach ($automationTestName in @('test_operational_automation.py', 'test_ai_service.py', 'test_executive_rules.py')) {
+foreach ($automationTestName in @('test_database_schema.py', 'test_operational_automation.py', 'test_ai_service.py', 'test_executive_rules.py')) {
     Write-Host "Running $automationTestName"
     Get-Content -Raw -Encoding UTF8 (Join-Path $automationTestRoot $automationTestName) |
         docker exec -i -e RUN_AUTOMATION_DB_TESTS=1 $Container python -

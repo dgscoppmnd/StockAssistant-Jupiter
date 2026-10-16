@@ -119,7 +119,7 @@ Qdrant conserva los vectores en el volumen `qdrant_data`. El cliente está fijad
 
 La indexación es una operación explícita desde CSV: no carga PostgreSQL ni sincroniza el catálogo operativo. El frontend actual no incorpora una pantalla específica para esta ruta. Consulta los comandos en [Instalación](readmeIntalacion.md).
 
-El esquema de instalación está en `BackEnd/apps/MonoliticDataStructure/app/docker/init-scripts/init.sql`. El backend también inicializa tablas operativas faltantes y aplica las extensiones de `src/DataBaseManagement/schema_extensions.sql`.
+El esquema de instalación está en `BackEnd/apps/MonoliticDataStructure/app/docker/init-scripts/init.sql`. El backend ejecuta ese mismo archivo para crear o actualizar el esquema, incluidas las extensiones comerciales y las automatizaciones.
 
 La documentación interactiva de todos los endpoints está en [Swagger](http://localhost:8000/docs) y [ReDoc](http://localhost:8000/redoc), una vez iniciada la API. `/health` ofrece una comprobación básica del proceso; conviene verificar también PostgreSQL y el acceso real al portal.
 

@@ -6,7 +6,7 @@ Implementación integrada en `AutomationService` mediante composición con servi
 
 En la navegación principal, **Resumen → Centro de control de agentes** (`/agentes/control`) y **Editor de reglas** (`/agentes/reglas`). El frontend usa la sesión y los estilos existentes. La antigua pantalla del Ejecutivo muestra también las nuevas propuestas de compra y enlaza al centro para aprobarlas.
 
-La migración aditiva es `BackEnd/apps/MonoliticDataStructure/app/src/DataBaseManagement/automation_schema.sql`. Se aplica al inicializar el backend, después del esquema operativo existente, siguiendo el mecanismo de extensiones del proyecto. Para una instalación nueva se debe arrancar la API además de inicializar PostgreSQL. No es necesario reaplicar `init.sql` sobre una base existente.
+La fuente única de creación y actualización es `BackEnd/apps/MonoliticDataStructure/app/docker/init-scripts/init.sql`. Integra los bloques comerciales y de automatización, RAG, ventas e índices de búsqueda. `init_db()` aplica ese archivo sobre la base configurada; no crea ni elimina bases de datos ni borra tablas. Los archivos separados de extensiones y automatización se han eliminado. Docker Compose, la imagen de la API y CI usan la misma fuente.
 
 La migración conserva las propuestas antiguas, pero marca como obsoletas sus propuestas pendientes: carecen de instantánea de evidencia y de versión de política. Deben analizarse de nuevo antes de ejecutar. No se transforman en pedidos ni se eliminan.
 
@@ -145,7 +145,7 @@ Set-Location Frontend
 npm.cmd run build
 ```
 
-La suite crea una base `automation_test_<aleatorio>`, aplica el esquema y la migración, usa dobles del proveedor de IA y elimina solo esa base al terminar. No necesita pytest dentro del contenedor ni realiza llamadas pagadas. El usuario PostgreSQL de pruebas debe poder crear una base. Los fixtures permanecen separados de los indicadores de negocio reales.
+La suite de integración (solo al ejecutarla explícitamente) crea una base `automation_test_<aleatorio>`, aplica el esquema y la migración, usa dobles del proveedor de IA y elimina solo esa base al terminar. No necesita pytest dentro del contenedor ni realiza llamadas pagadas. El usuario PostgreSQL de pruebas debe poder crear una base. Los fixtures permanecen separados de los indicadores de negocio reales.
 
 `test_e2e_purchase_receipt_separated_and_idempotent_evaluation` reproduce detección → comparación → propuesta → aprobación → pedido emitido → recepción parcial física → registro → revisión posterior. Comprueba que emitir no cambia existencias, recibir no crea otro pedido y repetir la operación no duplica movimientos. La evaluación temporal se adelanta únicamente en la base temporal de pruebas.
 
