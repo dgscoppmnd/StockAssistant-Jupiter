@@ -2,7 +2,6 @@
 ACCENTS = "áàâäãåéèêëíìîïóòôöõúùûüñç"
 PLAIN = "aaaaaaeeeeiiiiooooouuuunc"
 SEARCH_EXPRESSION = f"translate(lower(coalesce(cdgo_producto_externo, '') || ' ' || name_product), '{ACCENTS}', '{PLAIN}')"
-SEARCH_INDEX_SQL = f"CREATE INDEX IF NOT EXISTS ix_productos_search_trgm ON public.productos USING gin (({SEARCH_EXPRESSION}) gin_trgm_ops)"
 
 
 def search_pattern(query: str) -> str:

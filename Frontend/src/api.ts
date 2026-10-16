@@ -48,6 +48,10 @@ import { uploadClientCsv, type ClientImportProgress, type ClientImportResult } f
 import { uploadSupplierCsv, type SupplierImportProgress, type SupplierImportResult } from "./utils/supplierCsvUpload";
 
 const API_BASE = "/api";
+
+export function automationRequest<T>(path: string, method = 'GET', data?: unknown): Promise<T> {
+  return request<T>(`${API_BASE}/automation${path}`, {method, ...(data === undefined ? {} : {body: JSON.stringify(data)})});
+}
 const API_KEY_STORAGE_KEY = "stockassistant-api-key";
 const SESSION_STORAGE_KEY = "stockassistant-session-token";
 const ENV_API_KEY =

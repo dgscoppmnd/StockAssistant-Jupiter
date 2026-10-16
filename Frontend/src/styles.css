@@ -2085,3 +2085,21 @@ body[data-theme="day"] .chat-message-assistant {
   .sales-invoice-print .users-table-wrapper { overflow: visible !important; }
   .sales-invoice-print table { min-width: 0; width: 100%; font-size: 10pt; color: black; }
 }
+/* Agent operations reuse the portal palette and native keyboard controls. */
+.agent-control .card { color: var(--text-main); min-width: 0; }
+.agent-control label { display: flex; flex-direction: column; gap: .4rem; }
+.agent-control label:has(input[type="checkbox"]) { flex-direction: row; align-items: center; }
+.agent-fields { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 1rem; }
+.agent-rule { border-top: 1px solid currentColor; padding: 1rem 0; scroll-margin-top: 2rem; }
+.agent-control pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 36rem; overflow: auto; }
+.agent-control table { width: 100%; border-collapse: collapse; }
+.agent-control th, .agent-control td { text-align: left; padding: .65rem; border-bottom: 1px solid currentColor; }
+.agent-table-scroll { overflow-x: auto; }
+.agent-flow { display: flex; flex-wrap: wrap; gap: 1.5rem; padding-left: 1.5rem; }
+.agent-flow [aria-current="step"] { font-weight: bold; text-decoration: underline; }
+.agent-control :focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+.agent-control fieldset { padding: 1rem; border: 1px solid currentColor; }
+@media (max-width: 600px) {
+  .agent-control .agent-fields { grid-template-columns: minmax(0,1fr); }
+  .agent-control button { max-width: 100%; white-space: normal; }
+}

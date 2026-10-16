@@ -4,6 +4,7 @@ Portal local: [http://localhost:8080](http://localhost:8080).
 
 - [Instalación y actualización](readmeIntalacion.md).
 - [Contenido, arquitectura y funcionalidades](readmeContenido.md).
+- [Agentes operativos, centro de control, reglas y pruebas](Documentación/Agentes-Operativos.md).
 
 [Integración, esquema, arranque y verificaciones](Documentación/Integracion-Proyecto-Jupiter.md).
 
@@ -77,7 +78,7 @@ docker cp BackEnd/apps/MonoliticDataStructure/app/docker/init-scripts/init.sql p
 docker exec proyecto_jupiter_db psql -U admin -d supply_chain -v ON_ERROR_STOP=1 -f /tmp/jupiter-init.sql
 ```
 
-Reaplicar el esquema completo restablece las credenciales y el estado activo del administrador inicial. Para añadir solo los campos de productos, consulta la migración específica en [Instalación](readmeIntalacion.md).
+Reaplicar el esquema conserva las credenciales y el estado de los usuarios existentes. Para añadir solo los campos de productos, consulta la migración específica en [Instalación](readmeIntalacion.md).
 
 Cuenta local de desarrollo: `admin@stockassistant.app`, contraseña `Jupiter!2026Stock`.
 
