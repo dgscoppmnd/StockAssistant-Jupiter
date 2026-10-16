@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import json
 from typing import Any
@@ -11,7 +11,7 @@ from ai_service import AIProviderError, generate_ai
 from external_connectors import ExternalSourceError, get_connectors
 from support_rag import support_fallback
 from knowledge_retrieval import retrieve_current
-
+from SystemPrompts.sales_forecast_agent import SYSTEM_PROMPT_SALES_FORECAST
 
 class CommercialAgentError(Exception):
     pass
@@ -59,24 +59,32 @@ class CommercialAgentService:
             )
         self.connection.commit()
 
+
     def sales_forecast(self, product_id: int, horizon_days: int = 30) -> dict[str, Any]:
+        if not 1 <= horizon_days <= 365:
+            raise ValueError('Horizonte fuera de rango')
         product = self._product(product_id)
         rows = self._all(
             """
             SELECT DATE(created_at) AS day, COALESCE(SUM(-quantity_signed), 0) AS sold_qty
             FROM public.inventory_movements
-            WHERE product_id = %s AND movement_type = 'dispatch' AND created_at >= CURRENT_TIMESTAMP - INTERVAL '90 days'
+            WHERE product_id = %s AND movement_type = 'dispatch'
+              AND created_at >= CURRENT_TIMESTAMP - INTERVAL '90 days'
             GROUP BY DATE(created_at) ORDER BY day
-        """,
+            """,
             (product_id,),
         )
         sold = sum((Decimal(str(row["sold_qty"])) for row in rows), Decimal("0"))
-        observed_days = max(len(rows), 1)
+        observed_days = len(rows)
         daily_average = sold / Decimal("90")
-        recent = sum((Decimal(str(row["sold_qty"])) for row in rows[-30:]), Decimal("0"))
-        prior = sum((Decimal(str(row["sold_qty"])) for row in rows[-60:-30]), Decimal("0"))
-        trend = "stable" if recent == prior else ("up" if recent > prior else "down")
-        return {
+        today = datetime.now(timezone.utc).date()
+        dated = [r for r in rows if r.get('day') is not None]
+        recent = sum((Decimal(str(r['sold_qty'])) for r in dated if r['day'] >= today-timedelta(days=30)), Decimal(0))
+        prior = sum((Decimal(str(r['sold_qty'])) for r in dated if today-timedelta(days=60) <= r['day'] < today-timedelta(days=30)), Decimal(0))
+        trend = ('insufficient_evidence' if len(dated) < 2 else
+                 ('stable' if recent == prior else ('up' if recent > prior else 'down')))
+
+        result = {
             "agent": "sales_forecast",
             "product_id": product_id,
             "product_name": product["name_product"],
@@ -89,9 +97,35 @@ class CommercialAgentService:
                 "source": "inventory_movements",
                 "period_days": 90,
                 "confirmed_dispatch_qty": sold,
+                'recent_30_days_dispatch': recent,
+                'previous_30_days_dispatch': prior,
+                'history_completeness': 'unknown',
+                'missing_days': 'Sin registro no implica ventas cero; no hay historial completo de disponibilidad',
             },
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
+
+        try:
+            ai = generate_ai(
+                "Analiza críticamente esta previsión usando únicamente los datos recibidos: explica el método, evalúa su fiabilidad y propone próximos pasos; no te limites a repetir cifras. period_days es la ventana de cálculo de 90 días; observed_sales_days cuenta días con registros de despacho, no duración del periodo ni número de pedidos. No presupongas cobertura completa del historial, disponibilidad de stock ni ausencia real de demanda en días sin registros. El predictor utiliza una media histórica, no un modelo de aprendizaje automático entrenado. Con cero unidades confirmadas o un único día registrado, explica que la evidencia es insuficiente para inferir crecimiento o estacionalidad. trend es una etiqueta heredada: no la presentes como una tendencia demostrada. La previsión fraccionaria representa una media estimada, no una cantidad que deba comprarse automáticamente. No inventes intervalos de confianza ni efectos de promociones. Propón recopilar más ventas y comprobar disponibilidad, precios y márgenes; cualquier promoción debe plantearse como experimento condicionado a esos datos. "
+                "No cambies las cifras. Datos: "
+                f"{json.dumps(result, default=str, ensure_ascii=False)}",
+                SYSTEM_PROMPT_SALES_FORECAST,
+            )
+            result["explanation"] = ai["response"]
+            result["ai"] = {
+                key: ai[key] for key in ("provider", "model", "used_fallback")
+            }
+        except AIProviderError:
+            result["explanation"] = (
+                f"Previsión calculada para {product['name_product']}: "
+                f"{result['forecast_qty']} unidades en {horizon_days} días. "
+                f"Se registran {sold} unidades despachadas confirmadas en los últimos 90 días. "
+                "El proveedor de IA no está disponible para ampliar el análisis."
+            )
+            result["ai"] = None
+
+        return result
 
     def financial_summary(self, product_id: int | None = None) -> dict[str, Any]:
         product_filter = "AND sol.product_id = %s" if product_id else ""

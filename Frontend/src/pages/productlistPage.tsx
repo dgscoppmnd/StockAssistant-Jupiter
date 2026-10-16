@@ -6,6 +6,16 @@ import type { Product, ProductCreatePayload, ProductUpdatePayload } from "../typ
 import ProductEditerForm, { type EditorState, emptyEditor } from "./components/productEditerForm";
 import type { ProductImportProgress } from "../utils/productCsvUpload";
 import type { ProductQdrantSyncProgress } from "../utils/productQdrantSync";
+import ProductTextPreview from "./components/ProductTextPreview";
+
+const productColumnWidths: Record<string, number> = {
+  default_image_url: 94, cdgo_producto_externo: 160, name_product: 220,
+  description_product: 360, disabled: 160, price: 120, unit: 100,
+  final_price: 140, discount: 130, discount_end_date: 190, currency: 110,
+  user_rating: 100, link: 300, creation_date: 190, fk_last_update_user: 210,
+  last_update: 220, supplier: 180, actions: 132,
+};
+const productTableWidth = Object.values(productColumnWidths).reduce((total, width) => total + width, 0);
 
 function toInputDate(raw?: string | null): string {
   if (!raw) return "";
@@ -257,7 +267,7 @@ export default function ProductlistPage() {
       },
       { dataField: "cdgo_producto_externo", text: "Codigo externo", formatter: (cell: string | null) => cell || "-" },
       { dataField: "name_product", text: "Nombre" },
-      { dataField: "description_product", text: "Descripcion", formatter: (cell: string | null) => cell || "-" },
+      { dataField: "description_product", text: "Descripción", formatter: (cell: string | null) => <ProductTextPreview text={cell} /> },
       {
         dataField: "disabled",
         text: "Deshabilitado",
@@ -275,8 +285,7 @@ export default function ProductlistPage() {
       { dataField: "currency", text: "Moneda", formatter: (cell: string | null) => cell || "-" },
       { dataField: "user_rating", text: "Rating" },
       { dataField: "link", text: "Link",
-        style: { wordBreak: "break-all", whiteSpace: "normal", minWidth: "160px" }, 
-        formatter: (cell: string | null): ReactNode => cell ? <a href={cell} target="_blank" rel="noreferrer noopener">{cell}</a> : "-" },
+        formatter: (cell: string | null): ReactNode => <ProductTextPreview text={cell} link /> },
       {
         dataField: "creation_date",
         text: "Creacion",
@@ -312,7 +321,11 @@ export default function ProductlistPage() {
           </div>
         )
       }
-    ],
+    ].map((column) => ({
+      ...column,
+      headerStyle: { width: productColumnWidths[column.dataField], minWidth: productColumnWidths[column.dataField] },
+      style: { width: productColumnWidths[column.dataField], minWidth: productColumnWidths[column.dataField] },
+    })),
     [openEdit, onDelete, loading]
   );
 
@@ -382,12 +395,12 @@ export default function ProductlistPage() {
               No hay productos. Crea uno con "+ Nuevo producto" o usa "Importar CSV".
             </p>
           ) : products.length > 0 ? (
-            <div style={{ minWidth: 1700, opacity: loading ? 0.6 : 1, pointerEvents: loading ? "none" : "auto" }}>
+            <div style={{ minWidth: productTableWidth, opacity: loading ? 0.6 : 1, pointerEvents: loading ? "none" : "auto" }}>
               <BootstrapTable
                 keyField="pk_product"
                 data={products}
                 columns={columns}
-                classes="users-table"
+                classes="users-table product-list-table"
                 headerClasses="users-table"
                 bordered={false}
                 remote={{ pagination: true }}

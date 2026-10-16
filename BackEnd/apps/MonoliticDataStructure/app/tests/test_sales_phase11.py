@@ -18,7 +18,7 @@ from DataBaseManagement.schemasSales import InvoiceDraft, OrderDraft
 from endpoints.endpointsSales import router
 from endpoints.endpointsInventory import router as inventory_router
 from inventory_service import InventoryError, InventoryService
-from sales_schema import sales_schema_sql
+from database_schema import schema_sql
 from sales_service import SalesService
 from security import create_session_token
 
@@ -41,10 +41,7 @@ class SalesIntegrationTests(unittest.TestCase):
             connection = cls.connect()
             with connection:
                 with connection.cursor() as cursor:
-                    cursor.execute(
-                        Path("/app/docker/init-scripts/init.sql").read_text(encoding="utf-8")
-                    )
-                    cursor.execute(sales_schema_sql())
+                    cursor.execute(schema_sql())
             connection.close()
         except Exception:
             cls.tearDownClass()

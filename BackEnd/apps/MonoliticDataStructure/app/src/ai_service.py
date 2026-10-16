@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from copy import copy
 from datetime import datetime, timedelta, timezone
 import logging
 import os
@@ -24,6 +25,8 @@ class AIResponse:
     provider: str
     model: str
     used_fallback: bool
+    usage: dict[str, Any] | None = None
+    cost: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -31,6 +34,8 @@ class AIResponse:
             "provider": self.provider,
             "model": self.model,
             "used_fallback": self.used_fallback,
+            'usage': self.usage,
+            'cost': self.cost,
         }
 
 
@@ -106,6 +111,8 @@ class AIService:
         }
         if system:
             payload["system"] = system
+        if getattr(self, 'max_output_tokens', None):
+            payload['options'] = {'num_predict': self.max_output_tokens}
 
         try:
             response = requests.post(self.ollama_url, json=payload, timeout=self.ollama_timeout)
@@ -131,6 +138,8 @@ class AIService:
         return {
             "response": data.get("response", ""),
             "model": data.get("model") or self.ollama_model,
+            'usage': {'input_tokens': data.get('prompt_eval_count'), 'output_tokens': data.get('eval_count')}
+                     if 'prompt_eval_count' in data or 'eval_count' in data else None,
         }
 
     def _call_openai(self, prompt: str, system: str | None) -> dict[str, Any]:
@@ -143,6 +152,8 @@ class AIService:
         }
         if system:
             payload["instructions"] = system
+        if getattr(self, 'max_output_tokens', None):
+            payload['max_output_tokens'] = self.max_output_tokens
 
         try:
             response = requests.post(
@@ -172,7 +183,7 @@ class AIService:
 
         data = response.json()
         text = _extract_openai_text(data)
-        return {"response": text, "model": data.get("model") or self.openai_model}
+        return {"response": text, "model": data.get("model") or self.openai_model, 'usage': data.get('usage')}
 
     def _generate_with_provider(
         self, provider: str, prompt: str, system: str | None = None
@@ -184,6 +195,7 @@ class AIService:
                 provider="ollama",
                 model=data.get("model", self.ollama_model),
                 used_fallback=False,
+                usage=data.get('usage'),
             )
         if provider == "openai":
             data = self._openai_call(prompt, system)
@@ -192,6 +204,7 @@ class AIService:
                 provider="openai",
                 model=data.get("model", self.openai_model),
                 used_fallback=False,
+                usage=data.get('usage'),
             )
         raise ValueError(f"Unsupported provider: {provider}")
 
@@ -217,7 +230,7 @@ class AIService:
 
         data = self._generate_with_provider("openai", prompt, system)
         return AIResponse(
-            text=data.text, provider=data.provider, model=data.model, used_fallback=True
+            text=data.text, provider=data.provider, model=data.model, used_fallback=True, usage=data.usage, cost=data.cost
         )
 
     def generate_for_provider(
@@ -275,8 +288,25 @@ class AIService:
 _service = AIService()
 
 
-def generate_ai(prompt: str, system: str | None = None) -> dict[str, Any]:
-    return _service.generate(prompt, system).to_dict()
+def generate_ai(prompt: str, system: str | None = None, *, timeout_seconds: float | None = None,
+                max_output_tokens: int | None = None, allow_paid: bool = True) -> dict[str, Any]:
+    if timeout_seconds is None and max_output_tokens is None and allow_paid:
+        return _service.generate(prompt, system).to_dict()
+    # Per-call clone avoids changing timeouts or provider policy on concurrent requests.
+    bounded = copy(_service)
+    bounded._ollama_call = bounded._call_ollama if getattr(_service._ollama_call, '__self__', None) is _service else _service._ollama_call
+    bounded._openai_call = bounded._call_openai if getattr(_service._openai_call, '__self__', None) is _service else _service._openai_call
+    if timeout_seconds is not None:
+        if timeout_seconds <= 0:
+            raise AIProviderError('Cycle deadline exceeded', provider='policy', retryable=False)
+        # Auto can try two providers; reserve half the remaining budget for each.
+        share = timeout_seconds / (2 if bounded.provider_mode == 'auto' and allow_paid else 1)
+        bounded.ollama_timeout = min(bounded.ollama_timeout, share)
+        bounded.openai_timeout = min(bounded.openai_timeout, share)
+    bounded.max_output_tokens = max_output_tokens
+    if not allow_paid:
+        bounded.provider_mode = 'ollama'
+    return bounded.generate(prompt, system).to_dict()
 
 
 def get_ai_status() -> dict[str, Any]:
