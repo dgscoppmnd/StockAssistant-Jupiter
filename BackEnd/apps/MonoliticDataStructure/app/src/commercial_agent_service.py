@@ -11,6 +11,7 @@ from ai_service import AIProviderError, generate_ai
 from external_connectors import ExternalSourceError, get_connectors
 from support_rag import support_fallback
 from knowledge_retrieval import retrieve_current
+from sales_forecasting import forecast_dispatches
 from SystemPrompts.sales_forecast_agent import SYSTEM_PROMPT_SALES_FORECAST
 
 class CommercialAgentError(Exception):
@@ -105,10 +106,40 @@ class CommercialAgentService:
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
+        # Candidates use completed UTC days; legacy figures remain descriptive evidence.
+        cutoff = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        historical = []
+        if observed_days > 0 and all(row.get("day") is not None for row in rows):
+            historical = self._all(
+                """
+                SELECT DATE(created_at AT TIME ZONE 'UTC') AS day,
+                       COALESCE(SUM(-quantity_signed), 0) AS sold_qty
+                FROM public.inventory_movements
+                WHERE product_id = %s AND movement_type = 'dispatch'
+                  AND created_at >= %s - INTERVAL '540 days'
+                  AND created_at < %s
+                GROUP BY DATE(created_at AT TIME ZONE 'UTC') ORDER BY day
+                """,
+                (product_id, cutoff, cutoff),
+            )
+        result.update(forecast_dispatches(
+            historical, cutoff.date(), horizon_days, result["forecast_qty"]
+        ))
+        result["evidence"]["baseline_window"] = "Legacy rolling 90-day dispatch summary; candidate training uses completed UTC days"
+        result["evidence"]["daily_average_meaning"] = "Historical mean, not the selected model's future daily prediction"
+
         try:
             ai = generate_ai(
-                "Analiza críticamente esta previsión usando únicamente los datos recibidos: explica el método, evalúa su fiabilidad y propone próximos pasos; no te limites a repetir cifras. period_days es la ventana de cálculo de 90 días; observed_sales_days cuenta días con registros de despacho, no duración del periodo ni número de pedidos. No presupongas cobertura completa del historial, disponibilidad de stock ni ausencia real de demanda en días sin registros. El predictor utiliza una media histórica, no un modelo de aprendizaje automático entrenado. Con cero unidades confirmadas o un único día registrado, explica que la evidencia es insuficiente para inferir crecimiento o estacionalidad. trend es una etiqueta heredada: no la presentes como una tendencia demostrada. La previsión fraccionaria representa una media estimada, no una cantidad que deba comprarse automáticamente. No inventes intervalos de confianza ni efectos de promociones. Propón recopilar más ventas y comprobar disponibilidad, precios y márgenes; cualquier promoción debe plantearse como experimento condicionado a esos datos. "
-                "No cambies las cifras. Datos: "
+                "Analiza esta previsión usando solo la evidencia recibida. Explica forecast_method y sus límites. "
+                "forecast_qty es la estimación seleccionada; daily_average es una media histórica descriptiva "
+                "y no debe confundirse con la predicción diaria del método seleccionado. "
+                "forecast_validation contiene errores históricos de selección, no una garantía ni un intervalo de confianza. "
+                "forecast_history describe días completos UTC; evidence contiene el resumen de la ventana heredada "
+                "y no necesariamente el mismo periodo de entrenamiento. No confundas ambas ventanas. "
+                "El objetivo son despachos registrados: faltas de registro y roturas de stock impiden asegurar demanda real. "
+                "Con poco historial explica el fallback. La etiqueta trend compara periodos y no prueba causalidad "
+                "ni estacionalidad. No inventes promociones, fuentes ni intervalos de confianza. "
+                "No sustituyas la cifra calculada. Puedes mostrarla aproximadamente con dos decimales. Datos: "
                 f"{json.dumps(result, default=str, ensure_ascii=False)}",
                 SYSTEM_PROMPT_SALES_FORECAST,
             )
