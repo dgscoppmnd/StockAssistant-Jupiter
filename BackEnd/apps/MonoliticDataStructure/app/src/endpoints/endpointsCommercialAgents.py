@@ -51,7 +51,10 @@ def competition(
 def market_intelligence(
     payload: MarketIntelligenceRequest, service: CommercialAgentService = Depends(_service)
 ):
-    return service.market_intelligence(payload.term, payload.country)
+    try:
+        return service.market_intelligence(payload.term, payload.country)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/commercial/content")
