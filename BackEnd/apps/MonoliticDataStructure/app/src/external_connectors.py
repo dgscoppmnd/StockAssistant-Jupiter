@@ -91,7 +91,20 @@ class SerpApiConnector(ReadOnlyConnector):
         return self._search({"engine": "google_shopping", "q": query, "gl": country.lower(), "hl": language.lower()})
 
     def trends(self, query: str, country: str) -> dict[str, Any]:
-        return self._search({"engine": "google_trends", "q": query, "geo": country.upper()})
+        return self._trends_search(query, country, "TIMESERIES")
+
+    def related_queries(self, query: str, country: str) -> dict[str, Any]:
+        return self._trends_search(query, country, "RELATED_QUERIES")
+
+    def _trends_search(self, query: str, country: str, data_type: str) -> dict[str, Any]:
+        try:
+            raw = self._search({"engine": "google_trends", "q": query, "geo": country.upper(),
+                                "date": "today 12-m", "data_type": data_type})
+        except (ValueError, TypeError) as exc:
+            raise ExternalSourceError("SerpAPI devolvio una respuesta no valida") from exc
+        if not isinstance(raw, dict) or raw.get("error"):
+            raise ExternalSourceError("SerpAPI no pudo proporcionar datos para esta consulta")
+        return raw
 
 
 class CredentialGatedConnector(ReadOnlyConnector):

@@ -12,6 +12,8 @@ from external_connectors import ExternalSourceError, get_connectors
 from support_rag import support_fallback
 from knowledge_retrieval import retrieve_current
 from sales_forecasting import forecast_dispatches
+from market_trends import (normalize_series, normalize_related, summarize_series,
+                           fallback_explanation, SYSTEM_PROMPT_MARKET_TRENDS)
 from SystemPrompts.sales_forecast_agent import SYSTEM_PROMPT_SALES_FORECAST
 
 class CommercialAgentError(Exception):
@@ -257,36 +259,67 @@ class CommercialAgentService:
         }
 
     def market_intelligence(self, term: str, country: str = "ES") -> dict[str, Any]:
+        term = term.strip()
+        country = country.upper()
+        if not 2 <= len(term) <= 100 or len(country) != 2 or not country.isalpha():
+            raise ValueError("Indica un termino de 2 a 100 caracteres y un pais de dos letras")
         connector = get_connectors()["serpapi"]
         status = connector.status().to_dict()
         result: dict[str, Any] = {
-            "agent": "market_intelligence",
-            "term": term,
-            "country": country.upper(),
-            "source": status,
+            "agent": "market_intelligence", "term": term, "country": country,
+            "period": "today 12-m", "source": status,
             "generated_at": datetime.now(timezone.utc).isoformat(),
+            "status": "source_unavailable", "data": None, "ai": None,
+            "warnings": ["El indice mide interes relativo de busqueda, no ventas ni volumen absoluto.",
+                         "Esta consulta no predice ventas ni crea pedidos o modifica inventario.",
+                         "Los intervalos en curso se excluyen de la comparacion usando la duracion inferida de la serie; pueden aparecer en el grafico."],
+            "explanation": "La fuente de tendencias no esta disponible. Revisa su configuracion o vuelve a intentarlo.",
         }
         if not status["available"]:
-            result["data"] = None
             return result
         try:
-            raw = connector.trends(term, country)  # type: ignore[attr-defined]
-            self._cache(
-                "google_trends",
-                f"{term.lower()}:{country.upper()}",
-                raw,
-                country.upper(),
-                raw.get("search_metadata", {}).get("json_endpoint"),
-            )
-            result["data"] = {
-                "interest_over_time": raw.get("interest_over_time", {}).get("timeline_data", []),
-                "related_queries": raw.get("related_queries", []),
-                "queried_at": datetime.now(timezone.utc).isoformat(),
-                "reference_url": raw.get("search_metadata", {}).get("json_endpoint"),
-            }
+            raw = connector.trends(term, country)
         except ExternalSourceError as exc:
             result["source"] = {**status, "available": False, "detail": str(exc)}
-            result["data"] = None
+            return result
+        reference = raw.get("search_metadata", {}).get("json_endpoint")
+        self._cache("google_trends", f"{term.lower()}:{country}:today12m", raw, country, reference)
+        points = normalize_series(raw, term)
+        result["source"] = {**status, "reference_url": reference}
+        result["data"] = {
+            "interest_over_time": points, "related_queries": {"top": [], "rising": []},
+            "queried_at": result["generated_at"], "reference_url": reference,
+        }
+        if not points:
+            result.update(status="no_data", explanation="La fuente respondio, pero no hay observaciones validas para este termino. Prueba otra busqueda; no significa que no exista demanda.")
+            return result
+        result["status"] = "ok"
+        try:
+            related = connector.related_queries(term, country)
+            related_reference = related.get("search_metadata", {}).get("json_endpoint")
+            self._cache("google_trends_related", f"{term.lower()}:{country}:today12m", related, country, related_reference)
+            result["data"]["related_queries"] = normalize_related(related)
+            result["data"]["related_reference_url"] = related_reference
+        except ExternalSourceError:
+            result["warnings"].append("No se pudieron obtener consultas relacionadas; la serie de interes sigue disponible.")
+        summary = summarize_series(points, as_of=datetime.fromisoformat(result["generated_at"]))
+        result["summary"] = summary
+        result["explanation"] = fallback_explanation(summary)
+        evidence = {"term": term, "country": country, "period": result["period"],
+                    "summary": summary, "interest_over_time": points,
+                    "related_queries": result["data"]["related_queries"],
+                    "warnings": result["warnings"]}
+        try:
+            ai = generate_ai(json.dumps(evidence, ensure_ascii=False), SYSTEM_PROMPT_MARKET_TRENDS,
+                             timeout_seconds=25, max_output_tokens=900)
+            explanation = ai.get("response")
+            if isinstance(explanation, str) and explanation.strip():
+                result["explanation"] = explanation.strip()
+                result["ai"] = {key: ai.get(key) for key in ("provider", "model", "used_fallback")}
+            else:
+                result["warnings"].append("La IA no devolvio un analisis; se muestra un resumen calculado.")
+        except AIProviderError:
+            result["warnings"].append("La IA no esta disponible; se muestra un resumen calculado.")
         return result
 
     def commercial_content(self, product_id: int, channel: str) -> dict[str, Any]:

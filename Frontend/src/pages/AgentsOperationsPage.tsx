@@ -1,12 +1,12 @@
 import { FormEvent, useEffect, useState } from "react";
-import { createPurchaseRecommendation, fetchCompetition, fetchExternalSourceStatuses, fetchFinancialSummary, fetchMarketIntelligence, fetchRisks, fetchSalesForecast, fetchStockAlerts, processReviewBatch } from "../api";
+import { createPurchaseRecommendation, fetchCompetition, fetchExternalSourceStatuses, fetchFinancialSummary, fetchRisks, fetchSalesForecast, fetchStockAlerts, processReviewBatch } from "../api";
 import type { ExternalSourceStatus, FinancialSummary, ProductOption, PurchaseRecommendation, SalesForecast, StockAlert } from "../types";
 import SectionIcon from "./components/SectionIcon";
 import ProductCombobox from "./components/ProductCombobox";
 import CustomerSupportChat from "./components/CustomerSupportChat";
 import PurchaseRecommendationInfo from "./components/PurchaseRecommendationInfo";
 import ReviewBatchInfo from "./components/ReviewBatchInfo";
-import MarketTrendsInfo from "./components/MarketTrendsInfo";
+import MarketTrendsCard from "./components/MarketTrendsCard";
 
 export default function AgentsOperationsPage() {
   const [sources, setSources] = useState<ExternalSourceStatus[]>([]);
@@ -26,9 +26,7 @@ export default function AgentsOperationsPage() {
   const [forecast, setForecast] = useState<SalesForecast | null>(null);
   const [financial, setFinancial] = useState<FinancialSummary | null>(null);
   const [competition, setCompetition] = useState<Record<string, unknown> | null>(null);
-  const [market, setMarket] = useState<Record<string, unknown> | null>(null);
   const [risks, setRisks] = useState<Array<{ type: string; product_name: string; return_rate: number }>>([]);
-  const [term, setTerm] = useState("");
 
   const load = async () => {
     try {
@@ -64,16 +62,6 @@ export default function AgentsOperationsPage() {
       setForecast(nextForecast); setFinancial(nextFinancial); setCompetition(nextCompetition); setStatus("Prevision, margen y competencia calculados con evidencia."); setError("");
     } catch (err) { setError(err instanceof Error ? err.message : "No se pudo analizar el producto"); }
     finally { setAnalyzing(false); }
-  };
-  const analyzeMarket = async (event: FormEvent) => {
-    event.preventDefault();
-    try {
-      setMarket(await fetchMarketIntelligence(term));
-      setError("");
-    }
-    catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo consultar tendencias");
-    }
   };
 
   return <div className="grid agent-operations">
@@ -122,7 +110,7 @@ export default function AgentsOperationsPage() {
     </section>
     <section className="grid two-columns">
       <CustomerSupportChat />
-      <article className="card"><p className="section-label">Inteligencia de mercado</p><div className="routing-info-heading"><h3><SectionIcon kind="market" />Tendencias autorizadas</h3><MarketTrendsInfo /></div><form className="stack" onSubmit={analyzeMarket}><input required placeholder="Termino de busqueda" value={term} onChange={(event) => setTerm(event.target.value)} /><button className="chip-btn" type="submit">Consultar SerpAPI Trends</button></form>{market && <div className="agent-result"><p>{market.data ? "Datos de tendencia recibidos." : "La fuente no esta disponible."}</p><small>Fuente: {String((market.source as { name?: string })?.name ?? "sin fuente")}</small></div>}</article>
+      <MarketTrendsCard />
     </section>
   </div>;
 }
