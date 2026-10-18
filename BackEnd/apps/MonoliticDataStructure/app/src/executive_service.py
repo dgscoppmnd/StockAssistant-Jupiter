@@ -12,6 +12,7 @@ from psycopg2.extras import Json, RealDictCursor
 from agent_service import AgentService
 from commercial_agent_service import CommercialAgentService
 from automation_service import AutomationService
+from market_trends import executive_term
 
 
 class ExecutiveService:
@@ -89,7 +90,12 @@ class ExecutiveService:
                 raise ValueError("El agente de competencia requiere product_id")
             result = self.commercial.competition(product_id)
         elif routed == "market_intelligence":
-            result = self.commercial.market_intelligence(question)
+            term = executive_term(question)
+            if term:
+                result = self.commercial.market_intelligence(term)
+            else:
+                result = {"agent": "market_intelligence", "status": "needs_clarification", "data": None,
+                          "explanation": 'Indica un producto o categoría concreto. Ejemplo: Analiza las tendencias de auriculares inalámbricos. La consulta utiliza España y los últimos 12 meses.'}
         elif routed == "risks":
             result = self.commercial.risks()
         elif routed == "customer_support":
