@@ -1,13 +1,13 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { createPurchaseRecommendation, fetchCompetition, fetchExternalSourceStatuses, fetchFinancialSummary, fetchMarketIntelligence, fetchRisks, fetchSalesForecast, fetchStockAlerts, processReviewBatch } from "../api";
+import { createPurchaseRecommendation, fetchCompetition, fetchExternalSourceStatuses, fetchFinancialSummary, fetchRisks, fetchSalesForecast, fetchStockAlerts, processReviewBatch } from "../api";
 import type { ExternalSourceStatus, FinancialSummary, ProductOption, PurchaseRecommendation, SalesForecast, StockAlert } from "../types";
 import SectionIcon from "./components/SectionIcon";
 import ProductCombobox from "./components/ProductCombobox";
 import CustomerSupportChat from "./components/CustomerSupportChat";
 import PurchaseRecommendationInfo from "./components/PurchaseRecommendationInfo";
 import ReviewBatchInfo from "./components/ReviewBatchInfo";
-import MarketTrendsInfo from "./components/MarketTrendsInfo";
+import MarketTrendsCard from "./components/MarketTrendsCard";
 
 const sourceModes: Record<string, string> = { read_only: 'Solo lectura', disabled: 'Deshabilitada' };
 const formatNumber = (value: number) => Number(value).toLocaleString('es-ES', { maximumFractionDigits: 2 });
@@ -31,12 +31,9 @@ export default function AgentsOperationsPage() {
   const [forecast, setForecast] = useState<SalesForecast | null>(null);
   const [financial, setFinancial] = useState<FinancialSummary | null>(null);
   const [competition, setCompetition] = useState<Record<string, unknown> | null>(null);
-  const [market, setMarket] = useState<Record<string, unknown> | null>(null);
   const [risks, setRisks] = useState<Array<{ type: string; product_name: string; return_rate: number }>>([]);
-  const [term, setTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
-  const [marketLoading, setMarketLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -74,20 +71,6 @@ export default function AgentsOperationsPage() {
       setForecast(nextForecast); setFinancial(nextFinancial); setCompetition(nextCompetition); setStatus("Previsión, margen y competencia calculados con evidencia."); setError("");
     } catch (err) { setError(err instanceof Error ? err.message : "No se pudo analizar el producto"); }
     finally { setAnalyzing(false); }
-  };
-  const analyzeMarket = async (event: FormEvent) => {
-    event.preventDefault();
-    if (marketLoading || !term.trim()) return;
-    setMarketLoading(true);
-    try {
-      setMarket(await fetchMarketIntelligence(term));
-      setError("");
-      setStatus("Consulta de tendencias completada");
-    }
-    catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo consultar tendencias");
-    }
-    finally { setMarketLoading(false); }
   };
 
   return <div className="agent-operations operations-workspace">
@@ -137,7 +120,7 @@ export default function AgentsOperationsPage() {
     <section className="operations-section" id="agent-support" aria-labelledby="agent-support-title">
       <div className="operations-section-heading"><h3 id="agent-support-title"><span>04</span>Soporte y mercado</h3><span>Consultas con fuentes</span></div>
       <div className="operations-columns"><CustomerSupportChat/>
-        <article className="card operations-market"><p className="section-label">Inteligencia de mercado</p><div className="routing-info-heading"><h3><SectionIcon kind="market"/>Tendencias autorizadas</h3><MarketTrendsInfo/></div><p className="operations-hint">Consulta el interés de búsqueda del término que quieras analizar.</p><form className="stack" onSubmit={analyzeMarket}><label>Término de búsqueda<input required disabled={marketLoading} placeholder="Ej. material de oficina" value={term} onChange={event=>setTerm(event.target.value)}/></label><button className="primary-btn" disabled={marketLoading || !term.trim()} type="submit">{marketLoading ? 'Consultando…' : 'Consultar tendencias'}</button></form>{marketLoading && <p className="operations-hint" role="status">Consultando la fuente de tendencias…</p>}{market && <div className="agent-result" role="status"><p>{market.data ? 'Datos de tendencia recibidos.' : 'La fuente no está disponible.'}</p><small>Fuente: {String((market.source as {name?:string})?.name ?? 'sin fuente')}</small></div>}</article>
+        <MarketTrendsCard />
       </div>
     </section>
   </div>;
