@@ -12,6 +12,19 @@ import SalesOperationModal, { type SalesOperationMode } from "./components/Sales
 import SalesActionModal from "./components/SalesActionModal";
 import SalesDocumentDetail from "./components/SalesDocumentDetail";
 
+const statusLabels: Record<string, string> = {
+  borrador: "Borrador", confirmado: "Confirmado", parcial: "Parcial", completado: "Completado", cancelado: "Cancelado",
+};
+
+function SalesIcon({ name }: { name: "plus" | "refresh" | "search" | "filter" }) {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {name === "plus" && <path d="M12 5v14M5 12h14" />}
+    {name === "refresh" && <><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17" /></>}
+    {name === "search" && <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></>}
+    {name === "filter" && <><path d="M4 7h16M7 12h10M10 17h4" /></>}
+  </svg>;
+}
+
 export default function SalesDocumentsPage({ kind }: { kind: SalesKind }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedId = Number(searchParams.get("id")) || 0;
@@ -70,14 +83,16 @@ export default function SalesDocumentsPage({ kind }: { kind: SalesKind }) {
   const saved = (id: number) => { setEditor(null); setOperation(null); setSearchParams({ id: String(id) }); setRevision(value => value + 1); };
   const actionSaved = (deleted: boolean) => { setAction(null); if (deleted) setSearchParams({}); setRevision(value => value + 1); };
   const draft = detail?.status === "borrador";
+  const hasFilters = Boolean(query || status || client || from || to);
+  const clearFilters = () => { setQuery(""); setStatus(""); setClient(null); setFrom(""); setTo(""); setPage(1); };
   const columns = [
-    { dataField: "number", text: invoice ? "Factura" : "Pedido", formatter: (value: string, row: SalesDocument) =>
-      <button className="chip-btn" type="button" disabled={loading} aria-pressed={selectedId === row.id} onClick={() => setSearchParams({ id: String(row.id) })}>{value}</button> },
-    { dataField: invoice ? "invoice_date" : "order_date", text: "Fecha" },
-    { dataField: "customer_name", text: "Cliente" },
-    { dataField: "status", text: "Estado" },
-    { dataField: "currency_code", text: "Moneda" },
-    { dataField: "total", text: "Total", formatter: (value: number) => Number(value).toFixed(2) },
+    { dataField: "number", text: invoice ? "Factura" : "Pedido", headerStyle: { width: "360px" }, formatter: (value: string, row: SalesDocument) =>
+      <button className="sales-document-link" type="button" disabled={loading} aria-pressed={selectedId === row.id} onClick={() => setSearchParams({ id: String(row.id) })}>{value}<span aria-hidden="true">↗</span></button> },
+    { dataField: invoice ? "invoice_date" : "order_date", text: "Fecha", formatter: (value?: string) => value ? new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString("es-ES") : "—" },
+    { dataField: "customer_name", text: "Cliente", classes: "sales-customer-cell" },
+    { dataField: "status", text: "Estado", formatter: (value: string) => <span className={`sales-status sales-status--${value}`}><span aria-hidden="true" />{statusLabels[value] ?? value}</span> },
+    { dataField: "currency_code", text: "Moneda", classes: "sales-currency-cell" },
+    { dataField: "total", text: "Total", align: "right", headerAlign: "right", classes: "sales-total-cell", formatter: (value: number) => Number(value).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
   ];
   const detailActions = <div className="actions-row">
     {draft && <button className="chip-btn" disabled={!allowed(invoice ? "invoice" : "edit")} onClick={() => setEditor("edit")}>Editar</button>}
@@ -95,27 +110,33 @@ export default function SalesDocumentsPage({ kind }: { kind: SalesKind }) {
       <button className="danger-btn" disabled={!allowed("void")} onClick={() => setAction("void")}>Anular con rectificativa</button>}
     {invoice && <button className="chip-btn" onClick={() => window.print()}>Imprimir</button>}
   </div>;
-  return <div className="stack sales-page">
+  return <div className="stack sales-page sales-workspace">
     <div className="sales-no-print">
       <InventoryCrudCard sectionLabel="Ventas" title={invoice ? "Facturas de venta" : "Pedidos de venta"} titleIcon={<SectionIcon kind="cart" />}
-        description={invoice ? "Documentos históricos vinculados a pedidos y despachos. Facturar no descuenta stock." : "Borradores, reservas y despachos con trazabilidad de inventario."}
-        headerAction={<div className="actions-row"><button className="primary-btn" disabled={!allowed(invoice ? "invoice" : "create")} onClick={() => setEditor("create")}>{invoice ? "Agregar factura" : "Agregar pedido"}</button>
-          <button className="chip-btn" disabled={loading} onClick={() => setRevision(value => value + 1)}>Actualizar</button></div>}>
-        <div className="inventory-crud-grid sales-filters">
-          <label>Buscar número, cliente o referencia<input value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} /></label>
-          <label>Estado<select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">Todos</option>
-            {["borrador","confirmado","parcial","completado","cancelado"].map(s => <option key={s}>{s}</option>)}</select></label>
-          <ClientCombobox selected={client} onSelect={c => { setClient(c); setPage(1); }} />
-          <button type="button" className="chip-btn" disabled={!client} onClick={() => { setClient(null); setPage(1); }}>Todos los clientes</button>
-          <label>Desde<input type="date" value={from} onChange={e => { setFrom(e.target.value); setPage(1); }} /></label>
-          <label>Hasta<input type="date" min={from} value={to} onChange={e => { setTo(e.target.value); setPage(1); }} /></label>
+        description={invoice ? "Documentos históricos vinculados a pedidos y despachos. Facturar no descuenta stock." : "Gestiona tus ventas, desde el primer borrador hasta el último despacho."}
+        headerAction={<div className="actions-row"><button className="chip-btn sales-refresh" disabled={loading} onClick={() => setRevision(value => value + 1)}><SalesIcon name="refresh" />Actualizar</button>
+          <button className="primary-btn" title={!allowed(invoice ? "invoice" : "create") ? "Se necesita permiso para crear documentos" : undefined} disabled={!allowed(invoice ? "invoice" : "create")} onClick={() => setEditor("create")}><SalesIcon name="plus" />{invoice ? "Nueva factura" : "Nuevo pedido"}</button></div>}>
+        <div className="sales-filter-panel">
+          <div className="sales-filter-heading"><span><SalesIcon name="filter" />Filtrar {invoice ? "facturas" : "pedidos"}</span><button type="button" className="sales-clear" disabled={!hasFilters} onClick={clearFilters}>Limpiar filtros</button></div>
+          <div className="sales-filters">
+            <label className="sales-search">Buscar<span className="sales-search-control"><SalesIcon name="search" /><input placeholder="Número, cliente o referencia…" value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} /></span></label>
+            <label>Estado<select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">Todos los estados</option>
+              {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+            <div className="sales-client-filter"><ClientCombobox selected={client} onSelect={c => { setClient(c); setPage(1); }} />
+              {client && <button type="button" className="sales-clear" onClick={() => { setClient(null); setPage(1); }}>Quitar cliente</button>}</div>
+            <div className="sales-date-range"><label>Desde<input type="date" max={to || undefined} value={from} onChange={e => { setFrom(e.target.value); setPage(1); }} /></label>
+              <span aria-hidden="true">—</span><label>Hasta<input type="date" min={from} value={to} onChange={e => { setTo(e.target.value); setPage(1); }} /></label></div>
+          </div>
         </div>
-        {(error || permissionError) && <p className="error-line" role="alert">{error || permissionError}</p>}
-        {loading && <p role="status">Cargando documentos…</p>}
-        <div className="users-table-wrapper" aria-busy={loading}>
+        {(error || permissionError) && <div className="sales-error" role="alert"><span>{error || permissionError}</span><button type="button" className="chip-btn" disabled={loading} onClick={() => setRevision(value => value + 1)}>Reintentar</button></div>}
+        <div className="sales-list-heading"><h4>{invoice ? "Listado de facturas" : "Listado de pedidos"}<span className="sales-count">{loading ? "…" : data.total}</span></h4><span role="status">{loading ? "Actualizando documentos…" : hasFilters ? "Resultados filtrados" : "Todos los registros"}</span></div>
+        <div className={`users-table-wrapper sales-list-table${!data.items.length ? " sales-list-table--empty" : ""}`} aria-label={invoice ? "Facturas de venta" : "Pedidos de venta"} aria-busy={loading}>
           <BootstrapTable keyField="id" data={data.items} columns={columns} classes="users-table" bordered={false}
-            noDataIndication={loading ? "Cargando…" : "Sin documentos"} remote={{ pagination: true }}
-            pagination={paginationFactory({ page, sizePerPage: size, totalSize: data.total, sizePerPageList: [10,25,50], showTotal: true })}
+            rowClasses={(row: SalesDocument) => selectedId === row.id ? "sales-row-selected" : ""}
+            noDataIndication={<div className="sales-empty"><SectionIcon kind="cart" /><strong>{loading ? "Cargando documentos…" : error ? "No se pudieron cargar los documentos" : hasFilters ? "Sin resultados para estos filtros" : invoice ? "Todavía no hay facturas" : "Todavía no hay pedidos"}</strong><span>{loading ? "El listado estará listo en un momento." : error ? "Vuelve a intentarlo para consultar el listado." : hasFilters ? "Prueba con otro estado, cliente o intervalo de fechas." : "Crea el primer documento para empezar a gestionar tus ventas."}</span>{hasFilters && !loading && !error && <button type="button" className="chip-btn" onClick={clearFilters}>Limpiar filtros</button>}</div>} remote={{ pagination: true }}
+            pagination={paginationFactory({ page, sizePerPage: size, totalSize: data.total, sizePerPageList: [10,25,50], showTotal: true,
+              paginationTotalRenderer: (from: number, to: number, total: number) => <span className="sales-pagination-total">{total ? from : 0}–{to} de {total} {invoice ? "facturas" : "pedidos"}</span>,
+              firstPageTitle: "Primera página", prePageTitle: "Página anterior", nextPageTitle: "Página siguiente", lastPageTitle: "Última página" })}
             onTableChange={(_type: string, state: { page: number; sizePerPage: number }) => { setPage(state.page); setSize(state.sizePerPage); }} />
         </div>
       </InventoryCrudCard>

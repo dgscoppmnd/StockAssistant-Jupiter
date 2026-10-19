@@ -6,6 +6,9 @@ import "react-bootstrap-table-next/dist/react-bootstrap-table2.min.css";
 import { AuthProvider } from "./auth";
 import App from "./App";
 import "./styles.css";
+import "./sales-workspace.css";
+import "./rules-workspace.css";
+import "./operations-workspace.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
