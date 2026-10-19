@@ -428,16 +428,20 @@ class CommercialAgentService:
         )
         return product, stock
 
-    def risks(self) -> dict[str, Any]:
+    def risks(self, *, product_ids: list[int] | None = None, warehouse_ids: list[int] | None = None,
+              limit: int = 30) -> dict[str, Any]:
+        product_ids, warehouse_ids = product_ids or [], warehouse_ids or []
         rows = self._all(
             """
             SELECT p.pk_product AS product_id, TRIM(p.name_product) AS product_name,
                 COALESCE(SUM(CASE WHEN m.movement_type = 'dispatch' THEN -m.quantity_signed ELSE 0 END), 0) AS dispatched_qty,
                 COALESCE(SUM(CASE WHEN m.movement_type = 'return' THEN m.quantity_signed ELSE 0 END), 0) AS returned_qty
             FROM public.productos p LEFT JOIN public.inventory_movements m ON m.product_id = p.pk_product
+                AND (%s OR m.warehouse_id=ANY(%s))
+            WHERE (%s OR p.pk_product=ANY(%s))
             GROUP BY p.pk_product, p.name_product HAVING COALESCE(SUM(CASE WHEN m.movement_type = 'return' THEN m.quantity_signed ELSE 0 END), 0) > 0
-            ORDER BY returned_qty DESC LIMIT 30
-        """
+            ORDER BY returned_qty DESC, p.pk_product LIMIT %s
+        """, (not warehouse_ids, warehouse_ids, not product_ids, product_ids, limit)
         )
         alerts = []
         for row in rows:

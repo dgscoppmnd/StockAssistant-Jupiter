@@ -111,6 +111,8 @@ class AIService:
         }
         if system:
             payload["system"] = system
+        if getattr(self, 'response_schema', None) is not None:
+            payload['format'] = self.response_schema
         if getattr(self, 'max_output_tokens', None):
             payload['options'] = {'num_predict': self.max_output_tokens}
 
@@ -152,6 +154,9 @@ class AIService:
         }
         if system:
             payload["instructions"] = system
+        if getattr(self, 'response_schema', None) is not None:
+            payload['text'] = {'format': {'type': 'json_schema', 'name': 'operational_rule_turn',
+                                          'strict': True, 'schema': self.response_schema}}
         if getattr(self, 'max_output_tokens', None):
             payload['max_output_tokens'] = self.max_output_tokens
 
@@ -289,8 +294,9 @@ _service = AIService()
 
 
 def generate_ai(prompt: str, system: str | None = None, *, timeout_seconds: float | None = None,
-                max_output_tokens: int | None = None, allow_paid: bool = True) -> dict[str, Any]:
-    if timeout_seconds is None and max_output_tokens is None and allow_paid:
+                max_output_tokens: int | None = None, allow_paid: bool = True,
+                response_schema: dict[str, Any] | None = None) -> dict[str, Any]:
+    if timeout_seconds is None and max_output_tokens is None and allow_paid and response_schema is None:
         return _service.generate(prompt, system).to_dict()
     # Per-call clone avoids changing timeouts or provider policy on concurrent requests.
     bounded = copy(_service)
@@ -304,6 +310,7 @@ def generate_ai(prompt: str, system: str | None = None, *, timeout_seconds: floa
         bounded.ollama_timeout = min(bounded.ollama_timeout, share)
         bounded.openai_timeout = min(bounded.openai_timeout, share)
     bounded.max_output_tokens = max_output_tokens
+    bounded.response_schema = response_schema
     if not allow_paid:
         bounded.provider_mode = 'ollama'
     return bounded.generate(prompt, system).to_dict()

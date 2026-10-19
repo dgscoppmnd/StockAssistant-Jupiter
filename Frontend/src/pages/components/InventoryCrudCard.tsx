@@ -21,6 +21,8 @@ type InventoryCrudCardProps<T extends Record<string, unknown>> = {
     noDataIndication: string;
     totalLabel: string;
     minWidth?: number;
+    onSelectRow?: (row: T) => void;
+    selectedKey?: string | number;
   };
 };
 
@@ -56,7 +58,19 @@ export default function InventoryCrudCard<T extends Record<string, unknown>>({
               keyField={table.keyField}
               data={table.data}
               columns={table.columns}
-              classes="users-table inventory-bootstrap-table"
+              classes={`users-table inventory-bootstrap-table${table.onSelectRow ? ' inventory-selectable-table' : ''}`}
+              rowClasses={(row: T) => table.selectedKey === row[table.keyField] ? 'inventory-row-selected' : ''}
+              rowAttrs={(row: T) => table.onSelectRow ? {tabIndex: 0, 'aria-selected': table.selectedKey === row[table.keyField]} : {}}
+              rowEvents={table.onSelectRow ? {
+                onClick: (event: React.MouseEvent<HTMLElement>, row: T) => {
+                  if (!(event.target as HTMLElement).closest('button,a,input,select,textarea')) table.onSelectRow?.(row);
+                },
+                onKeyDown: (event: React.KeyboardEvent<HTMLElement>, row: T) => {
+                  if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                    event.preventDefault();table.onSelectRow?.(row);
+                  }
+                },
+              } : undefined}
               headerClasses="users-table"
               bordered={false}
               noDataIndication={table.noDataIndication}

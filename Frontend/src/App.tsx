@@ -5,6 +5,7 @@ import StockAssistantPage from "./pages/StockAssistantPage";
 import ConfigPage from "./pages/ConfigPage";
 import UsersPage from "./pages/UsersPage";
 import InventoryPage from "./pages/InventoryPage";
+import StockOrdersPage from "./pages/StockOrdersPage";
 import AgentsOperationsPage from "./pages/AgentsOperationsPage";
 import ExecutivePage from "./pages/ExecutivePage";
 import AgentControlPage from "./pages/AgentControlPage";
@@ -77,7 +78,8 @@ const groups: MenuGroup[] = [
     ),
     children: [
       { to: "/productlist", label: "Lista de productos" },
-      { to: "/inventario", label: "Inventario y dashboard" }
+      { to: "/inventario", label: "Inventario y dashboard" },
+      { to: "/inventario/pedidos", label: "Pedidos de stock" }
     ]
   },  
   {
@@ -236,6 +238,7 @@ function PortalShell({
             <Route path="/users" element={<UsersPage />} />
             <Route path="/productlist" element={<ProductlistPage />} />
             <Route path="/inventario" element={<InventoryPage />} />
+            <Route path="/inventario/pedidos" element={<StockOrdersPage />} />
             <Route path="/configuracion" element={<ConfigPage />} />
             <Route path="/rag" element={<RagChat />} />
             <Route path="/setup" element={<ConfigPage />} />

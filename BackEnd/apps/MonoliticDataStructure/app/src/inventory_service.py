@@ -411,6 +411,21 @@ class InventoryService:
         summary["stock_snapshot"] = self.list_stock()
         return summary
 
+    def priority_purchase_rows(self):
+        """Shared source for dashboard priorities and default automation products."""
+        return self._fetchall('''
+            SELECT s.product_id, p.name_product AS product_name, p.cdgo_producto_externo AS product_code,
+                   s.warehouse_id, w.name AS warehouse_name,
+                   s.physical_qty, s.reserved_qty, (s.physical_qty-s.reserved_qty) AS available_qty,
+                   c.reorder_point, c.reorder_quantity, u.code AS base_unit_code
+            FROM public.inventory_stock_levels s JOIN public.productos p ON p.pk_product=s.product_id
+            JOIN public.inventory_warehouses w ON w.id=s.warehouse_id
+            JOIN public.product_inventory_config c ON c.product_id=s.product_id
+            JOIN public.inventory_units u ON u.id=c.base_unit_id
+            WHERE (s.physical_qty-s.reserved_qty)<=c.reorder_point
+            ORDER BY ((s.physical_qty-s.reserved_qty)-c.reorder_point) ASC, p.name_product ASC,
+                     s.product_id,s.warehouse_id LIMIT 12''')
+
     def get_executive_dashboard(self, period_days: int = 30) -> dict[str, Any]:
         """Return auditable operational indicators without fabricating unavailable supplier data."""
         service_level = (
@@ -456,21 +471,7 @@ class InventoryService:
             )
             or {}
         )
-        priorities = self._fetchall(
-            """
-            SELECT s.product_id, p.name_product AS product_name, w.name AS warehouse_name,
-                   s.physical_qty, s.reserved_qty, (s.physical_qty - s.reserved_qty) AS available_qty,
-                   c.reorder_point, c.reorder_quantity, u.code AS base_unit_code
-            FROM public.inventory_stock_levels s
-            JOIN public.productos p ON p.pk_product = s.product_id
-            JOIN public.inventory_warehouses w ON w.id = s.warehouse_id
-            JOIN public.product_inventory_config c ON c.product_id = s.product_id
-            JOIN public.inventory_units u ON u.id = c.base_unit_id
-            WHERE (s.physical_qty - s.reserved_qty) <= c.reorder_point
-            ORDER BY ((s.physical_qty - s.reserved_qty) - c.reorder_point) ASC, p.name_product ASC
-            LIMIT 12
-            """
-        )
+        priorities = self.priority_purchase_rows()
         for row in priorities:
             row["priority"] = "critica" if row["available_qty"] <= 0 else "alta"
             row["category"] = "Sin categoría registrada"

@@ -1,5 +1,5 @@
 import ComboboxPopup from "./ComboboxPopup";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { MasterRecord } from "../../types";
 
 type Props = {
@@ -8,6 +8,7 @@ type Props = {
   creating: boolean;
   disabled: boolean;
   loading: boolean;
+  allowCreate?: boolean;
   onSelect: (supplier: MasterRecord) => void;
   onCreate: (name: string) => void;
 };
@@ -15,7 +16,8 @@ type Props = {
 const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const supplierLabel = (supplier: MasterRecord) => [supplier.supplier_code, supplier.name].filter(Boolean).join(" · ");
 
-export default function SupplierCombobox({ suppliers, selectedId, creating, disabled, loading, onSelect, onCreate }: Props) {
+export default function SupplierCombobox({ suppliers, selectedId, creating, disabled, loading, onSelect, onCreate, allowCreate = true }: Props) {
+  const id=useId();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -25,7 +27,7 @@ export default function SupplierCombobox({ suppliers, selectedId, creating, disa
   const matches = suppliers.filter((supplier) => normalize(supplierLabel(supplier)).includes(normalize(query.trim())));
   const options = [
     ...matches.map((supplier) => ({ supplier, label: supplierLabel(supplier) })),
-    { supplier: null, label: query.trim() ? `Crear nuevo proveedor: «${query.trim()}»…` : "Crear nuevo proveedor…" },
+    ...(allowCreate ? [{ supplier: null, label: query.trim() ? `Crear nuevo proveedor: «${query.trim()}»…` : "Crear nuevo proveedor…" }] : []),
   ];
   const activeIndex = Math.min(active, options.length - 1);
   const expanded = open && !disabled;
@@ -44,11 +46,11 @@ export default function SupplierCombobox({ suppliers, selectedId, creating, disa
   return <div className="inventory-picker-combobox stock-order-supplier-combobox" onBlur={(event) => {
     if (!event.currentTarget.contains(event.relatedTarget)) { setOpen(false); setQuery(""); }
   }}>
-    <label className="input-label" htmlFor="stock-order-supplier">Proveedor (código o nombre)</label>
+    <label className="input-label" htmlFor={id}>Proveedor (código o nombre)</label>
     <div className="inventory-picker-input">
-      <input ref={input} id="stock-order-supplier" role="combobox" aria-autocomplete="list"
-        aria-expanded={expanded} aria-controls="stock-order-supplier-options"
-        aria-activedescendant={expanded ? `stock-order-supplier-option-${activeIndex}` : undefined}
+      <input ref={input} id={id} role="combobox" aria-autocomplete="list"
+        aria-expanded={expanded} aria-controls={`${id}-options`}
+        aria-activedescendant={expanded && options.length ? `${id}-option-${activeIndex}` : undefined}
         autoComplete="off" disabled={disabled} placeholder="Buscar por código o nombre…"
         value={expanded ? query : selected ? supplierLabel(selected) : creating ? "Nuevo proveedor" : ""}
         onFocus={() => { setOpen(true); setQuery(""); setActive(0); }}
@@ -58,10 +60,11 @@ export default function SupplierCombobox({ suppliers, selectedId, creating, disa
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
             setOpen(true);
+            if (!options.length) return;
             setActive(!expanded ? 0 : (activeIndex + (event.key === "ArrowDown" ? 1 : options.length - 1)) % options.length);
           } else if (event.key === "Enter" && expanded) {
             event.preventDefault();
-            choose(options[activeIndex].supplier);
+            if (options[activeIndex]) choose(options[activeIndex].supplier);
           } else if (event.key === "Escape" && expanded) {
             event.preventDefault(); event.stopPropagation(); setOpen(false); setQuery("");
           }
@@ -71,9 +74,9 @@ export default function SupplierCombobox({ suppliers, selectedId, creating, disa
         onClick={() => { input.current?.focus(); setOpen(true); setQuery(""); setActive(0); }}>▾</button>
     </div>
     {expanded && <ComboboxPopup anchor={input}>
-      <ul ref={list} id="stock-order-supplier-options" role="listbox" aria-label="Proveedores" aria-busy={loading}>
+      <ul ref={list} id={`${id}-options`} role="listbox" aria-label="Proveedores" aria-busy={loading}>
         {options.map((option, index) => <li key={option.supplier?.id ?? "create"}
-          id={`stock-order-supplier-option-${index}`} role="option"
+          id={`${id}-option-${index}`} role="option"
           aria-selected={option.supplier ? option.supplier.id === selectedId : creating}
           className={index === activeIndex ? "is-active" : ""}
           onMouseDown={(event) => event.preventDefault()} onClick={() => choose(option.supplier)}>
