@@ -1,11 +1,36 @@
 import os
 import unittest
+import requests
+import ai_service
 from unittest.mock import Mock, patch
 
 from ai_service import AIProviderError, AIService, _extract_openai_text
 
 
 class AIServiceTests(unittest.TestCase):
+    @patch('ai_service.requests.post')
+    def test_structured_schema_survives_fallback_and_is_isolated_from_other_calls(self, post):
+        schema = {'type': 'object', 'properties': {'result': {'type': 'string'}},
+                  'required': ['result'], 'additionalProperties': False}
+        cloud = Mock(status_code=200)
+        cloud.json.return_value = {'output_text': '{"result":"ok"}'}
+        post.side_effect = [requests.ConnectionError('offline'), cloud, cloud]
+        service = AIService()
+        service.provider_mode = 'auto'
+        service.openai_api_key = 'test-key'
+        with patch.object(ai_service, '_service', service):
+            result = ai_service.generate_ai('datos', 'JSON puro', timeout_seconds=10, response_schema=schema)
+            self.assertTrue(result['used_fallback'])
+            ollama_payload = post.call_args_list[0].kwargs['json']
+            openai_payload = post.call_args_list[1].kwargs['json']
+            self.assertEqual(ollama_payload['format'], schema)
+            self.assertEqual(openai_payload['text']['format'], {
+                'type': 'json_schema', 'name': 'operational_rule_turn', 'strict': True, 'schema': schema})
+            self.assertFalse(hasattr(service, 'response_schema'))
+            service.provider_mode = 'openai'
+            ai_service.generate_ai('chat normal')
+            self.assertNotIn('text', post.call_args.kwargs['json'])
+
     def tearDown(self):
         for key in (
             "AI_PROVIDER",

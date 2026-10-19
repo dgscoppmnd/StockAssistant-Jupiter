@@ -1,4 +1,7 @@
 import logging
+from datetime import datetime
+from psycopg2 import IntegrityError
+from stock_orders_service import StockOrdersService, StockOrderDraft, StockOrderMetadata
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from uuid import uuid4
@@ -27,6 +30,52 @@ from .endpointsSales import sales_user
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 logger = logging.getLogger("api.endpointsInventory")
+
+
+def stock_orders_service(db=Depends(get_db_products),authorization: str | None = Header(default=None)):
+    user=sales_user(db,authorization)
+    svc=StockOrdersService(db)
+    svc.actor=user['email']
+    return svc
+
+
+def stock_order_operation(fn,*args):
+    try:
+        return fn(*args)
+    except InventoryError as exc:
+        raise HTTPException(exc.status_code,str(exc)) from exc
+    except IntegrityError as exc:
+        raise HTTPException(409,'Número de pedido duplicado o documento vinculado. Recarga el listado.') from exc
+
+
+@router.get('/stock-orders')
+def stock_order_list(svc=Depends(stock_orders_service)):
+    return svc.list_orders()
+
+
+@router.get('/stock-orders/{order_id}')
+def stock_order_detail(order_id:int,svc=Depends(stock_orders_service)):
+    return stock_order_operation(svc.detail,order_id)
+
+
+@router.post('/stock-orders',status_code=201)
+def stock_order_create(payload:StockOrderDraft,svc=Depends(stock_orders_service)):
+    return stock_order_operation(svc.save,payload,svc.actor)
+
+
+@router.put('/stock-orders/{order_id}')
+def stock_order_edit(order_id:int,payload:StockOrderDraft,svc=Depends(stock_orders_service)):
+    return stock_order_operation(svc.save,payload,svc.actor,order_id)
+
+
+@router.delete('/stock-orders/{order_id}')
+def stock_order_delete(order_id:int,expected_updated_at:datetime,svc=Depends(stock_orders_service)):
+    return stock_order_operation(svc.delete,order_id,expected_updated_at)
+
+
+@router.patch('/stock-orders/{order_id}')
+def stock_order_metadata(order_id:int,payload:StockOrderMetadata,svc=Depends(stock_orders_service)):
+    return stock_order_operation(svc.edit_metadata,order_id,payload)
 
 
 def _service(db=Depends(get_db_products)) -> InventoryService:

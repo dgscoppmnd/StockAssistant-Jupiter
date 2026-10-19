@@ -1644,6 +1644,50 @@ body[data-theme="day"] .agent-result { background: rgba(230, 246, 255, 0.72); }
   min-width: 100%;
 }
 
+.inventory-selectable-table tbody tr { cursor: pointer; }
+.inventory-selectable-table tbody tr:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+.inventory-selectable-table tbody tr.inventory-row-selected td {
+  background: var(--bg-2);
+  box-shadow: inset 0 2px var(--cyan), inset 0 -2px var(--cyan);
+}
+
+.stock-orders-page .card {
+  --bs-card-color: var(--text-main);
+  color: var(--text-main);
+}
+
+.stock-orders-page .react-bootstrap-table-pagination {
+  color: var(--text-main);
+}
+
+.stock-orders-page .pagination {
+  --bs-pagination-color: var(--text-main);
+  --bs-pagination-bg: var(--bg-1);
+  --bs-pagination-border-color: var(--line-strong);
+  --bs-pagination-hover-color: var(--text-main);
+  --bs-pagination-hover-bg: var(--bg-2);
+  --bs-pagination-hover-border-color: var(--cyan);
+  --bs-pagination-focus-color: var(--text-main);
+  --bs-pagination-focus-bg: var(--bg-2);
+  --bs-pagination-active-color: var(--bg-0);
+  --bs-pagination-active-bg: var(--cyan);
+  --bs-pagination-active-border-color: var(--cyan);
+  --bs-pagination-disabled-color: var(--text-soft);
+  --bs-pagination-disabled-bg: var(--bg-1);
+  --bs-pagination-disabled-border-color: var(--line);
+}
+
+.stock-orders-page .dropdown-menu {
+  --bs-dropdown-color: var(--text-main);
+  --bs-dropdown-bg: var(--bg-1);
+  --bs-dropdown-border-color: var(--line-strong);
+  --bs-dropdown-link-color: var(--text-main);
+  --bs-dropdown-link-hover-color: var(--text-main);
+  --bs-dropdown-link-hover-bg: var(--bg-2);
+  --bs-dropdown-link-active-color: var(--bg-0);
+  --bs-dropdown-link-active-bg: var(--cyan);
+}
+
 .executive-hero {
   background: linear-gradient(125deg, rgba(9, 40, 62, 0.92), rgba(16, 73, 69, 0.72));
   color: #eaf8ff;
@@ -2095,6 +2139,50 @@ body[data-theme="day"] .chat-message-assistant {
 .agent-control table { width: 100%; border-collapse: collapse; }
 .agent-control th, .agent-control td { text-align: left; padding: .65rem; border-bottom: 1px solid currentColor; }
 .agent-table-scroll { overflow-x: auto; }
+.observed-ai { display: inline-flex; align-items: center; gap: .4rem; padding: .35rem .5rem; border: 1px solid var(--line-strong); border-radius: .5rem; background: var(--surface-soft); font: inherit; font-size: .85rem; cursor: pointer; white-space: nowrap; }
+.observed-ai svg, .observed-ai-logo { width: 1.15rem; height: 1.15rem; flex-shrink: 0; }
+.observed-ai-logo { filter: invert(1); }
+body[data-theme="day"] .observed-ai-logo { filter: none; }
+.observed-ai--critical { color: var(--danger); }
+.observed-ai--warning { color: var(--amber); }
+.observed-ai--success { color: var(--lime); }
+.observed-ai--neutral { color: var(--text-soft); }
+.observed-ai:hover { border-color: currentColor; }
+.observed-ai-popup { position: fixed; z-index: 1100; width: min(336px, calc(100vw - 24px)); padding: 1rem; border: 1px solid var(--line-strong); border-radius: .75rem; background: var(--bg-1); color: var(--text-main); box-shadow: 0 12px 32px #0005; font-size: .85rem; line-height: 1.5; overflow-y: auto; overflow-wrap: anywhere; }
+.observed-ai-popup p { margin: .6rem 0 0; }
+.observed-ai-cause { border-top: 1px solid var(--line); padding-top: .6rem; color: var(--text-soft); }
+.trace-interpretation { margin-top: 1.25rem; padding: 1rem; border: 1px solid var(--line-strong); border-left: 3px solid var(--cyan); border-radius: .6rem; background: var(--surface-soft); }
+.trace-interpretation h4 { margin: 0 0 .65rem; }
+.trace-interpretation-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.trace-interpretation small { display: block; margin-top: .65rem; color: var(--text-soft); }
+.trace-interpretation details, .trace-interpretation button { margin-top: .65rem; }
+.trace-note-metrics { display: grid; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap: .75rem; margin: .75rem 0; }
+.trace-note-metrics > div { padding: .65rem; border: 1px solid var(--line); border-radius: .4rem; }
+.trace-note-metrics dt { font-size: .8rem; color: var(--text-soft); }
+.trace-note-metrics dd { margin: .25rem 0 0; font-size: 1.25rem; font-weight: 600; }
+.trace-interpretation .trace-note-metrics dd small { display: inline; font-size: .75rem; font-weight: 400; }
+.trace-note-chart { margin: 1rem 0; max-width: 640px; }
+.trace-note-chart figcaption { margin-bottom: .5rem; font-size: .85rem; }
+.trace-note-chart svg { display: block; width: 100%; height: auto; }
+.rule-scope-picker { min-width: 0; }
+.rule-scope-picker > label { margin-bottom: .4rem; }
+.rule-scope-picker > small { display: block; margin-top: .4rem; color: var(--text-soft); }
+.rule-scope-panel { padding: .65rem; color: var(--text-main); }
+.rule-scope-panel > label { display: block; margin-bottom: .35rem; }
+.rule-scope-panel > input { width: 100%; margin-bottom: .5rem; }
+.rule-scope-options { display: grid; gap: .25rem; margin-top: .5rem; }
+.rule-scope-options > label { display: flex; flex-direction: row; align-items: flex-start; gap: .6rem; padding: .5rem; cursor: pointer; border-radius: .35rem; }
+.rule-scope-options > label:has(input:checked) { background: var(--surface); outline: 1px solid var(--line-strong); }
+.rule-scope-options input { flex-shrink: 0; margin-top: .2rem; width: 1rem; height: 1rem; accent-color: var(--cyan); }
+.rule-scope-options small { color: var(--text-soft); }
+.rule-scope-panel :focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+.rule-scope-actions { display: flex; align-items: center; gap: .5rem; margin-top: .5rem; }
+.rule-scope-actions .rule-scope-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: .4rem; }
+.rule-scope-icon svg { width: 20px; height: 20px; }
+.rule-scope-actions .rule-scope-close { margin-left: auto; }
+.purchase-offer-lines { margin: 1rem 0; }
+.purchase-offer-line { min-width: 0; margin: 1rem 0; border-radius: .6rem; }
+.purchase-offer-line legend { float: none; width: auto; padding: 0 .4rem; font-size: .95rem; }
 .agent-flow { display: flex; flex-wrap: wrap; gap: 1.5rem; padding-left: 1.5rem; }
 .agent-flow [aria-current="step"] { font-weight: bold; text-decoration: underline; }
 .agent-control :focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }

@@ -450,9 +450,5 @@ crear regla → simular → activar → observar ejecución → revisar propuest
 → aprobar una acción autorizada → consultar su evaluación posterior.
 
 Cualquier dato de demostración debe estar identificado y separado
-
-
 de los indicadores reales.
-
-
-ES6800494876552116113888
+.

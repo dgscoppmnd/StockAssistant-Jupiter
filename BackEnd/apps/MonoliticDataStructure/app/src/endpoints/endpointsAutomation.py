@@ -7,7 +7,11 @@ from automation_service import AutomationService
 from automation_contracts import RuleDraft, RuleConfig, ProposalDecision, ActionRequest, StopRequest, PhysicalReceipt
 from automation_purchasing import receive_purchase
 from inventory_service import InventoryError
+from rules_policy import RULE_OBJECTIVES, validate_rule_objective
 from .endpointsSales import sales_user
+from automation_contracts import StockDraftRequest
+from automation_stock_drafts import save_stock_draft,load_stock_draft,confirm_stock_draft
+from DataBaseManagement.schemasInventory import ReceiptConfirmRequest
 
 router = APIRouter(prefix='/automation', tags=['Agent control'])
 
@@ -57,6 +61,28 @@ def rules(svc: Service):
     return svc.rules()
 
 
+@router.get('/objectives')
+def objectives(svc: Service):
+    permit(svc, 'read')
+    return RULE_OBJECTIVES
+
+
+@router.get('/scope-defaults')
+def scope_defaults(svc: Service):
+    permit(svc,'read')
+    return svc.scope_defaults()
+
+
+@router.get('/scope-products')
+def scope_products(svc: Service, ids: str = Query(default='',max_length=1400)):
+    permit(svc,'read')
+    try:
+        selected = [int(value.strip()) for value in ids.split(',')] if ids.strip() else []
+    except ValueError:
+        raise HTTPException(422,'Indica IDs de productos separados por comas')
+    return execute(svc.scope_product_options,selected)
+
+
 @router.post('/rules')
 def create(payload: RuleDraft, svc: Service):
     permit(svc, 'edit')
@@ -78,6 +104,7 @@ def versions(rule_id: int, svc: Service):
 @router.post('/simulate')
 def simulate(payload: RuleConfig, svc: Service):
     permit(svc, 'edit')
+    execute(validate_rule_objective, payload.kind, payload.objective)
     return execute(svc.simulate, payload)
 
 
@@ -93,10 +120,35 @@ def trace(run_id: int, svc: Service):
     return svc.trace(run_id)
 
 
+@router.post('/runs/{run_id}/interpretation')
+def interpretation(run_id: int, svc: Service, retry: bool = False):
+    permit(svc, 'read')
+    return execute(svc.interpret_trace, run_id, retry)
+
+
 @router.get('/proposals')
 def proposals(svc: Service):
     permit(svc, 'read')
     return svc.action_proposals()
+
+
+@router.post('/stock-order-drafts')
+def stock_draft(payload: StockDraftRequest,svc: Service):
+    permit(svc,'edit')
+    return execute(save_stock_draft,svc,payload,svc.user['email'])
+
+
+@router.get('/stock-order-drafts/{draft_id}')
+def stock_draft_detail(draft_id:int,svc:Service):
+    permit(svc,'read')
+    return execute(load_stock_draft,svc,draft_id)
+
+
+@router.post('/stock-order-drafts/{draft_id}/{group_key}/confirm')
+def stock_draft_confirm(draft_id:int,group_key:str,payload:ReceiptConfirmRequest,svc:Service):
+    permit(svc,'execute')
+    return execute(confirm_stock_draft,svc,draft_id,group_key,payload,svc.user['email'],
+                   'approve' in svc.user['automation_permissions'])
 
 
 @router.post('/proposals/{proposal_id}/decision')
