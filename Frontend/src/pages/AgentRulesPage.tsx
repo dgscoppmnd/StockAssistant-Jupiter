@@ -16,7 +16,7 @@ type Config = {
 const initial: Config = {objective_metric:'confirmed_dispatch_qty',objective_target:null,kind:'stock_reorder_proposals', objective:'Reducir roturas manteniendo cobertura y capital', mode:'assisted', simulation:false,
   interval_minutes:1440,timezone:'Europe/Madrid',window_start_hour:0,window_end_hour:24,product_ids:[],warehouse_ids:[],target_days:'30',safety_qty:'0',minimum_order:'0',order_multiple:'1',lead_days:null,
   stagnant_days:90,maximum_coverage_days:'120',origin_min_days:'30',minimum_margin_percent:'20',per_action_budget:'0',daily_budget:'0',allowed_actions:[],expires_hours:24,cooldown_hours:24,
-  review_days:30,max_entities:30,max_model_calls:2,max_tool_calls:4,max_seconds:120,allow_unmetered_paid_ai:false,conditions:{mode:'all',items:[]}};
+  review_days:30,max_entities:30,max_model_calls:1,max_tool_calls:0,max_seconds:120,allow_unmetered_paid_ai:false,conditions:{mode:'all',items:[]}};
 const numbers: {key: keyof Config; label: string; min: number; max: number; decimal?: boolean}[] = [
   {key:'interval_minutes',label:'Frecuencia (minutos)',min:15,max:525600},{key:'window_start_hour',label:'Inicio de ventana (hora)',min:0,max:23},{key:'window_end_hour',label:'Fin de ventana (hora)',min:1,max:24},
   {key:'target_days',label:'Cobertura objetivo (días)',min:1,max:365,decimal:true},{key:'safety_qty',label:'Stock de seguridad (unidades base)',min:0,max:1000000,decimal:true},
@@ -25,7 +25,7 @@ const numbers: {key: keyof Config; label: string; min: number; max: number; deci
   {key:'origin_min_days',label:'Cobertura mínima del origen (días)',min:1,max:365,decimal:true},{key:'minimum_margin_percent',label:'Margen mínimo (%)',min:0,max:99.99,decimal:true},
   {key:'per_action_budget',label:'Presupuesto por acción (EUR)',min:0,max:100000000,decimal:true},{key:'daily_budget',label:'Presupuesto diario (EUR, UTC)',min:0,max:100000000,decimal:true},
   {key:'expires_hours',label:'Caducidad de propuestas (horas)',min:1,max:168},{key:'cooldown_hours',label:'Enfriamiento entre acciones (horas)',min:1,max:720},{key:'review_days',label:'Revisión del resultado (días)',min:1,max:365},
-  {key:'max_entities',label:'Máximo de entidades por ciclo',min:1,max:100},{key:'max_model_calls',label:'Máximo de llamadas IA',min:0,max:3},{key:'max_tool_calls',label:'Máximo de herramientas',min:0,max:10},{key:'max_seconds',label:'Duración máxima de análisis (segundos)',min:10,max:240},
+  {key:'max_entities',label:'Máximo de entidades por ciclo',min:1,max:100},{key:'max_seconds',label:'Duración máxima de análisis (segundos)',min:10,max:240},
 ];
 
 export default function AgentRulesPage() {
@@ -33,17 +33,19 @@ export default function AgentRulesPage() {
   const [name,setName] = useState(''),[description,setDescription] = useState(''),[reason,setReason] = useState(''),[status,setStatus] = useState('Cargando reglas…'),[error,setError] = useState('');
   const [simulation,setSimulation] = useState<unknown>(null),[versions,setVersions] = useState<{version:number; author:string; reason:string; created_at:string; config:Config}[]>([]),[busy,setBusy] = useState(false);
   const [permissions,setPermissions] = useState<string[]>([]);
+  const [objectives,setObjectives] = useState<Record<string,string[]>>({});
   const [productScope,setProductScope]=useState(''), [warehouseScope,setWarehouseScope]=useState('');
   const scopedConfig = () => {
     const parse=(text:string) => {if(!text.trim()) return []; const ids=text.split(',').map(x=>Number(x.trim())); if(ids.some(x=>!Number.isSafeInteger(x) || x<=0)) throw new Error('Indica identificadores positivos separados por comas'); return ids;};
     return {...config,product_ids:parse(productScope),warehouse_ids:parse(warehouseScope)};
   };
-  const load = async () => {const [r,c] = await Promise.all([automationRequest<Rule[]>('/rules'),automationRequest<{permissions:string[]}>('/control')]);setRules(r);setPermissions(c.permissions);};
+  const load = async () => {const [r,c,o] = await Promise.all([automationRequest<Rule[]>('/rules'),automationRequest<{permissions:string[]}>('/control'),automationRequest<Record<string,string[]>>('/objectives')]);setRules(r);setPermissions(c.permissions);setObjectives(o);};
   useEffect(() => {void load().then(() => setStatus('Reglas sincronizadas')).catch(e => setError(String(e)));},[]);
   const edit = async (r: Rule | null) => {
     setProductScope(((r?.config?.product_ids as number[]) ?? []).join(','));setWarehouseScope(((r?.config?.warehouse_ids as number[]) ?? []).join(','));
     setSelected(r);setName(r?.name ?? '');setDescription(r?.description ?? '');setReason('');setSimulation(null);setError('');
-    setConfig(r?.config ? {...initial,...r.config} as Config : {...initial,kind:r?.code ?? initial.kind});
+    const kind = r?.code ?? initial.kind;
+    setConfig(r?.config ? {...initial,...r.config} as Config : {...initial,kind,objective:objectives[kind]?.[0] ?? initial.objective});
     if(r) {try {setVersions(await automationRequest(`/rules/${r.id}/versions`));} catch(e) {setError(String(e));}} else setVersions([]);
   };
   const change = (patch: Partial<Config>) => {setConfig(c => ({...c,...patch}));setSimulation(null);};
@@ -57,9 +59,13 @@ export default function AgentRulesPage() {
     <section className="card"><h3>{selected ? `Editar ${selected.name} · base v${selected.current_version}` : 'Crear regla'}</h3><form className="stack" onSubmit={save}>
       <label>Nombre<input required minLength={3} maxLength={160} value={name} onChange={e => setName(e.target.value)} /></label>
       <label>Descripción<textarea maxLength={2000} value={description} onChange={e => setDescription(e.target.value)} /></label>
-      <label>Objetivo<textarea required minLength={3} maxLength={500} value={config.objective} onChange={e => change({objective:e.target.value})} /></label>
-      <div className="agent-fields"><label>Tipo de regla<select value={config.kind} onChange={e => change({kind:e.target.value})}><option value="stock_reorder_proposals">Reposición</option><option value="stagnant_stock">Stock estancado</option><option value="daily_inventory_report">Informe diario</option><option value="risk_alerts">Riesgos</option></select></label>
-        <label>Autonomía<select value={config.mode} onChange={e => change({mode:e.target.value,allowed_actions:[]})}><option value="observation">Observación</option><option value="assisted">Asistido</option><option value="limited_auto">Automático limitado</option></select></label>
+      <label>Objetivo<select required value={(objectives[config.kind] ?? []).includes(config.objective) ? config.objective : ''} onChange={e => change({objective:e.target.value})}>
+        <option value="" disabled>Selecciona un objetivo dentro del alcance de la regla</option>
+        {(objectives[config.kind] ?? []).map(objective => <option key={objective} value={objective}>{objective}</option>)}
+      </select><small>Los objetivos admitidos dependen del tipo de regla. Ajusta cobertura, condiciones y límites en sus campos.</small></label>
+      {!!Object.keys(objectives).length && !(objectives[config.kind] ?? []).includes(config.objective) && <p role="alert">El objetivo anterior no pertenece al catálogo permitido. Selecciona uno válido antes de guardar o simular.</p>}
+      <div className="agent-fields"><label>Tipo de regla<select value={config.kind} onChange={e => change({kind:e.target.value,objective:objectives[e.target.value]?.[0] ?? '',...(['daily_inventory_report','risk_alerts'].includes(e.target.value) ? {mode:'observation',allowed_actions:[],conditions:{mode:'all',items:[]}} : {})})}><option value="stock_reorder_proposals">Reposición</option><option value="stagnant_stock">Stock estancado</option><option value="daily_inventory_report">Informe diario</option><option value="risk_alerts">Riesgos</option></select></label>
+        <label>Autonomía<select value={config.mode} onChange={e => change({mode:e.target.value,allowed_actions:[]})}><option value="observation">Observación</option><option value="assisted">Asistido</option>{['stock_reorder_proposals','stagnant_stock'].includes(config.kind) && <option value="limited_auto">Automático limitado</option>}</select></label>
         <label>Zona horaria<input required value={config.timezone} onChange={e => change({timezone:e.target.value})} /></label>
         <label>Productos (IDs separados por comas, vacío = todos)<input pattern="[0-9, ]*" value={productScope} onChange={e => {setProductScope(e.target.value);setSimulation(null);}} /></label>
         <label>Almacenes (IDs separados por comas, vacío = todos)<input pattern="[0-9, ]*" value={warehouseScope} onChange={e => {setWarehouseScope(e.target.value);setSimulation(null);}} /></label>
@@ -68,12 +74,14 @@ export default function AgentRulesPage() {
         {numbers.map(n => <label key={n.key}>{n.label}<input required type="number" min={n.min} max={n.max} step={n.decimal ? '0.0001' : '1'} value={String(config[n.key])} onChange={e => change({[n.key]:n.decimal ? e.target.value : Number(e.target.value)})} /></label>)}
       </div>
       <label><input type="checkbox" checked={config.simulation} onChange={e => change({simulation:e.target.checked})} /> Ejecutar esta regla siempre en simulación (sin propuestas persistidas ni acciones)</label>
+      {['stock_reorder_proposals','stagnant_stock'].includes(config.kind) && <label><input type="checkbox" checked={config.max_model_calls > 0} onChange={e => change({max_model_calls:e.target.checked ? 1 : 0,max_tool_calls:0})} /> Permitir análisis con IA: una única consulta con la evidencia disponible; puede terminar sin propuestas si faltan datos.</label>}
       <label><input type="checkbox" checked={config.allow_unmetered_paid_ai} onChange={e => change({allow_unmetered_paid_ai:e.target.checked})} /> Autorizar IA cuyo proveedor no facilita coste (requiere permiso de autorización)</label>
       {config.mode === 'limited_auto' && <fieldset><legend>Acciones expresamente autorizadas</legend><label><input type="checkbox" checked={config.allowed_actions.includes('suspend_reorder')} onChange={e => change({allowed_actions:e.target.checked ? ['suspend_reorder'] : []})} /> Suspender propuestas automáticas por producto y almacén</label><p>Comprar necesita oferta vigente confirmada. Trasladar necesita confirmación física; publicar campañas necesita integración y autorización específicas.</p></fieldset>}
-      <fieldset><legend>Condiciones declarativas</legend><label>Grupo<select value={config.conditions.mode} onChange={e => change({conditions:{...config.conditions,mode:e.target.value}})}><option value="all">Todas</option><option value="any">Cualquiera</option></select></label>
+      {['stock_reorder_proposals','stagnant_stock'].includes(config.kind) && <fieldset><legend>Condiciones declarativas</legend><label>Grupo<select value={config.conditions.mode} onChange={e => change({conditions:{...config.conditions,mode:e.target.value}})}><option value="all">Todas</option><option value="any">Cualquiera</option></select></label>
         {config.conditions.items.map((c,i) => <div className="agent-fields" key={i}><label>Campo<select value={c.field} onChange={e => change({conditions:{...config.conditions,items:config.conditions.items.map((v,j)=> j === i ? {...v,field:e.target.value} : v)}})}>{[['available','Disponible (unidad base)'],['pending','Pendiente (unidad base)'],['sold_90','Despachos en 90 días (unidad base)'],['coverage_days','Cobertura (días)'],['days_without_sales','Días desde último despacho']].map(([v,l]) => <option value={v} key={v}>{l}</option>)}</select></label><label>Operador<select value={c.operator} onChange={e => change({conditions:{...config.conditions,items:config.conditions.items.map((v,j)=> j === i ? {...v,operator:e.target.value} : v)}})}>{['lt','lte','gt','gte','eq'].map(v => <option key={v}>{v}</option>)}</select></label><label>Umbral<input required type="number" min="0" step="0.0001" value={c.value} onChange={e => change({conditions:{...config.conditions,items:config.conditions.items.map((v,j)=> j === i ? {...v,value:e.target.value} : v)}})} /></label><button className="chip-btn" type="button" onClick={() => change({conditions:{...config.conditions,items:config.conditions.items.filter((_,j)=>j !== i)}})}>Quitar condición {i+1}</button></div>)}
         <button className="chip-btn" type="button" disabled={config.conditions.items.length >= 12} onClick={() => change({conditions:{...config.conditions,items:[...config.conditions.items,{field:'available',operator:'lt',value:'1'}]}})}>Añadir condición</button>
-      </fieldset>
+      </fieldset>}
+      {['daily_inventory_report','risk_alerts'].includes(config.kind) && <p>Este informe se calcula sin IA y sin acciones automáticas. Se aplican los filtros de productos y almacenes; las condiciones de stock corresponden a reposición y stock estancado.</p>}
       <label>Motivo del cambio<input required minLength={3} maxLength={500} value={reason} onChange={e => setReason(e.target.value)} /></label>
       <div><button className="primary-btn" type="submit" disabled={busy || !permissions.includes('edit')}>Guardar nueva versión pausada</button>{' '}<button className="chip-btn" type="button" disabled={busy || !permissions.includes('edit')} onClick={() => void perform(async () => {setSimulation(await automationRequest('/simulate','POST',scopedConfig()));setStatus('Simulación completada, sin efectos operativos');})}>Validar y simular instantánea</button></div>
     </form></section>

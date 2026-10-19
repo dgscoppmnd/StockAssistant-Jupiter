@@ -1,0 +1,1 @@
+Provider logos: [Simple Icons v14.15.0](https://github.com/simple-icons/simple-icons/tree/14.15.0/icons), distributed under [CC0-1.0](https://github.com/simple-icons/simple-icons/blob/14.15.0/LICENSE.md). Brand names and logos belong to their respective owners.

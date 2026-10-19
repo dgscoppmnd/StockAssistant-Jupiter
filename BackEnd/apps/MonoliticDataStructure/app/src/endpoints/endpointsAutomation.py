@@ -7,6 +7,7 @@ from automation_service import AutomationService
 from automation_contracts import RuleDraft, RuleConfig, ProposalDecision, ActionRequest, StopRequest, PhysicalReceipt
 from automation_purchasing import receive_purchase
 from inventory_service import InventoryError
+from rules_policy import RULE_OBJECTIVES, validate_rule_objective
 from .endpointsSales import sales_user
 
 router = APIRouter(prefix='/automation', tags=['Agent control'])
@@ -57,6 +58,12 @@ def rules(svc: Service):
     return svc.rules()
 
 
+@router.get('/objectives')
+def objectives(svc: Service):
+    permit(svc, 'read')
+    return RULE_OBJECTIVES
+
+
 @router.post('/rules')
 def create(payload: RuleDraft, svc: Service):
     permit(svc, 'edit')
@@ -78,6 +85,7 @@ def versions(rule_id: int, svc: Service):
 @router.post('/simulate')
 def simulate(payload: RuleConfig, svc: Service):
     permit(svc, 'edit')
+    execute(validate_rule_objective, payload.kind, payload.objective)
     return execute(svc.simulate, payload)
 
 

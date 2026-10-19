@@ -2095,6 +2095,18 @@ body[data-theme="day"] .chat-message-assistant {
 .agent-control table { width: 100%; border-collapse: collapse; }
 .agent-control th, .agent-control td { text-align: left; padding: .65rem; border-bottom: 1px solid currentColor; }
 .agent-table-scroll { overflow-x: auto; }
+.observed-ai { display: inline-flex; align-items: center; gap: .4rem; padding: .35rem .5rem; border: 1px solid var(--line-strong); border-radius: .5rem; background: var(--surface-soft); font: inherit; font-size: .85rem; cursor: pointer; white-space: nowrap; }
+.observed-ai svg, .observed-ai-logo { width: 1.15rem; height: 1.15rem; flex-shrink: 0; }
+.observed-ai-logo { filter: invert(1); }
+body[data-theme="day"] .observed-ai-logo { filter: none; }
+.observed-ai--critical { color: var(--danger); }
+.observed-ai--warning { color: var(--amber); }
+.observed-ai--success { color: var(--lime); }
+.observed-ai--neutral { color: var(--text-soft); }
+.observed-ai:hover { border-color: currentColor; }
+.observed-ai-popup { position: fixed; z-index: 1100; width: min(336px, calc(100vw - 24px)); padding: 1rem; border: 1px solid var(--line-strong); border-radius: .75rem; background: var(--bg-1); color: var(--text-main); box-shadow: 0 12px 32px #0005; font-size: .85rem; line-height: 1.5; overflow-y: auto; overflow-wrap: anywhere; }
+.observed-ai-popup p { margin: .6rem 0 0; }
+.observed-ai-cause { border-top: 1px solid var(--line); padding-top: .6rem; color: var(--text-soft); }
 .agent-flow { display: flex; flex-wrap: wrap; gap: 1.5rem; padding-left: 1.5rem; }
 .agent-flow [aria-current="step"] { font-weight: bold; text-decoration: underline; }
 .agent-control :focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }

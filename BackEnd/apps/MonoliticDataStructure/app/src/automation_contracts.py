@@ -4,6 +4,9 @@ from typing import Literal, Annotated
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from rules_policy import RULE_OBJECTIVES, validate_rule_objective
+import json
+import re
 
 Action = Literal['wait', 'replenish', 'transfer', 'suspend_reorder', 'promotion', 'supplier_return']
 PositiveId = Annotated[int, Field(gt=0, strict=True)]
@@ -70,8 +73,9 @@ class RuleConfig(Contract):
     cooldown_hours: int = Field(default=24, ge=1, le=720)
     review_days: int = Field(default=30, ge=1, le=365)
     max_entities: int = Field(default=30, ge=1, le=100)
-    max_model_calls: int = Field(default=2, ge=0, le=3)
-    max_tool_calls: int = Field(default=4, ge=0, le=10)
+    # Legacy higher budgets remain readable; direct selection uses at most one call and no tools.
+    max_model_calls: int = Field(default=1, ge=0, le=3)
+    max_tool_calls: int = Field(default=0, ge=0, le=10)
     max_seconds: int = Field(default=120, ge=10, le=240)
     # Without metered provider costs only local inference is permitted by default.
     allow_unmetered_paid_ai: bool = False
@@ -79,6 +83,8 @@ class RuleConfig(Contract):
 
     @model_validator(mode='after')
     def validate_policy(self):
+        if 'objective' not in self.model_fields_set:
+            self.objective = RULE_OBJECTIVES[self.kind][0]
         try:
             ZoneInfo(self.timezone)
         except (ZoneInfoNotFoundError, ValueError) as exc:
@@ -91,6 +97,11 @@ class RuleConfig(Contract):
             raise ValueError('Presupuesto por acción superior al diario')
         if self.mode != 'limited_auto' and self.allowed_actions:
             raise ValueError('Acciones automáticas requieren modo automático limitado')
+        if self.kind in ('daily_inventory_report', 'risk_alerts'):
+            if self.mode == 'limited_auto' or self.allowed_actions:
+                raise ValueError('Los informes y alertas solo observan datos; no admiten acciones automáticas')
+            if self.conditions.items:
+                raise ValueError('Las condiciones de stock solo se aplican a reposición y stock estancado; usa filtros de producto y almacén para informes')
         # Physical operations and external publication always need separate confirmation.
         if any(a not in ('replenish', 'suspend_reorder') for a in self.allowed_actions):
             raise ValueError('Esta acción requiere confirmación operativa específica')
@@ -103,6 +114,11 @@ class RuleDraft(Contract):
     reason: str = Field(min_length=3, max_length=500)
     expected_version: int = Field(default=0, ge=0)
     config: RuleConfig
+
+    @model_validator(mode='after')
+    def objective_in_scope(self):
+        validate_rule_objective(self.config.kind, self.config.objective)
+        return self
 
 
 class ToolCall(Contract):
@@ -119,9 +135,50 @@ class Choice(Contract):
 
 
 class ModelTurn(Contract):
-    tools: list[ToolCall] = Field(default_factory=list, max_length=4)
+    tools: list[ToolCall] = Field(default_factory=list, max_length=0)
     choices: list[Choice] = Field(default_factory=list, max_length=100)
     finish_reason: str = Field(min_length=3, max_length=500)
+
+def model_turn_schema():
+    """Derive the provider schema from the same contract validated locally."""
+    schema = ModelTurn.model_json_schema()
+    def require_fields(node):
+        if isinstance(node, dict):
+            node.pop('default', None)
+            if node.get('type') == 'object':
+                node['required'] = list(node.get('properties', {}))
+                node['additionalProperties'] = False
+            for value in node.values():
+                require_fields(value)
+        elif isinstance(node, list):
+            for value in node:
+                require_fields(value)
+    require_fields(schema)
+    return schema
+
+
+def parse_model_turn(response: str):
+    """Accept pure JSON or one complete Markdown fence, never extract arbitrary prose."""
+    if not isinstance(response, str):
+        raise ValueError('La respuesta del modelo debe ser texto JSON')
+    text = response.strip()
+    fenced = re.fullmatch(r'```(?:json)?\s*\n([\s\S]*?)\n```', text, flags=re.IGNORECASE)
+    if fenced:
+        text = fenced.group(1).strip()
+    def unique_object(pairs):
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise ValueError('Clave JSON duplicada en la respuesta del modelo')
+            obj[key] = value
+        return obj
+    def reject_constant(value):
+        raise ValueError('Constante JSON no válida: ' + value)
+    try:
+        data = json.loads(text, object_pairs_hook=unique_object, parse_constant=reject_constant)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f'Respuesta JSON no válida: {exc.msg} (línea {exc.lineno}, columna {exc.colno})') from exc
+    return ModelTurn.model_validate(data), fenced is not None
 
 
 class Quote(Contract):
