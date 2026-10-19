@@ -95,5 +95,4 @@ def save_document(service, values: dict, upload=None, record_id: int | None = No
             if file_storage.bucket():
                 file_storage.delete(f"knowledge/{path.name}")
         raise
-    file_storage.trigger_indexing()
     return result

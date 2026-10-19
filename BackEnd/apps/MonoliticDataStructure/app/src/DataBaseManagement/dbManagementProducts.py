@@ -1,4 +1,6 @@
 import logging
+import os
+import re
 from contextlib import nullcontext
 from typing import Any
 from psycopg2.extras import RealDictCursor
@@ -18,6 +20,15 @@ from src.DataBaseManagement.dbManagement import (
 logger = logging.getLogger("api.dbProducts")
 
 TableNameProducts = "productos"
+
+# Relaci?n desde la que se LEE el cat?logo. En local es la tabla productos; en AWS
+# apunta a la vista productos_catalogo (sobre public.products). Las escrituras
+# siguen yendo siempre a TableNameProducts.
+READ_RELATION = os.getenv("PRODUCTS_READ_RELATION", TableNameProducts).strip()
+if not re.fullmatch(r"[a-z_][a-z0-9_]*", READ_RELATION):
+	raise RuntimeError("PRODUCTS_READ_RELATION no es un identificador v?lido")
+CATALOG_READ_ONLY = READ_RELATION != TableNameProducts
+MAX_UNPAGED_ROWS = 1000
 
 
 def insert_product(data: dict[str, Any], connection: Any = None) -> dict[str, Any]:
@@ -48,18 +59,19 @@ def get_product_by_id(
 	id_column: str = "pk_product",
 	connection: Any = None,
 ) -> dict[str, Any] | None:
-	return get_record_by_id_Generic(table=TableNameProducts, record_id=record_id, id_column=id_column, connection=connection)
+	return get_record_by_id_Generic(table=READ_RELATION, record_id=record_id, id_column=id_column, connection=connection)
 
 
 def get_all_products(connection: Any = None) -> list[dict[str, Any]]:
 	with nullcontext(connection) if connection is not None else db_context() as conn:
 		with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-			cursor.execute("""
+			cursor.execute(f"""
 				SELECT p.*, image.public_url AS default_image_url
-				FROM public.productos p
+				FROM public.{READ_RELATION} p
 				LEFT JOIN public.products_images image ON image.product_id = p.pk_product AND image.is_default = TRUE
 				ORDER BY p.pk_product ASC
-			""")
+				{"LIMIT %s" if CATALOG_READ_ONLY else ""}
+			""", (MAX_UNPAGED_ROWS,) if CATALOG_READ_ONLY else None)
 			return [dict(row) for row in cursor.fetchall()]
 
 
@@ -109,14 +121,14 @@ def get_products_page(page: int, page_size: int, connection: Any = None) -> dict
 		raise ValueError("Página o tamaño de página fuera del rango permitido.")
 	with nullcontext(connection) if connection is not None else db_context() as conn:
 		with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-			cursor.execute("SELECT COUNT(*) AS total FROM public.productos")
+			cursor.execute(f"SELECT COUNT(*) AS total FROM public.{READ_RELATION}")
 			total = cursor.fetchone()["total"]
 			# Si se elimina la última fila de la última página, devolver la anterior.
 			page = min(page, max(1, (total + page_size - 1) // page_size))
-			cursor.execute("""
+			cursor.execute(f"""
 				SELECT p.*, image.public_url AS default_image_url
 				FROM (
-					SELECT * FROM public.productos ORDER BY pk_product ASC LIMIT %s OFFSET %s
+					SELECT * FROM public.{READ_RELATION} ORDER BY pk_product ASC LIMIT %s OFFSET %s
 				) p
 				LEFT JOIN public.products_images image ON image.product_id = p.pk_product AND image.is_default = TRUE
 				ORDER BY p.pk_product ASC
@@ -137,7 +149,7 @@ def search_product_options(query: str, after: int, limit: int, connection: Any) 
 		params.append(search_pattern(query))
 	with connection.cursor(cursor_factory=RealDictCursor) as cursor:
 		cursor.execute(
-			f"SELECT pk_product, cdgo_producto_externo, name_product FROM public.productos WHERE {where} ORDER BY pk_product DESC LIMIT %s",
+			f"SELECT pk_product, cdgo_producto_externo, name_product FROM public.{READ_RELATION} WHERE {where} ORDER BY pk_product DESC LIMIT %s",
 			[*params, limit + 1],
 		)
 		rows = [dict(row) for row in cursor.fetchall()]
@@ -147,7 +159,7 @@ def search_product_options(query: str, after: int, limit: int, connection: Any) 
 
 def get_product_option(product_id: int, connection: Any) -> dict[str, Any] | None:
 	with connection.cursor(cursor_factory=RealDictCursor) as cursor:
-		cursor.execute("SELECT pk_product, cdgo_producto_externo, name_product FROM public.productos WHERE pk_product = %s", (product_id,))
+		cursor.execute(f"SELECT pk_product, cdgo_producto_externo, name_product FROM public.{READ_RELATION} WHERE pk_product = %s", (product_id,))
 		row = cursor.fetchone()
 		return dict(row) if row else None
 
@@ -157,11 +169,11 @@ def get_disabled_products(connection: Any = None) -> list[dict[str, Any]]:
 		disabled = TRUE
 		ORDER BY pk_product ASC
 	"""
-	return get_rows_by_condition_Generic(table=TableNameProducts, condition=query, params=[], connection=connection)
+	return get_rows_by_condition_Generic(table=READ_RELATION, condition=query, params=[], connection=connection)
 
 
 def count_disabled_products(connection: Any = None) -> int:
 	query = """
 		disabled = TRUE
 	"""
-	return count_rows_by_condition_Generic(table=TableNameProducts, condition=query, params=[], connection=connection)
+	return count_rows_by_condition_Generic(table=READ_RELATION, condition=query, params=[], connection=connection)

@@ -1,7 +1,7 @@
 """Atajos para el día a día. Uso: python infra/scripts/dev.py <comando>
 
   sg-open | sg-close | sg-status   Abre/cierra 5432 a 0.0.0.0/0 (RDS sin VPC)
-  deploy-backend [tag]             build + push + update-function-code + env
+  deploy-backend [tag]             build + push + update-function-code
   deploy-frontend                  build Vite + s3 sync + invalidación
   smoke                            prueba rápida vía CloudFront
 
@@ -9,6 +9,7 @@ Requiere: aws CLI con credenciales, docker (buildx), npm.
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -54,16 +55,76 @@ def sg(action):
               "--query", "SecurityGroups[0].IpPermissions[0].IpRanges[].CidrIp"))
 
 
+def uses_ecr_helper(registry):
+    config_dir = Path(os.environ.get("DOCKER_CONFIG") or Path.home() / ".docker")
+    config_path = config_dir / "config.json"
+    if not config_path.exists():
+        return False
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as error:
+        sys.exit(f"No se puede leer la configuracion Docker {config_path}: {error}")
+    if not isinstance(config, dict):
+        sys.exit(f"Configuracion Docker invalida: {config_path}")
+    helpers = config.get("credHelpers") or {}
+    if not isinstance(helpers, dict):
+        sys.exit(f"credHelpers debe ser un objeto en {config_path}")
+    return helpers.get(registry, config.get("credsStore")) == "ecr-login"
+
+
+def ecr_helper_environment():
+    if shutil.which("docker-credential-ecr-login") is None:
+        sys.exit("Falta docker-credential-ecr-login en PATH; no se inicia el despliegue.")
+    result = subprocess.run(
+        ["aws", "configure", "export-credentials", "--format", "process"],
+        capture_output=True, text=True,
+    )
+    if result.returncode:
+        sys.exit("No se pudieron exportar las credenciales. Comprueba la sesion con "
+                 "'aws sts get-caller-identity' y renuevala con tu metodo habitual.")
+    try:
+        credentials = json.loads(result.stdout)
+    except ValueError:
+        sys.exit("AWS CLI no devolvio credenciales JSON validas.")
+    if not isinstance(credentials, dict):
+        sys.exit("AWS CLI no devolvio un objeto de credenciales.")
+    required = ("AccessKeyId", "SecretAccessKey")
+    if any(not isinstance(credentials.get(key), str) or not credentials[key].strip()
+           for key in required):
+        sys.exit("AWS CLI devolvio credenciales incompletas.")
+    token = credentials.get("SessionToken")
+    if token is not None and (not isinstance(token, str) or not token.strip()):
+        sys.exit("AWS CLI devolvio un token de sesion invalido.")
+
+    env = os.environ.copy()
+    env["AWS_ACCESS_KEY_ID"] = credentials["AccessKeyId"]
+    env["AWS_SECRET_ACCESS_KEY"] = credentials["SecretAccessKey"]
+    env.pop("AWS_SESSION_TOKEN", None)
+    env.pop("AWS_SECURITY_TOKEN", None)
+    if token:
+        env["AWS_SESSION_TOKEN"] = token
+    env["AWS_REGION"] = REGION
+    env["AWS_DEFAULT_REGION"] = REGION
+    env["AWS_ECR_DISABLE_CACHE"] = "true"
+    return env
+
+
 def deploy_backend(tag=None):
     tag = tag or time.strftime("%Y%m%d-%H%M%S")
     registry = f"{account()}.dkr.ecr.{REGION}.amazonaws.com"
     image = f"{registry}/stockassistant-api:{tag}"
-    pwd = aws("ecr", "get-login-password")
-    subprocess.run(["docker", "login", "--username", "AWS", "--password-stdin", registry],
-                   input=pwd, text=True, check=True)
+    docker_env = None
+    if uses_ecr_helper(registry):
+        print("ECR helper: autenticacion con credenciales de AWS CLI, sin docker login.")
+        docker_env = ecr_helper_environment()
+    else:
+        pwd = aws("ecr", "get-login-password")
+        subprocess.run(["docker", "login", "--username", "AWS", "--password-stdin", registry],
+                       input=pwd, text=True, check=True)
     run(["docker", "buildx", "build", "--provenance=false", "--sbom=false", "--platform", "linux/amd64",
          "-f", "Dockerfile.lambda", "--build-arg", "REQUIREMENTS_FILE=requirements/lambda.txt",
-         "--build-arg", "APP_MODULE=src.api.main:app", "-t", image, "--push", "."], cwd=BACKEND)
+         "--build-arg", "APP_MODULE=src.api.main:app", "-t", image, "--push", "."],
+        cwd=BACKEND, env=docker_env)
     run(["aws", "lambda", "update-function-code", "--function-name", FUNCTION, "--image-uri", image,
          "--region", REGION, "--query", "LastUpdateStatus"])
     run(["aws", "lambda", "wait", "function-updated", "--function-name", FUNCTION, "--region", REGION])

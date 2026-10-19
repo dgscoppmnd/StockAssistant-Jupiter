@@ -2,6 +2,7 @@
 import logging
 import threading
 
+import file_storage
 from knowledge_service import KnowledgeService
 from knowledge_vectors import configured_embedding_spec, EmbeddingSpec, KnowledgeVectors
 
@@ -28,7 +29,10 @@ def cleanup_retired_vectors(connection):
 
 
 def notify_knowledge_worker():
-    _wake.set()
+    if file_storage.IS_LAMBDA:
+        file_storage.trigger_indexing()
+    else:
+        _wake.set()
 
 
 def process_pending(connection_factory, stop=None):
