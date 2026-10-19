@@ -431,6 +431,39 @@ export type ChatConversationListResponse = {
   conversations: ChatConversation[];
 };
 
+export type MarketingOpportunity = {
+  product_id: number;
+  product_name: string;
+  recent_qty: number | string;
+  previous_qty: number | string;
+  increase_qty: number | string;
+  increase_percent: number | string;
+  available_qty: number | string;
+  base_unit_code: string;
+  external: {
+    term: string;
+    status: string;
+    source: { name: string; detail?: string; reference_url?: string };
+    generated_at?: string;
+    summary?: { status: string; change_index_points?: number; completed_observations?: number } | null;
+  };
+  campaign: { objective: string; audience_hypothesis: string; channel: string; message: string; reason: string };
+  campaign_origin: "ai" | "template";
+  state: "draft_requires_review";
+};
+
+export type MarketingResult = {
+  agent: "marketing";
+  status: "ok" | "no_candidates";
+  country: string;
+  generated_at: string;
+  opportunities: MarketingOpportunity[];
+  selection: { recent_start: string; previous_start: string; end_exclusive: string };
+  ai: { provider: string; model: string; used_fallback: boolean } | null;
+  warnings: string[];
+  explanation: string;
+};
+
 export type ChatHistoryResponse = {
   conversation: ChatConversation;
   messages: ChatMessage[];

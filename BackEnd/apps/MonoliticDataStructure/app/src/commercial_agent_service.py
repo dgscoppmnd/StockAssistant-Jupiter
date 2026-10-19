@@ -258,7 +258,7 @@ class CommercialAgentService:
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
 
-    def market_intelligence(self, term: str, country: str = "ES") -> dict[str, Any]:
+    def market_intelligence(self, term: str, country: str = "ES", *, include_ai: bool = True) -> dict[str, Any]:
         term = term.strip()
         country = country.upper()
         if not 2 <= len(term) <= 100 or len(country) != 2 or not country.isalpha():
@@ -305,6 +305,8 @@ class CommercialAgentService:
         summary = summarize_series(points, as_of=datetime.fromisoformat(result["generated_at"]))
         result["summary"] = summary
         result["explanation"] = fallback_explanation(summary)
+        if not include_ai:
+            return result
         evidence = {"term": term, "country": country, "period": result["period"],
                     "summary": summary, "interest_over_time": points,
                     "related_queries": result["data"]["related_queries"],

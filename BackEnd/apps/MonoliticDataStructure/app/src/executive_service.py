@@ -13,6 +13,7 @@ from agent_service import AgentService
 from commercial_agent_service import CommercialAgentService
 from automation_service import AutomationService
 from market_trends import executive_term
+from marketing_service import MarketingService
 
 
 class ExecutiveService:
@@ -22,6 +23,7 @@ class ExecutiveService:
         self.connection = connection
         self.inventory = AgentService(connection)
         self.commercial = CommercialAgentService(connection)
+        self.marketing = MarketingService(connection)
 
     def _all(self, query: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
         with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -52,7 +54,9 @@ class ExecutiveService:
         lowered = question.lower()
         requested = (agent or "auto").strip().lower()
         if requested == "auto":
-            if any(word in lowered for word in ("riesgo", "devoluci", "obsoleto")):
+            if any(word in lowered for word in ("marketing", "campaña", "campana", "promocion", "promoción")):
+                routed = "marketing"
+            elif any(word in lowered for word in ("riesgo", "devoluci", "obsoleto")):
                 routed = "risks"
             elif any(word in lowered for word in ("margen", "beneficio", "financ")):
                 routed = "financial"
@@ -73,7 +77,9 @@ class ExecutiveService:
         else:
             routed = requested
 
-        if routed == "clients":
+        if routed == "marketing":
+            result = self.marketing.opportunities()
+        elif routed == "clients":
             result = self.inventory.client_support(question, client_id)
         elif routed == "stock":
             result = self.inventory.stock_alerts()

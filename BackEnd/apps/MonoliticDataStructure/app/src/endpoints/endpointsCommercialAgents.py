@@ -5,10 +5,12 @@ from DataBaseManagement.schemasAgents import (
     CommercialContentRequest,
     CustomerSupportRequest,
     MarketIntelligenceRequest,
+    MarketingOpportunitiesRequest,
     ProductAnalysisRequest,
 )
 from commercial_agent_service import CommercialAgentError, CommercialAgentService
 from knowledge_errors import KnowledgeError
+from marketing_service import MarketingService
 
 router = APIRouter(prefix="/agents", tags=["commercial agents"])
 
@@ -62,6 +64,14 @@ def commercial_content(
     payload: CommercialContentRequest, service: CommercialAgentService = Depends(_service)
 ):
     return _call(lambda: service.commercial_content(payload.product_id, payload.channel))
+
+
+@router.post("/marketing/opportunities")
+def marketing_opportunities(payload: MarketingOpportunitiesRequest, db=Depends(get_db_products)):
+    try:
+        return MarketingService(db).opportunities(payload.limit, payload.country)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/customer-support")
