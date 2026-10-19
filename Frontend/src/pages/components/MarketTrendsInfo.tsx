@@ -5,14 +5,14 @@ export default function MarketTrendsInfo() {
     <p>Esta tarjeta permite <strong>consultar señales de interés de búsqueda en Google Trends mediante SerpAPI</strong>. Es una consulta externa de solo lectura para apoyar el análisis de mercado de un término, producto o categoría.</p>
     <ol>
       <li><strong>Introduce un término de búsqueda</strong>, por ejemplo «auriculares inalámbricos» o «cargador portátil». El backend admite términos de entre 2 y 100 caracteres.</li>
-      <li><strong>Pulsa «Consultar SerpAPI Trends».</strong> La app envía el término al backend, comprueba la disponibilidad de SerpAPI y consulta Google Trends si la fuente está habilitada.</li>
+      <li><strong>Pulsa «Consultar tendencias».</strong> La app envía el término al backend, comprueba la disponibilidad de SerpAPI y consulta Google Trends si la fuente está habilitada.</li>
       <li><strong>Comprueba el resultado en esta tarjeta.</strong> Se muestra «Datos de tendencia recibidos» cuando se recibe el bloque de datos, o «La fuente no está disponible» cuando la consulta no puede proporcionar datos. Debajo aparece el nombre de la fuente.</li>
       <li><strong>Si se produce un error de la solicitud</strong>, revisa el mensaje de error de la parte superior de la página. Puedes corregir el término o volver a consultar cuando el servicio esté disponible.</li>
     </ol>
     <table className="routing-info-table">
       <thead><tr><th scope="col">Qué quieres consultar</th><th scope="col">Qué debes seleccionar o introducir</th></tr></thead>
       <tbody>
-        <tr><td>El interés de búsqueda de un producto o categoría</td><td>Escribe su <strong>nombre o término representativo</strong> y pulsa <strong>Consultar SerpAPI Trends</strong>.</td></tr>
+        <tr><td>El interés de búsqueda de un producto o categoría</td><td>Escribe su <strong>nombre o término representativo</strong> y pulsa <strong>Consultar tendencias</strong>.</td></tr>
         <tr><td>Consultar otro término</td><td>Sustituye el texto del campo y vuelve a pulsar el botón. El resultado recibido sustituye al anterior.</td></tr>
         <tr><td>Comprobar si la consulta obtuvo datos</td><td>Revisa el <strong>mensaje del resultado</strong> y el nombre de la <strong>fuente</strong>.</td></tr>
         <tr><td>Comprobar la disponibilidad del proveedor</td><td>Revisa también <strong>Disponibilidad y modo</strong>, donde aparece el estado de SerpAPI y su detalle al cargar la página.</td></tr>
