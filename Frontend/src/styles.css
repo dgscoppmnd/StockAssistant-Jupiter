@@ -1644,6 +1644,50 @@ body[data-theme="day"] .agent-result { background: rgba(230, 246, 255, 0.72); }
   min-width: 100%;
 }
 
+.inventory-selectable-table tbody tr { cursor: pointer; }
+.inventory-selectable-table tbody tr:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+.inventory-selectable-table tbody tr.inventory-row-selected td {
+  background: var(--bg-2);
+  box-shadow: inset 0 2px var(--cyan), inset 0 -2px var(--cyan);
+}
+
+.stock-orders-page .card {
+  --bs-card-color: var(--text-main);
+  color: var(--text-main);
+}
+
+.stock-orders-page .react-bootstrap-table-pagination {
+  color: var(--text-main);
+}
+
+.stock-orders-page .pagination {
+  --bs-pagination-color: var(--text-main);
+  --bs-pagination-bg: var(--bg-1);
+  --bs-pagination-border-color: var(--line-strong);
+  --bs-pagination-hover-color: var(--text-main);
+  --bs-pagination-hover-bg: var(--bg-2);
+  --bs-pagination-hover-border-color: var(--cyan);
+  --bs-pagination-focus-color: var(--text-main);
+  --bs-pagination-focus-bg: var(--bg-2);
+  --bs-pagination-active-color: var(--bg-0);
+  --bs-pagination-active-bg: var(--cyan);
+  --bs-pagination-active-border-color: var(--cyan);
+  --bs-pagination-disabled-color: var(--text-soft);
+  --bs-pagination-disabled-bg: var(--bg-1);
+  --bs-pagination-disabled-border-color: var(--line);
+}
+
+.stock-orders-page .dropdown-menu {
+  --bs-dropdown-color: var(--text-main);
+  --bs-dropdown-bg: var(--bg-1);
+  --bs-dropdown-border-color: var(--line-strong);
+  --bs-dropdown-link-color: var(--text-main);
+  --bs-dropdown-link-hover-color: var(--text-main);
+  --bs-dropdown-link-hover-bg: var(--bg-2);
+  --bs-dropdown-link-active-color: var(--bg-0);
+  --bs-dropdown-link-active-bg: var(--cyan);
+}
+
 .executive-hero {
   background: linear-gradient(125deg, rgba(9, 40, 62, 0.92), rgba(16, 73, 69, 0.72));
   color: #eaf8ff;

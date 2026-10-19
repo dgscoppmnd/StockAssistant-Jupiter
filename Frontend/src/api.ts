@@ -49,6 +49,10 @@ import { uploadSupplierCsv, type SupplierImportProgress, type SupplierImportResu
 
 const API_BASE = "/api";
 
+export function stockOrdersRequest<T>(path = '', method = 'GET', data?: unknown): Promise<T> {
+  return request<T>(`${API_BASE}/inventory/stock-orders${path}`, {method, ...(data === undefined ? {} : {body: JSON.stringify(data)})});
+}
+
 export function automationRequest<T>(path: string, method = 'GET', data?: unknown): Promise<T> {
   return request<T>(`${API_BASE}/automation${path}`, {method, ...(data === undefined ? {} : {body: JSON.stringify(data)})});
 }

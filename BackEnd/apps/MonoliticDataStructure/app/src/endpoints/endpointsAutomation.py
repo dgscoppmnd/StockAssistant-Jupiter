@@ -9,6 +9,9 @@ from automation_purchasing import receive_purchase
 from inventory_service import InventoryError
 from rules_policy import RULE_OBJECTIVES, validate_rule_objective
 from .endpointsSales import sales_user
+from automation_contracts import StockDraftRequest
+from automation_stock_drafts import save_stock_draft,load_stock_draft,confirm_stock_draft
+from DataBaseManagement.schemasInventory import ReceiptConfirmRequest
 
 router = APIRouter(prefix='/automation', tags=['Agent control'])
 
@@ -127,6 +130,25 @@ def interpretation(run_id: int, svc: Service, retry: bool = False):
 def proposals(svc: Service):
     permit(svc, 'read')
     return svc.action_proposals()
+
+
+@router.post('/stock-order-drafts')
+def stock_draft(payload: StockDraftRequest,svc: Service):
+    permit(svc,'edit')
+    return execute(save_stock_draft,svc,payload,svc.user['email'])
+
+
+@router.get('/stock-order-drafts/{draft_id}')
+def stock_draft_detail(draft_id:int,svc:Service):
+    permit(svc,'read')
+    return execute(load_stock_draft,svc,draft_id)
+
+
+@router.post('/stock-order-drafts/{draft_id}/{group_key}/confirm')
+def stock_draft_confirm(draft_id:int,group_key:str,payload:ReceiptConfirmRequest,svc:Service):
+    permit(svc,'execute')
+    return execute(confirm_stock_draft,svc,draft_id,group_key,payload,svc.user['email'],
+                   'approve' in svc.user['automation_permissions'])
 
 
 @router.post('/proposals/{proposal_id}/decision')

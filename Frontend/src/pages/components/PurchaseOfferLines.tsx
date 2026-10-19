@@ -23,7 +23,7 @@ export default function PurchaseOfferLines({rows,drafts,busy,onChange}:Props){
       const draft=drafts[row.key]??emptyOffer(row.productId);
       const editable=row.action==='replenish'&&row.proposalId!==undefined&&['pending_approval','approved'].includes(row.status??'');
       const message=editable?offerError(row.productId,draft):row.action!=='replenish'
-        ?'Esta recomendación no solicita una compra; no necesita oferta de proveedor.'
+        ?'La IA no solicitó una compra. Para preparar un pedido manual, selecciona proveedor, precio y validez; la referencia es opcional. La cantidad se obtiene del cálculo de reposición y se revisa en Inventario.'
         :row.proposalId===undefined?'Esta recomendación no tiene una propuesta de compra persistida para ejecutar.'
         :'La propuesta ya no está pendiente de aprobación o ejecución.';
       const update=(patch:Partial<OfferDraft>)=>onChange(row.key,{...draft,...patch});

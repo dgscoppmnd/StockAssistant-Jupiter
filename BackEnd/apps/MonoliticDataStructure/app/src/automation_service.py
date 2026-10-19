@@ -636,7 +636,7 @@ class AutomationService:
         self.connection.rollback()
         return interpret_trace(run,events,proposals,retry=retry)
 
-    def revalidate(self, p):
+    def revalidate(self, p, allow_historical_cost_change=False):
         rule = self._one('SELECT * FROM public.automation_rules WHERE id=%s FOR UPDATE', (p['rule_id'],))
         config = self.config(rule)
         if self.stopped() or config.simulation or config.mode == 'observation':
@@ -649,10 +649,18 @@ class AutomationService:
             config = config.model_copy(update={k:frozen[k] for k in ('product_ids','warehouse_ids')})
         rows = self.snapshots(config)
         row = next((r for r in rows if r['product_id'] == p['product_id'] and r['warehouse_id'] == p['warehouse_id']), None)
-        if not row or digest(row) != p['snapshot_hash']:
+        original=p['plan'].get('evidence',{}).get('snapshot',{})
+        cost_only_change=bool(row and allow_historical_cost_change and p['action']=='replenish'
+            and digest({k:v for k,v in row.items() if k!='historical_cost'})
+                ==digest({k:v for k,v in original.items() if k!='historical_cost'}))
+        if not row or (digest(row) != p['snapshot_hash'] and not cost_only_change):
             raise ValueError('Los datos cambiaron; vuelve a analizar y aprobar')
         scenario = self.compare(row, rows, config)
-        if not scenario['relevant'] or p['plan']['action'] not in scenario['alternatives']:
+        matches=p['plan']['action'] in scenario['alternatives']
+        if cost_only_change:
+            expected={k:v for k,v in p['plan']['action'].items() if k!='estimated_cost'}
+            matches=any({k:v for k,v in candidate.items() if k!='estimated_cost'}==expected for candidate in scenario['alternatives'])
+        if not scenario['relevant'] or not matches:
             # JSON stores decimals/datetimes as strings; alternatives contain strings/numbers only.
             raise ValueError('La alternativa ya no cumple las condiciones')
         return config, row

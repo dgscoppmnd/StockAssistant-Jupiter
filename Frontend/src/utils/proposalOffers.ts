@@ -30,14 +30,14 @@ export function recommendedOfferLines(proposals:OfferProposal[],selectedRunId:nu
   return [...rows.values()];
 }
 
-export function offerError(productId:number,draft:OfferDraft | undefined,now=Date.now()):string{
+export function offerError(productId:number,draft:OfferDraft | undefined,now=Date.now(),requireReference=true):string{
   if(!draft)return 'Completa la oferta de este producto antes de ejecutar la compra.';
   if(draft.product_id!==productId)return `Selecciona el producto recomendado #${productId}; esta propuesta no permite cambiar de producto.`;
   if(!/^\d+$/.test(draft.supplier_id)||!Number.isSafeInteger(Number(draft.supplier_id))||Number(draft.supplier_id)<=0)return 'Selecciona un proveedor para este producto.';
   if(!/^\d+(\.\d{1,4})?$/.test(draft.unit_price)||Number(draft.unit_price)<=0||Number(draft.unit_price)>100000000)return 'Indica un precio válido, mayor que cero y con hasta cuatro decimales.';
   const until=new Date(draft.valid_until).getTime();
   if(!Number.isFinite(until)||until<=now)return 'Indica una fecha de validez futura para esta oferta.';
-  if(draft.reference.trim().length<3||draft.reference.length>500)return 'La referencia de la oferta debe tener entre 3 y 500 caracteres.';
+  if((requireReference&&draft.reference.trim().length<3)||draft.reference.length>500)return requireReference?'La referencia de la oferta debe tener entre 3 y 500 caracteres.':'La referencia de la oferta no puede superar 500 caracteres.';
   return '';
 }
 

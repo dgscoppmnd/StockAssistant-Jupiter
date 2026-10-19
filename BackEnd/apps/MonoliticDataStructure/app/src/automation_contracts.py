@@ -205,6 +205,23 @@ class ActionRequest(Contract):
     quote: Quote | None = None
 
 
+class StockDraftQuote(Quote):
+    # Preparing a manual inventory form does not execute an agent purchase.
+    reference: str = Field(default='', max_length=500)
+
+
+class StockDraftLine(Contract):
+    run_id: PositiveId
+    source_product_id: PositiveId
+    product_id: PositiveId
+    warehouse_id: PositiveId
+    quote: StockDraftQuote
+
+
+class StockDraftRequest(Contract):
+    lines: list[StockDraftLine] = Field(min_length=1,max_length=100)
+
+
 class StopRequest(Contract):
     stopped: bool
 

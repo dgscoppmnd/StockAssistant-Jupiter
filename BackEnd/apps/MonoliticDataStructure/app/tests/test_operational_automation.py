@@ -576,4 +576,150 @@ class DatabaseTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.s.scope_product_options([0])
 
 
+    def test_stock_order_crud_preserves_inventory_and_rejects_stale_changes(self):
+        from stock_orders_service import StockOrdersService, StockOrderDraft
+        from inventory_service import InventoryError
+        svc=StockOrdersService(self.c)
+        supplier=svc._fetchone("INSERT INTO public.inventory_suppliers(name) VALUES('Proveedor CRUD') RETURNING id")['id']
+        self.c.commit()
+        before=svc._fetchall('SELECT * FROM public.inventory_stock_levels ORDER BY id')
+        payload=StockOrderDraft(supplier_id=supplier,warehouse_id=1,notes='Pedido manual',lines=[{
+            'product_id':self.pid,'quantity':3,'unit_code':'unit','unit_price':'17.50'}])
+        order=svc.save(payload,'tester')
+        self.assertEqual(order['status'],'borrador')
+        self.assertEqual(order['lines'][0]['unit_price'],Decimal('17.50'))
+        self.assertTrue(next(o for o in svc.list_orders() if o['id']==order['id'])['editable'])
+        payload.expected_updated_at=order['updated_at']
+        payload.lines[0].quantity=Decimal(5)
+        edited=svc.save(payload,'tester',order['id'])
+        self.assertEqual(edited['lines'][0]['quantity'],5)
+        with self.assertRaisesRegex(InventoryError,'cambió'):svc.save(payload,'tester',order['id'])
+        with self.assertRaisesRegex(InventoryError,'cambió'):svc.delete(order['id'],order['updated_at'])
+        self.assertEqual(svc._fetchall('SELECT * FROM public.inventory_stock_levels ORDER BY id'),before)
+        self.assertEqual(svc._fetchone('SELECT COUNT(*) AS n FROM public.goods_receipts')['n'],0)
+        svc.delete(order['id'],edited['updated_at'])
+        with self.assertRaisesRegex(InventoryError,'no encontrado'):svc.detail(order['id'])
+
+    def test_stock_order_crud_cannot_erase_received_orders(self):
+        from stock_orders_service import StockOrdersService, StockOrderDraft
+        from inventory_service import InventoryError
+        svc=StockOrdersService(self.c)
+        svc.confirm_receipt({'warehouse_id':1,'supplier_name':'Proveedor recibido','user_name':'tester',
+            'lines':[{'product_id':self.pid,'quantity':2,'unit_code':'unit','unit_price':5}]})
+        order=svc.list_orders()[0]
+        self.assertFalse(order['editable'])
+        with self.assertRaisesRegex(InventoryError,'borradores'):svc.delete(order['id'],order['updated_at'])
+        payload=StockOrderDraft(supplier_id=order['supplier_id'],warehouse_id=1,expected_updated_at=order['updated_at'],
+            lines=[{'product_id':self.pid,'quantity':4,'unit_code':'unit','unit_price':8}])
+        with self.assertRaisesRegex(InventoryError,'borradores'):svc.save(payload,'tester',order['id'])
+        self.assertEqual(svc.detail(order['id'])['lines'][0]['quantity'],2)
+
+    def test_received_stock_order_metadata_can_be_edited_without_changing_inventory(self):
+        from stock_orders_service import StockOrdersService, StockOrderMetadata
+        from inventory_service import InventoryError
+        svc=StockOrdersService(self.c)
+        svc.confirm_receipt({'warehouse_id':1,'supplier_name':'Proveedor edición','user_name':'tester',
+            'lines':[{'product_id':self.pid,'quantity':2,'unit_code':'unit','unit_price':5}]})
+        order=svc.list_orders()[0]
+        stock=svc._fetchall('SELECT * FROM public.inventory_stock_levels ORDER BY id')
+        receipts=svc._fetchall('SELECT * FROM public.goods_receipts ORDER BY id')
+        lines=svc.detail(order['id'])['lines']
+        payload=StockOrderMetadata(purchase_order_number='PO-EDITADO',notes='Nota revisada',expected_updated_at=order['updated_at'])
+        edited=svc.edit_metadata(order['id'],payload)
+        self.assertEqual(edited['purchase_order_number'],'PO-EDITADO')
+        self.assertEqual(edited['notes'],'Nota revisada')
+        self.assertEqual(edited['lines'],lines)
+        self.assertEqual(svc._fetchall('SELECT * FROM public.inventory_stock_levels ORDER BY id'),stock)
+        self.assertEqual(svc._fetchall('SELECT * FROM public.goods_receipts ORDER BY id'),receipts)
+        with self.assertRaisesRegex(InventoryError,'cambió'):svc.edit_metadata(order['id'],payload)
+        with self.assertRaises(ValueError):StockOrderMetadata(**{**payload.model_dump(),'warehouse_id':2})
+
+    def prepare_manual_stock_draft(self,manual_wait=False):
+        from automation_stock_drafts import save_stock_draft,load_stock_draft
+        from automation_contracts import StockDraftRequest
+        second=self.s._one("INSERT INTO public.productos(name_product) VALUES('Segundo producto') RETURNING pk_product")['pk_product']
+        self.s._write('''INSERT INTO public.product_inventory_config(product_id,base_unit_id,reorder_point,reorder_quantity)
+            SELECT %s,id,10,20 FROM public.inventory_units WHERE code='unit' ''',(second,))
+        self.s._write('INSERT INTO public.inventory_stock_levels(product_id,warehouse_id,physical_qty,reserved_qty) VALUES(%s,1,2,0),(%s,2,2,0)',(second,second))
+        supplier=self.s._one("INSERT INTO public.inventory_suppliers(name,supplier_code) VALUES('Proveedor guardado','GUARDADO') ON CONFLICT(supplier_code) DO UPDATE SET name=EXCLUDED.name RETURNING id")['id']
+        self.c.commit()
+        config=self.config.model_copy(update={'product_ids':[self.pid,second],'warehouse_ids':[1,2]})
+        self.s.save_rule(RuleDraft(name='Recomendación múltiple',reason='Guardar para inventario',expected_version=1,config=config),'tester',self.rid,True)
+        choices=[{'product_id':pid,'warehouse_id':wid,'action':'wait' if manual_wait else 'replenish','reason':'Existencias insuficientes'}
+                 for pid,wid in [(self.pid,1),(second,1),(second,2)]]
+        with patch('automation_service.generate_ai',return_value={'response':json.dumps({'choices':choices,'finish_reason':'Proponer reposición'})}):
+            run=self.s.run_rule(self.rid)
+        request=StockDraftRequest(lines=[{'run_id':run['run_id'],'source_product_id':choice['product_id'],
+            'product_id':choice['product_id'],'warehouse_id':choice['warehouse_id'],
+            'quote':{'supplier_id':supplier,'unit_price':'2.5000','valid_until':datetime.now(timezone.utc)+timedelta(hours=2),'reference':'' if manual_wait else 'Oferta documentada'}} for choice in choices])
+        saved=save_stock_draft(self.s,request,'tester')
+        return request,load_stock_draft(self.s,saved['id'])
+
+    def test_wait_recommendations_with_blank_reference_prepare_manual_inventory_cards(self):
+        request,draft=self.prepare_manual_stock_draft(manual_wait=True)
+        self.assertEqual(len(draft['groups']),2)
+        self.assertEqual(sum(len(group['lines']) for group in draft['groups']),3)
+        self.assertTrue(all(Decimal(line['quantity'])>0 for group in draft['groups'] for line in group['lines']))
+        self.assertTrue(all(line.quote.reference=='' for line in request.lines))
+        self.assertEqual(self.s._one('SELECT COUNT(*) AS n FROM public.purchase_orders')['n'],0)
+
+    def test_manual_stock_draft_saves_all_recommendations_without_creating_orders(self):
+        from automation_stock_drafts import save_stock_draft
+        before=self.s._all('SELECT * FROM public.inventory_stock_levels ORDER BY id')
+        request,draft=self.prepare_manual_stock_draft()
+        self.assertEqual(len(draft['groups']),2)
+        self.assertEqual([len(g['lines']) for g in draft['groups']],[2,1])
+        self.assertEqual(draft['groups'][0]['supplier_name'],'Proveedor guardado')
+        self.assertTrue(all(Decimal(line['unit_price'])==Decimal('2.5') for group in draft['groups'] for line in group['lines']))
+        self.assertTrue(all('Revisar propuestas y resultados' in group['notes'] for group in draft['groups']))
+        self.assertEqual(self.s._one('SELECT COUNT(*) AS n FROM public.purchase_orders')['n'],0)
+        self.assertEqual(self.s._all('SELECT * FROM public.inventory_stock_levels WHERE product_id=%s ORDER BY id',(self.pid,)),before)
+        self.assertEqual(save_stock_draft(self.s,request,'tester')['id'],draft['id'])
+        event=self.s._one('SELECT detail FROM public.automation_events WHERE id=%s',(draft['id'],))
+        self.assertEqual(len(event['detail']['recommendations']),3)
+
+    def test_manual_stock_confirmation_requires_user_permissions_and_is_idempotent(self):
+        from automation_stock_drafts import confirm_stock_draft,load_stock_draft
+        from DataBaseManagement.schemasInventory import ReceiptConfirmRequest
+        _,draft=self.prepare_manual_stock_draft()
+        group=draft['groups'][0]
+        payload=ReceiptConfirmRequest(warehouse_id=group['warehouse_id'],supplier_name=group['supplier_name'],
+            supplier_code=group['supplier_code'],purchase_order_number=group['purchase_order_number'],
+            notes=group['notes'],lines=group['lines'])
+        with self.assertRaises(PermissionError): confirm_stock_draft(self.s,draft['id'],group['key'],payload,'tester',False)
+        first=confirm_stock_draft(self.s,draft['id'],group['key'],payload,'tester',True)
+        before=self.s._all('SELECT * FROM public.inventory_stock_levels ORDER BY id')
+        again=confirm_stock_draft(self.s,draft['id'],group['key'],payload,'tester',True)
+        self.assertEqual(first['document_id'],again['document_id'])
+        self.assertEqual(before,self.s._all('SELECT * FROM public.inventory_stock_levels ORDER BY id'))
+        self.assertEqual(self.s._one('SELECT COUNT(*) AS n FROM public.purchase_orders')['n'],1)
+        self.assertTrue(load_stock_draft(self.s,draft['id'])['groups'][0]['confirmed'])
+        second_group=draft['groups'][1]
+        self.assertFalse(second_group['confirmed'])
+        second_payload=ReceiptConfirmRequest(warehouse_id=second_group['warehouse_id'],supplier_name=second_group['supplier_name'],
+            supplier_code=second_group['supplier_code'],notes=second_group['notes'],lines=second_group['lines'])
+        confirm_stock_draft(self.s,draft['id'],second_group['key'],second_payload,'tester',True)
+        self.assertTrue(all(g['confirmed'] for g in load_stock_draft(self.s,draft['id'])['groups']))
+        self.assertEqual(self.s._one('SELECT COUNT(*) AS n FROM public.purchase_orders')['n'],2)
+
+    def test_manual_stock_draft_groups_separate_suppliers_in_the_same_warehouse(self):
+        from automation_stock_drafts import save_stock_draft,load_stock_draft
+        request,_=self.prepare_manual_stock_draft()
+        supplier=self.s._one("INSERT INTO public.inventory_suppliers(name) VALUES('Otro proveedor') RETURNING id")['id']
+        self.c.commit()
+        request.lines[1].quote.supplier_id=supplier
+        saved=save_stock_draft(self.s,request,'tester')
+        draft=load_stock_draft(self.s,saved['id'])
+        self.assertEqual(len(draft['groups']),3)
+        self.assertEqual(len({(g['warehouse_id'],g['supplier_id']) for g in draft['groups']}),3)
+        warehouse_groups=[g for g in draft['groups'] if g['warehouse_id']==request.lines[1].warehouse_id]
+        self.assertEqual(len(warehouse_groups),2)
+        other_supplier_group=next(g for g in warehouse_groups if g['supplier_id']==supplier)
+        self.assertEqual(other_supplier_group['supplier_name'],'Otro proveedor')
+        self.assertEqual([line['product_id'] for line in other_supplier_group['lines']],
+                         [request.lines[1].product_id])
+        self.assertEqual(Decimal(other_supplier_group['lines'][0]['unit_price']),request.lines[1].quote.unit_price)
+        self.assertTrue(all(g['supplier_id']!=supplier for g in warehouse_groups if g is not other_supplier_group))
+
+
 if __name__=='__main__': unittest.main(verbosity=2)

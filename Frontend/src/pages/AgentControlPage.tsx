@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link,useNavigate } from 'react-router-dom';
 import { automationRequest, runAutomationRule } from '../api';
 import ObservedAi from './components/ObservedAi';
 import TraceInterpretation from './components/TraceInterpretation';
 import PurchaseOfferLines from './components/PurchaseOfferLines';
 import {recommendedOfferLines,offerKey,offerError,quoteForProposal,type OfferDraft} from '../utils/proposalOffers';
+import {stockDraftPayload} from '../utils/stockOrderDrafts';
 
 export type Rule = {latest_run_status?:string;pending_proposals?:number;executed_actions?:number;last_provider_signal?:string;failures?:number;id: number; name: string; code: string; description: string; current_version: number; is_active: boolean; last_run_at: string | null; next_run_at: string | null; config: Record<string, unknown> | null};
 type Run = {id: number; rule_id: number; rule_code: string; rule_name: string; status: string; rule_version: number; started_at: string; completed_at: string | null; latency_ms: number | null; result: Record<string, unknown> | null; error_message: string | null; config_snapshot?: {allow_unmetered_paid_ai?: boolean} | null};
@@ -32,6 +33,7 @@ function Series({title,points,unit}: {title:string; points:{label:string;value:n
 }
 
 export default function AgentControlPage() {
+  const navigate=useNavigate();
   const [rules, setRules] = useState<Rule[]>([]), [runs, setRuns] = useState<Run[]>([]), [proposals, setProposals] = useState<Proposal[]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null), [events, setEvents] = useState<Event[]>([]);
   const [eventsRunId,setEventsRunId] = useState<number | null>(null);
@@ -41,6 +43,7 @@ export default function AgentControlPage() {
   const [error, setError] = useState(''), [loading, setLoading] = useState(true), [connected, setConnected] = useState(false), [stopped, setStopped] = useState(false);
   const [permissions, setPermissions] = useState<string[]>([]), [busy, setBusy] = useState(false), [reason, setReason] = useState('');
   const [offers,setOffers]=useState<Record<string,OfferDraft>>({}), [physical,setPhysical]=useState(false);
+  const [conversionError,setConversionError]=useState('');
   const [receiptFor,setReceiptFor]=useState<number | null>(null), [receiptQty,setReceiptQty]=useState(''), [receiptKey,setReceiptKey]=useState(''), [receiptPhysical,setReceiptPhysical]=useState(false);
   const load = async () => {
     try {
@@ -69,6 +72,14 @@ export default function AgentControlPage() {
   const action = async (fn: () => Promise<unknown>) => {setBusy(true); try {await fn(); await load();} catch(e) {setError(e instanceof Error ? e.message : String(e));} finally {setBusy(false);setPhysical(false);}};
   const filteredProposals = proposals.filter(p => (!ruleFilter || p.rule_id === Number(ruleFilter)) && (!product || p.product_id === Number(product)) && (!warehouse || p.warehouse_id === Number(warehouse)));
   const offerRows=recommendedOfferLines(selected===null?filteredProposals:proposals,selected,eventsRunId===selected?events:[]);
+  const convertToStock=async()=>{
+    setBusy(true);setError('');setConversionError('');
+    try{
+      const saved=await automationRequest<{id:number}>('/stock-order-drafts','POST',stockDraftPayload(offerRows,offers));
+      navigate(`/inventario?recommendation=${saved.id}`);
+    }catch(err){setConversionError(err instanceof Error?err.message:'No se pudo guardar la recomendación');}
+    finally{setBusy(false);}
+  };
   const filteredRuns = runs.filter(r => (!ruleFilter || r.rule_id === Number(ruleFilter)) && (!stateFilter || r.status === stateFilter) && (!version || r.rule_version === Number(version)) && (!model || (r.result?.ai as {model?:string} | undefined)?.model === model) &&
     new Date(r.started_at).getTime() >= Date.now() - Number(days)*86400000 && ((!product && !warehouse) || filteredProposals.some(p => p.run_id === r.id)));
   const lastPhase = events.length ? events[events.length - 1].phase : null;
@@ -114,6 +125,8 @@ export default function AgentControlPage() {
     </section>}
     <section className="card"><h3>Revisar propuestas y resultados</h3><label>Motivo de aprobación o rechazo<input value={reason} onChange={e => setReason(e.target.value)} minLength={3} maxLength={500} /></label>
       <PurchaseOfferLines rows={offerRows} drafts={offers} busy={busy} onChange={(key,draft)=>setOffers(current=>({...current,[key]:draft}))} />
+      <button type="button" className="primary-btn" disabled={busy||!offerRows.length||!permissions.includes('edit')} onClick={()=>void convertToStock()}>Convertir en pedido de stock</button>
+      {conversionError&&<p className="error-line" role="alert">{conversionError}</p>}
       <label><input type="checkbox" checked={physical} onChange={e => setPhysical(e.target.checked)} /> Confirmo que el traslado seleccionado se ha realizado físicamente</label>
       {!filteredProposals.length && <p>No hay propuestas para estos filtros.</p>}{filteredProposals.map(p => <article className="agent-rule" id={`proposal-${p.id}`} key={p.id}>
         <h4>#{p.id} · {labels[p.action] ?? p.action} · {p.product_name}</h4><p>{p.warehouse_name} · {p.plan.action.quantity} {p.plan.unit} · {p.status} · caduca {date(p.expires_at)}</p><p>{p.plan.reason}</p>
