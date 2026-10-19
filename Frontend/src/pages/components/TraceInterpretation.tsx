@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { automationRequest } from '../../api';
+import TraceNoteVisuals, {type TraceMetric,type TraceChart} from './TraceNoteVisuals';
 
 type Interpretation = {source:'ai'|'fallback'|'pending'; explanation:string; warning?:string | null;
+  next_step?:string;metrics?:TraceMetric[];chart?:TraceChart | null;
   ai:{provider?:string;model?:string;used_fallback?:boolean} | null};
 
 export default function TraceInterpretation({runId, revision, ready}: {runId:number;revision:string;ready:boolean}) {
@@ -27,6 +29,8 @@ export default function TraceInterpretation({runId, revision, ready}: {runId:num
       {error && <><p role="alert">No se pudo obtener la explicación: {error}</p><button type="button" className="chip-btn" onClick={() => setAttempt(a=>a+1)}>Reintentar explicación</button></>}
       {result && <>
         <p className="trace-interpretation-text">{result.explanation}</p>
+        <TraceNoteVisuals metrics={result.metrics ?? []} chart={result.chart} />
+        {result.next_step && <p><strong>Siguiente paso:</strong> {result.next_step}</p>}
         {result.ai && <small>Interpretación con {result.ai.provider === 'ollama' ? 'Ollama' : result.ai.provider === 'openai' ? 'OpenAI' : 'IA'}{result.ai.model ? ` · ${result.ai.model}` : ''}{result.ai.used_fallback ? ' · Respaldo automático' : ''}</small>}
         {result.source === 'fallback' && <><small>Resumen calculado · IA no disponible para esta explicación.</small>{result.warning && <details><summary>Motivo</summary><p>{result.warning}</p></details>}<button type="button" className="chip-btn" onClick={() => setAttempt(a=>a+1)}>Reintentar con IA</button></>}
       </>}

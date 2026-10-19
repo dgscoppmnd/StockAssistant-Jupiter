@@ -55,7 +55,7 @@ export function describeObservedAi(run: ObservedAiRun) {
     tone = 'success';
     title = providerName ? `Análisis completado con ${providerName}` : 'Ejecución completada sin IA';
     explanation = providerName
-      ? 'El modelo respondió y su decisión superó la validación de la regla. Esto confirma el análisis técnico; no garantiza el resultado de negocio ni implica que se hayan ejecutado acciones.'
+      ? 'La IA revisó los datos de inventario y comparó las opciones de la regla para recomendar qué hacer. También podía recomendar mantener el stock como estaba o indicar que necesitaba más datos para recomendar cambios. Solo se aceptaron recomendaciones para los productos y almacenes incluidos en la regla y las acciones que esta permite. En el detalle de la ejecución puedes ver qué recomendó y por qué.'
       : 'La ejecución terminó sin una decisión de IA registrada: puede ser un informe determinista o no haber entidades que analizar.';
   }
   if (ai?.used_fallback === true) explanation += ` Se utilizó ${providerName ?? 'un proveedor alternativo'} como respaldo automático.`;

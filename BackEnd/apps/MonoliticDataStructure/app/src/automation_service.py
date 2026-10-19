@@ -153,7 +153,40 @@ class AutomationService:
         validate_rule_objective(config.kind, config.objective)
         self.validate_references(config)
 
+    def scope_defaults(self):
+        warehouses = self._all('SELECT id,code,name,is_active FROM public.inventory_warehouses ORDER BY id')
+        first = next((w for w in warehouses if w['is_active']),None)
+        priorities = InventoryService(self.connection).priority_purchase_rows()
+        products = list({p['product_id']: {'id':p['product_id'],'code':p['product_code'],
+                         'name':p['product_name']} for p in priorities}.values())
+        return {'warehouses':warehouses,'products':products,'warehouse_ids':[first['id']] if first else [],
+                'product_ids':[p['id'] for p in products]}
+
+    def scope_product_options(self, ids):
+        if len(ids)>100 or any(type(i) is not int or i<=0 for i in ids):
+            raise ValueError('Indica hasta 100 IDs positivos de productos')
+        return self._all('''SELECT pk_product AS id,cdgo_producto_externo AS code,TRIM(name_product) AS name
+            FROM public.productos WHERE pk_product=ANY(%s) ORDER BY pk_product''',(ids,)) if ids else []
+
+    def resolve_scope(self, config):
+        defaults = self.scope_defaults() if not config.product_ids or not config.warehouse_ids else {}
+        products = config.product_ids or defaults.get('product_ids',[])
+        warehouses = config.warehouse_ids or defaults.get('warehouse_ids',[])
+        resolved = config.model_copy(update={'product_ids':products,'warehouse_ids':warehouses})
+        scope = {'policy':'priority_defaults_v1','product_ids':products,'warehouse_ids':warehouses,
+                 'products_source':'selected' if config.product_ids else 'priority_purchases',
+                 'warehouses_source':'selected' if config.warehouse_ids else 'first_active_warehouse'}
+        return resolved,scope
+
+    def scoped_snapshots(self, config):
+        # Empty default results are an empty scope, never a wildcard over the whole company.
+        return self.snapshots(config) if config.product_ids and config.warehouse_ids else []
+
     def deterministic_report(self, config):
+        if not config.product_ids or not config.warehouse_ids:
+            return {'movements_24h':0} if config.kind=='daily_inventory_report' else {
+                'agent':'risks','alerts':[],'source':'inventory_movements',
+                'generated_at':datetime.now(timezone.utc).isoformat()}
         if config.kind == 'daily_inventory_report':
             return self._one('''SELECT COUNT(*) AS movements_24h FROM public.inventory_movements
                 WHERE created_at>=now()-INTERVAL '24 hours'
@@ -285,13 +318,14 @@ class AutomationService:
 
     def simulate(self, config):
         self.validate_execution_config(config)
+        config,scope = self.resolve_scope(config)
         if config.kind in ('daily_inventory_report', 'risk_alerts'):
             report = self.deterministic_report(config)
             self.connection.rollback()
-            return {'as_of': datetime.now(timezone.utc), 'simulation': True, 'report': report,
+            return {'as_of': datetime.now(timezone.utc), 'simulation': True, 'report': report,'resolved_scope':scope,
                     'scenarios': [], 'overlapping_rules': [],
                     'limitations': ['Informe calculado sin IA, propuestas ni acciones operativas.']}
-        rows = self.snapshots(config)
+        rows = self.scoped_snapshots(config)
         scenarios = [self.compare(r, rows, config) for r in rows]
         overlaps = self.overlaps(config)
         for scenario in scenarios:
@@ -305,7 +339,7 @@ class AutomationService:
                               ('authorized_with_current_data' if permitted_auto else 'requires_approval_or_missing_dependencies'),
                     'conditions': option['reason']})
         self.connection.rollback()  # Simulation has no persistent or operational effects.
-        return {'as_of': datetime.now(timezone.utc), 'simulation': True,
+        return {'as_of': datetime.now(timezone.utc), 'simulation': True,'resolved_scope':scope,
                 'scenarios': [s for s in scenarios if s['relevant']],
                 'overlapping_rules': overlaps,
                 'limitations': ['Instantánea limitada por max_entities; no garantiza resultados futuros.',
@@ -354,11 +388,12 @@ class AutomationService:
                     self.connection.commit()
                     return None
             token = uuid4().hex
+            config,scope = self.resolve_scope(config)
             self._write("UPDATE public.automation_rules SET claim_token=%s,lease_until=now()+INTERVAL '10 minutes' WHERE id=%s", (token, rule_id))
             run = self._one('''INSERT INTO public.automation_runs(rule_id,initiated_by,status,rule_version,config_snapshot,claim_token)
                 VALUES(%s,%s,'running',%s,%s,%s) RETURNING *''',
                 (rule_id, initiated_by, rule['current_version'], document(config.model_dump(mode='json')), token))
-            self.event(run['id'], rule_id, 'observation', {'version': rule['current_version']})
+            self.event(run['id'], rule_id, 'observation', {'version': rule['current_version'],'resolved_scope':scope})
             self.connection.commit()
             return rule, config, run, token
         except Exception:
@@ -432,12 +467,17 @@ class AutomationService:
                                   'product_ids': config.product_ids, 'warehouse_ids': config.warehouse_ids})
                 event('decision', {'reason': 'Informe sin IA; no genera propuestas ni acciones'})
             else:
-                rows = self.snapshots(config)
+                rows = self.scoped_snapshots(config)
                 scenarios = [self.compare(r, rows, config) for r in rows]
                 scenarios = [s for s in scenarios if s['relevant']]
+                eligible = len(scenarios)
                 if config.kind == 'stock_reorder_proposals':
                     scenarios = [s for s in scenarios if not self.suppressed(s['product_id'], s['warehouse_id'])]
-                event('analysis', {'as_of': datetime.now(timezone.utc), 'scenarios': scenarios})
+                result['analysis_counts'] = {'rows_examined':len(rows),'eligible_entities':len(scenarios),
+                                             'suppressed_entities':eligible-len(scenarios)}
+                event('analysis', {'as_of': datetime.now(timezone.utc), 'scenarios': scenarios,
+                                   **result['analysis_counts'],'product_ids':config.product_ids,
+                                   'warehouse_ids':config.warehouse_ids})
                 choices = []
                 if scenarios:
                     try:
@@ -449,7 +489,9 @@ class AutomationService:
                             event('provider_failure', {'provider': exc.provider, 'retryable': exc.retryable})
                         event('degraded', {'reason': result['degraded_reason'], 'deterministic_analysis_preserved': True})
                 else:
-                    event('decision', {'reason': 'Ninguna entidad cumple las condiciones; sin acciones'})
+                    reason = (f'Se revisaron {len(rows)} combinaciones de producto y almacén; ninguna cumple las condiciones o está habilitada para propuestas'
+                              if rows else 'No hay filas de inventario configuradas para el ámbito resuelto; no demuestra ausencia de productos o almacenes en la empresa')
+                    event('decision', {'reason':reason})
                 by_key = {(s['product_id'], s['warehouse_id']): s for s in scenarios}
                 for choice in choices:
                     scenario = by_key[(choice.product_id, choice.warehouse_id)]
@@ -601,6 +643,10 @@ class AutomationService:
             raise ValueError('Operaciones detenidas o regla sin permiso operativo')
         if p['rule_version'] != rule['current_version'] or p['expires_at'] <= datetime.now(timezone.utc):
             raise ValueError('Propuesta caducada o versión obsoleta; vuelve a analizar')
+        run = self._one('SELECT config_snapshot FROM public.automation_runs WHERE id=%s',(p['run_id'],))
+        frozen = (run or {}).get('config_snapshot') or {}
+        if frozen.get('product_ids') and frozen.get('warehouse_ids'):
+            config = config.model_copy(update={k:frozen[k] for k in ('product_ids','warehouse_ids')})
         rows = self.snapshots(config)
         row = next((r for r in rows if r['product_id'] == p['product_id'] and r['warehouse_id'] == p['warehouse_id']), None)
         if not row or digest(row) != p['snapshot_hash']:

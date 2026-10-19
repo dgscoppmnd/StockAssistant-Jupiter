@@ -9,6 +9,7 @@ import time
 
 from ai_service import generate_ai, AIProviderError
 from SystemPrompts.rules_agents import rules_trace_system_prompt
+from trace_presentation import presentation_catalog, note_schema, validate_note
 
 _cache = OrderedDict()
 _pending = {}
@@ -34,18 +35,23 @@ def _bounded(value, depth=0):
     return value
 
 
-def _context(run, events, proposals):
+def _context(run, events, proposals, metrics=None, charts=None):
     result = run.get('result') or {}
     context = {'run': {k: run.get(k) for k in ('id','rule_name','rule_code','rule_version','status',
                'started_at','completed_at','error_message')},
                'result': _bounded(result), 'proposals': _bounded(proposals),
+               'scope':{k:(run.get('config_snapshot') or {}).get(k) for k in ('product_ids','warehouse_ids')},
+               'scope_note':'Las listas vacías históricas significaban todos; cero escenarios no demuestra ausencia de productos ni almacenes.',
                'proposal_status_counts': dict(Counter(p['status'] for p in proposals)),
-               'events': [], 'omitted_events': max(0,len(events)-40)}
+               'events': [], 'omitted_events': max(0,len(events)-40),
+               'available_metrics':metrics or {},'available_charts':charts or {}}
     for event in events[-40:]:
         detail = event.get('detail') or {}
         if event['phase'] == 'analysis' and 'scenarios' in detail:
             scenarios = detail['scenarios']
-            detail = {'entities': len(scenarios), 'sample': [
+            detail = {'eligible_entities': len(scenarios),
+                      'rows_examined':detail.get('rows_examined'),
+                      'product_ids':detail.get('product_ids'),'warehouse_ids':detail.get('warehouse_ids'),'sample': [
                 {k:s.get(k) for k in ('product_id','warehouse_id','values','quality','relevant')}
                 for s in scenarios[:8]], 'omitted_entities': max(0,len(scenarios)-8)}
         elif event['phase'] == 'proposal':
@@ -69,29 +75,25 @@ def _fallback(run, proposals):
     result = run.get('result') or {}
     reason = run.get('error_message') or result.get('degraded_reason')
     if run['status'] == 'running':
-        text = 'La ejecución sigue en curso. La explicación estará disponible cuando termine.'
+        return 'La ejecución sigue en curso. La explicación estará disponible cuando termine.'
     elif run['status'] in ('failed','degraded'):
         text = 'La ejecución no se completó con normalidad.'
         if reason:
-            text += ' Causa registrada: ' + str(reason)[:700]
+            text += ' Causa registrada: ' + str(reason)[:200]
         if run['status'] == 'degraded':
             text += ' Se conserva el análisis calculado, pero la decisión de IA no se completó.'
     elif 'report' in result:
         text = 'La regla completó un informe calculado sin utilizar IA para decidir acciones.'
     else:
         text = 'La ejecución terminó. Consulta el evento de decisión para ver los motivos registrados.'
-    counts = Counter(p['status'] for p in proposals)
-    if counts:
-        text += f" Propuestas registradas: {len(proposals)}; pendientes de aprobación: {counts['pending_approval']}; aprobadas: {counts['approved']}; con acción ejecutada: {counts['executed']}."
-        text += ' Una acción ejecutada no acredita por sí sola recepción física ni éxito de negocio.'
-    else:
+    if not proposals:
         text += ' No hay propuestas persistidas asociadas a esta ejecución.'
     return text
 
 
 def interpret_trace(run, events, proposals, *, retry=False):
     # Hash all recorded evidence, including updated proposal states, before summarizing it.
-    evidence = json.dumps([run,events,proposals], default=str, sort_keys=True, ensure_ascii=False)
+    evidence = json.dumps(['concise-note-v3-scope',run,events,proposals], default=str, sort_keys=True, ensure_ascii=False)
     fingerprint = hashlib.sha256(evidence.encode()).hexdigest()
     if run['status'] == 'running':
         return {'source':'pending','explanation':_fallback(run,proposals),'ai':None,'revision':fingerprint}
@@ -108,19 +110,20 @@ def interpret_trace(run, events, proposals, *, retry=False):
         return pending.result(timeout=40)
     try:
         allow_paid = (run.get('config_snapshot') or {}).get('allow_unmetered_paid_ai') is True
+        metrics,charts = presentation_catalog(run,events,proposals)
         try:
-            raw = generate_ai(_context(run,events,proposals),rules_trace_system_prompt(),
-                              timeout_seconds=30,max_output_tokens=800,allow_paid=allow_paid)
-            explanation = raw.get('response')
-            if not isinstance(explanation,str) or not explanation.strip() or len(explanation) > 5000:
-                raise ValueError('La IA devolvió una explicación vacía o demasiado extensa')
-            response = {'source':'ai','explanation':explanation.strip(),
+            raw = generate_ai(_context(run,events,proposals,metrics,charts),rules_trace_system_prompt(),
+                              timeout_seconds=30,max_output_tokens=600,allow_paid=allow_paid,
+                              response_schema=note_schema(metrics,charts))
+            presentation = validate_note(raw.get('response'),metrics,charts)
+            response = {'source':'ai',**presentation,
                         'ai':{k:raw.get(k) for k in ('provider','model','used_fallback')},'warning':None}
         except (AIProviderError,ValueError) as exc:
             warning = str(exc)
             if not allow_paid:
                 warning += ' Esta ejecución no autoriza IA de pago; OpenAI no se utiliza como alternativa.'
-            response = {'source':'fallback','explanation':_fallback(run,proposals),'ai':None,'warning':warning}
+            response = {'source':'fallback','explanation':_fallback(run,proposals),'ai':None,'warning':warning,
+                        'next_step':'','metrics':list(metrics.values())[:4],'chart':None}
         response.update(revision=fingerprint,generated_at=datetime.now(timezone.utc).isoformat())
         with _lock:
             _cache[fingerprint] = (time.monotonic()+(600 if response['source']=='ai' else 30),response)

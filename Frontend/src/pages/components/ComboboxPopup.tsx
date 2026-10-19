@@ -4,10 +4,11 @@ import { createPortal } from "react-dom";
 type Props = {
   anchor: RefObject<HTMLInputElement>;
   children: ReactNode;
+  interactive?: boolean;
 };
 
 // Render outside cards and scrolling dialogs so their stacking and overflow cannot clip the list.
-export default function ComboboxPopup({ anchor, children }: Props) {
+export default function ComboboxPopup({ anchor, children, interactive = false }: Props) {
   const popup = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -48,7 +49,7 @@ export default function ComboboxPopup({ anchor, children }: Props) {
 
   return createPortal(
     <div ref={popup} className="inventory-picker-popup combobox-floating-popup"
-      onMouseDown={(event) => event.preventDefault()}>
+      onMouseDown={interactive ? undefined : (event) => event.preventDefault()}>
       {children}
     </div>,
     document.body,

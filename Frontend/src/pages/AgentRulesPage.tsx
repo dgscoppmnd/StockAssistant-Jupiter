@@ -1,7 +1,22 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { automationRequest, updateAutomationRule } from '../api';
+import { automationRequest, searchProductOptions, updateAutomationRule } from '../api';
 import type { Rule } from './AgentControlPage';
+import RuleScopePicker, {type ScopeOption,type ScopePage} from './components/RuleScopePicker';
+import {parseScopeIds} from '../utils/ruleScope';
+
+type ScopeDefaults={product_ids:number[];warehouse_ids:number[];products:ScopeOption[];
+  warehouses:(ScopeOption&{is_active:boolean})[]};
+const loadScopeProducts=async(query:string,cursor:number,signal:AbortSignal):Promise<ScopePage>=>{
+  const page=await searchProductOptions(query,cursor,signal);
+  return {items:page.items.map(p=>({id:p.pk_product,code:p.cdgo_producto_externo,name:p.name_product})),next_cursor:page.next_cursor};
+};
+const hydrateScopeProducts=(ids:number[])=>automationRequest<ScopeOption[]>(`/scope-products?ids=${ids.join(',')}`);
+function RuleScopeSummary({rule,defaults}:{rule:Rule;defaults:ScopeDefaults}){
+  const products=(rule.config?.product_ids as number[] | undefined)??[],warehouses=(rule.config?.warehouse_ids as number[] | undefined)??[];
+  return <p className="muted">Productos: {products.length?products.join(', '):`Compras prioritarias (${defaults.product_ids.join(', ')||'sin referencias actuales'})`}
+    {' · '}Almacenes: {warehouses.length?warehouses.join(', '):`Primer almacén activo (${defaults.warehouse_ids.join(', ')||'no disponible'})`}</p>;
+}
 
 type Condition = {field: string; operator: string; value: string};
 type Config = {
@@ -34,15 +49,22 @@ export default function AgentRulesPage() {
   const [simulation,setSimulation] = useState<unknown>(null),[versions,setVersions] = useState<{version:number; author:string; reason:string; created_at:string; config:Config}[]>([]),[busy,setBusy] = useState(false);
   const [permissions,setPermissions] = useState<string[]>([]);
   const [objectives,setObjectives] = useState<Record<string,string[]>>({});
+  const [defaults,setDefaults]=useState<ScopeDefaults>({product_ids:[],warehouse_ids:[],products:[],warehouses:[]});
+  const warehouses=useMemo(()=>defaults.warehouses.map(w=>({...w,name:w.name+(w.is_active?'':' (inactivo)')})),[defaults.warehouses]);
+  const loadWarehouses=useCallback(async(query:string,cursor:number):Promise<ScopePage>=>{
+    const matches=warehouses.filter(w=>`${w.id} ${w.code??''} ${w.name}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+    return {items:matches.slice(cursor,cursor+12),next_cursor:cursor+12<matches.length?cursor+12:null};
+  },[warehouses]);
+  const hydrateWarehouses=useCallback(async(ids:number[])=>warehouses.filter(w=>ids.includes(w.id)),[warehouses]);
   const [productScope,setProductScope]=useState(''), [warehouseScope,setWarehouseScope]=useState('');
   const scopedConfig = () => {
-    const parse=(text:string) => {if(!text.trim()) return []; const ids=text.split(',').map(x=>Number(x.trim())); if(ids.some(x=>!Number.isSafeInteger(x) || x<=0)) throw new Error('Indica identificadores positivos separados por comas'); return ids;};
-    return {...config,product_ids:parse(productScope),warehouse_ids:parse(warehouseScope)};
+    return {...config,product_ids:parseScopeIds(productScope),warehouse_ids:parseScopeIds(warehouseScope)};
   };
-  const load = async () => {const [r,c,o] = await Promise.all([automationRequest<Rule[]>('/rules'),automationRequest<{permissions:string[]}>('/control'),automationRequest<Record<string,string[]>>('/objectives')]);setRules(r);setPermissions(c.permissions);setObjectives(o);};
-  useEffect(() => {void load().then(() => setStatus('Reglas sincronizadas')).catch(e => setError(String(e)));},[]);
+  const load = async () => {const [r,c,o,d] = await Promise.all([automationRequest<Rule[]>('/rules'),automationRequest<{permissions:string[]}>('/control'),automationRequest<Record<string,string[]>>('/objectives'),automationRequest<ScopeDefaults>('/scope-defaults')]);setRules(r);setPermissions(c.permissions);setObjectives(o);setDefaults(d);return d;};
+  useEffect(() => {void load().then(d=>{setProductScope(value=>value||d.product_ids.join(','));setWarehouseScope(value=>value||d.warehouse_ids.join(','));setStatus('Reglas sincronizadas');}).catch(e => setError(String(e)));},[]);
   const edit = async (r: Rule | null) => {
-    setProductScope(((r?.config?.product_ids as number[]) ?? []).join(','));setWarehouseScope(((r?.config?.warehouse_ids as number[]) ?? []).join(','));
+    const products=(r?.config?.product_ids as number[] | undefined)??[],warehouseIds=(r?.config?.warehouse_ids as number[] | undefined)??[];
+    setProductScope((products.length?products:defaults.product_ids).join(','));setWarehouseScope((warehouseIds.length?warehouseIds:defaults.warehouse_ids).join(','));
     setSelected(r);setName(r?.name ?? '');setDescription(r?.description ?? '');setReason('');setSimulation(null);setError('');
     const kind = r?.code ?? initial.kind;
     setConfig(r?.config ? {...initial,...r.config} as Config : {...initial,kind,objective:objectives[kind]?.[0] ?? initial.objective});
@@ -55,7 +77,7 @@ export default function AgentRulesPage() {
     await load();const r = await automationRequest<Rule[]>('/rules');await edit(r.find(x => x.id === result.id) ?? null);setStatus('Versión guardada y pausada. Propuestas pendientes anteriores invalidadas.');
   });};
   return <div className="grid agent-control"><section className="card"><p className="section-label">Configuración con versiones</p><h3>Editor de reglas</h3><p>Agente responsable: AutomationService. Guardar crea una versión pausada e invalida propuestas pendientes de versiones anteriores. Restaurar crea un nuevo borrador; el historial se conserva.</p><Link to="/agentes/control">Volver al centro de control</Link><p role="status" aria-live="polite">{status}</p>{error && <p className="error-line" role="alert">{error}</p>}</section>
-    <section className="card"><h3>Reglas existentes</h3><button className="chip-btn" onClick={() => void edit(null)}>Nueva regla</button>{rules.map(r => <article className="agent-rule" key={r.id}><strong>{r.name} · v{r.current_version} · {r.is_active ? 'Activa' : 'Pausada'}</strong><p>{r.description}</p><button className="chip-btn" onClick={() => void edit(r)}>Editar</button><button className="chip-btn" disabled={busy || !permissions.includes('activate')} onClick={() => void perform(async () => {await updateAutomationRule(r.id,!r.is_active);await load();setStatus(r.is_active ? 'Regla desactivada' : 'Regla activada: habilita análisis, los permisos operativos se validan por separado');})}>{r.is_active ? 'Desactivar' : 'Activar versión'}</button></article>)}</section>
+    <section className="card"><h3>Reglas existentes</h3><button className="chip-btn" onClick={() => void edit(null)}>Nueva regla</button>{rules.map(r => <article className="agent-rule" key={r.id}><strong>{r.name} · v{r.current_version} · {r.is_active ? 'Activa' : 'Pausada'}</strong><p>{r.description}</p><RuleScopeSummary rule={r} defaults={defaults} /><button className="chip-btn" onClick={() => void edit(r)}>Editar</button><button className="chip-btn" disabled={busy || !permissions.includes('activate')} onClick={() => void perform(async () => {await updateAutomationRule(r.id,!r.is_active);await load();setStatus(r.is_active ? 'Regla desactivada' : 'Regla activada: habilita análisis, los permisos operativos se validan por separado');})}>{r.is_active ? 'Desactivar' : 'Activar versión'}</button></article>)}</section>
     <section className="card"><h3>{selected ? `Editar ${selected.name} · base v${selected.current_version}` : 'Crear regla'}</h3><form className="stack" onSubmit={save}>
       <label>Nombre<input required minLength={3} maxLength={160} value={name} onChange={e => setName(e.target.value)} /></label>
       <label>Descripción<textarea maxLength={2000} value={description} onChange={e => setDescription(e.target.value)} /></label>
@@ -67,8 +89,10 @@ export default function AgentRulesPage() {
       <div className="agent-fields"><label>Tipo de regla<select value={config.kind} onChange={e => change({kind:e.target.value,objective:objectives[e.target.value]?.[0] ?? '',...(['daily_inventory_report','risk_alerts'].includes(e.target.value) ? {mode:'observation',allowed_actions:[],conditions:{mode:'all',items:[]}} : {})})}><option value="stock_reorder_proposals">Reposición</option><option value="stagnant_stock">Stock estancado</option><option value="daily_inventory_report">Informe diario</option><option value="risk_alerts">Riesgos</option></select></label>
         <label>Autonomía<select value={config.mode} onChange={e => change({mode:e.target.value,allowed_actions:[]})}><option value="observation">Observación</option><option value="assisted">Asistido</option>{['stock_reorder_proposals','stagnant_stock'].includes(config.kind) && <option value="limited_auto">Automático limitado</option>}</select></label>
         <label>Zona horaria<input required value={config.timezone} onChange={e => change({timezone:e.target.value})} /></label>
-        <label>Productos (IDs separados por comas, vacío = todos)<input pattern="[0-9, ]*" value={productScope} onChange={e => {setProductScope(e.target.value);setSimulation(null);}} /></label>
-        <label>Almacenes (IDs separados por comas, vacío = todos)<input pattern="[0-9, ]*" value={warehouseScope} onChange={e => {setWarehouseScope(e.target.value);setSimulation(null);}} /></label>
+        <RuleScopePicker label="Productos (IDs separados por comas)" hint="Vacío = productos de Compras prioritarias" value={productScope} onChange={value=>{setProductScope(value);setSimulation(null);}}
+          loadOptions={loadScopeProducts} hydrateOptions={hydrateScopeProducts} initialOptions={defaults.products} />
+        <RuleScopePicker label="Almacenes (IDs separados por comas)" hint="Vacío = primer almacén activo de la empresa (menor ID)" value={warehouseScope} onChange={value=>{setWarehouseScope(value);setSimulation(null);}}
+          loadOptions={loadWarehouses} hydrateOptions={hydrateWarehouses} initialOptions={warehouses} minQueryLength={1} />
         <label>Métrica objetivo<input readOnly value="Unidades despachadas confirmadas en el horizonte de revisión" /></label><label>Objetivo mínimo de despachos (unidades base, vacío = no evaluable)<input type="number" min="0" max="1000000000" step="0.0001" value={config.objective_target ?? ""} onChange={e=>change({objective_target:e.target.value || null})} /></label>
         <label>Plazo estimado (días, vacío = desconocido)<input type="number" min="0" max="365" value={config.lead_days ?? ''} onChange={e => change({lead_days:e.target.value || null})} /></label>
         {numbers.map(n => <label key={n.key}>{n.label}<input required type="number" min={n.min} max={n.max} step={n.decimal ? '0.0001' : '1'} value={String(config[n.key])} onChange={e => change({[n.key]:n.decimal ? e.target.value : Number(e.target.value)})} /></label>)}

@@ -432,7 +432,8 @@ class DatabaseTests(unittest.TestCase):
         from psycopg2.extensions import TRANSACTION_STATUS_IDLE
         def explain(*args,**kwargs):
             self.assertEqual(self.c.get_transaction_status(),TRANSACTION_STATUS_IDLE)
-            return {'response':'La regla terminó sin propuestas persistidas.','provider':'ollama','model':'test'}
+            return {'response':json.dumps({'summary':'La regla terminó sin propuestas persistidas.',
+                    'next_step':'','metric_ids':['proposals_total'],'chart_id':''}),'provider':'ollama','model':'test'}
         with patch('trace_interpretation.generate_ai',side_effect=explain) as generate:
             interpretation = self.s.interpret_trace(run_id)
         self.assertEqual(interpretation['source'],'ai')
@@ -500,6 +501,10 @@ class DatabaseTests(unittest.TestCase):
             self.s.save_rule(RuleDraft(name='Autonomía',reason='Solicitar ejecución',expected_version=2,config=auto),'tester',self.rid)
 
     def test_physical_transfer_requires_confirmation_conserves_stock_and_is_idempotent(self):
+        # Transfers compare both explicitly selected warehouses; an empty scope now selects only the first.
+        transfer_config=self.config.model_copy(update={'product_ids':[self.pid],'warehouse_ids':[1,2]})
+        self.s.save_rule(RuleDraft(name='Traslado aislado',reason='Comparar origen y destino',
+                         expected_version=1,config=transfer_config),'tester',self.rid,True)
         # Give the destination one confirmed historical dispatch without creating a sales document.
         inventory = __import__('inventory_service').InventoryService(self.c)
         unit=self.s._one("SELECT id FROM public.inventory_units WHERE code='unit'")['id']
@@ -517,6 +522,58 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(before,self.s._one('SELECT SUM(physical_qty) AS total FROM public.inventory_stock_levels')['total'])
         moves=self.s._all("SELECT quantity_signed FROM public.inventory_movements WHERE movement_type IN ('transfer_in','transfer_out')")
         self.assertEqual(len(moves),2);self.assertEqual(sum(m['quantity_signed'] for m in moves),0)
+
+    def test_default_scope_matches_priority_purchases_and_first_active_warehouse(self):
+        defaults=self.s.scope_defaults()
+        priority=__import__('inventory_service').InventoryService(self.c).priority_purchase_rows()
+        self.assertEqual(defaults['product_ids'],list(dict.fromkeys(p['product_id'] for p in priority)))
+        self.assertEqual(defaults['warehouse_ids'],[1])
+        preview=self.s.simulate(self.config)
+        self.assertEqual(preview['resolved_scope']['product_ids'],defaults['product_ids'])
+        self.assertEqual(preview['resolved_scope']['warehouse_ids'],[1])
+        with self.ai('wait'):
+            result=self.s.run_rule(self.rid)
+        run=self.s._one('SELECT config_snapshot FROM public.automation_runs WHERE id=%s',(result['run_id'],))
+        self.assertEqual(run['config_snapshot']['product_ids'],defaults['product_ids'])
+        self.assertEqual(run['config_snapshot']['warehouse_ids'],[1])
+        self.assertEqual(result['result']['analysis_counts']['rows_examined'],1)
+        event=next(e for e in self.s.trace(result['run_id']) if e['phase']=='observation')
+        self.assertEqual(event['detail']['resolved_scope']['products_source'],'priority_purchases')
+
+    def test_no_priority_products_never_expands_to_all_products(self):
+        self.s._write('UPDATE public.inventory_stock_levels SET physical_qty=10000')
+        self.c.commit()
+        self.assertEqual(self.s.scope_defaults()['product_ids'],[])
+        with patch('automation_service.generate_ai') as generate:
+            result=self.s.run_rule(self.rid)
+        generate.assert_not_called()
+        self.assertEqual(result['result']['analysis_counts']['rows_examined'],0)
+        self.assertEqual(self.s.simulate(self.config)['scenarios'],[])
+
+    def test_explicit_scope_is_preserved_and_reviewed_rows_differ_from_eligible_rows(self):
+        config=RuleConfig(kind='stagnant_stock',product_ids=[self.pid],warehouse_ids=[2],stagnant_days=730)
+        # Give warehouse 2 sufficient recent demand so it is not stagnant.
+        unit=self.s._one("SELECT id FROM public.inventory_units WHERE code='unit'")['id']
+        self.s._write('''INSERT INTO public.inventory_movements(movement_type,product_id,warehouse_id,
+            quantity,quantity_signed,base_unit_id,operation_key,user_name)
+            VALUES('dispatch',%s,2,100,-100,%s,'scope-recent-demand','tester')''',(self.pid,unit))
+        self.c.commit()
+        saved=self.s.save_rule(RuleDraft(name='Ámbito explícito',reason='Probar selección',config=config),'tester')
+        with patch.object(self.s,'scope_defaults') as defaults,patch('automation_service.generate_ai') as generate:
+            result=self.s.run_rule(saved['id'])
+            defaults.assert_not_called();generate.assert_not_called()
+        self.assertEqual(result['result']['analysis_counts'],{'rows_examined':1,'eligible_entities':0,'suppressed_entities':0})
+        event=next(e for e in self.s.trace(result['run_id']) if e['phase']=='analysis')
+        self.assertEqual(event['detail']['product_ids'],[self.pid])
+        self.assertEqual(event['detail']['warehouse_ids'],[2])
+
+    def test_default_warehouse_skips_inactive_and_scope_options_keep_saved_ids(self):
+        self.s._write('UPDATE public.inventory_warehouses SET is_active=FALSE WHERE id=1')
+        self.c.commit()
+        self.assertEqual(self.s.scope_defaults()['warehouse_ids'],[2])
+        options=self.s.scope_product_options([self.pid])
+        self.assertEqual([item['id'] for item in options],[self.pid])
+        with self.assertRaises(ValueError): self.s.scope_product_options([0])
 
 
 if __name__=='__main__': unittest.main(verbosity=2)

@@ -64,6 +64,22 @@ def objectives(svc: Service):
     return RULE_OBJECTIVES
 
 
+@router.get('/scope-defaults')
+def scope_defaults(svc: Service):
+    permit(svc,'read')
+    return svc.scope_defaults()
+
+
+@router.get('/scope-products')
+def scope_products(svc: Service, ids: str = Query(default='',max_length=1400)):
+    permit(svc,'read')
+    try:
+        selected = [int(value.strip()) for value in ids.split(',')] if ids.strip() else []
+    except ValueError:
+        raise HTTPException(422,'Indica IDs de productos separados por comas')
+    return execute(svc.scope_product_options,selected)
+
+
 @router.post('/rules')
 def create(payload: RuleDraft, svc: Service):
     permit(svc, 'edit')
