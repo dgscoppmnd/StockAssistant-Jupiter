@@ -61,14 +61,24 @@ export default function MarketTrendsCard() {
       <button className="chip-btn" type="submit" disabled={loading || term.trim().length < 2}>{loading ? "Consultando…" : "Consultar SerpAPI Trends"}</button>
     </form>
     <p role="status">{loading ? "Consultando la fuente y preparando el análisis…" : ""}</p>
-    {error && <p className="error-line" role="alert">{error}</p>}
+    {error && <div className="error-line" role="alert">
+      <strong>No se pudo completar la consulta de tendencias. La gráfica no está disponible.</strong>
+      <p>{error}</p>
+      <p>Comprueba la conexión y vuelve a consultar. Si el problema continúa, contacta con el administrador.</p>
+    </div>}
     {result && <div className="agent-result">
       <strong>{result.term} · {result.country}</strong>
       <p role="status">{result.status === "ok" ? `${points.length} observaciones válidas recibidas.` : result.status === "no_data" ? "No hay datos válidos para analizar." : "La fuente no está disponible."}</p>
-      {!!points.length && <InterestChart points={points} />}
+      {points.length ? <InterestChart points={points} /> : <div role="status">
+        <strong>Gráfica y tabla de valores no disponibles.</strong>
+        {result.status === "source_unavailable" ? <>
+          <p>El servicio de tendencias no está disponible y no ha proporcionado datos para esta consulta.</p>
+          {result.source.detail && <p>Motivo: {result.source.detail}</p>}
+          <p>Vuelve a consultar más tarde. Si el problema continúa, pide al administrador que revise la configuración y el acceso a SerpAPI.</p>
+        </> : <p>No se han recibido observaciones válidas para este término y periodo. Prueba otro producto o categoría. La falta de datos no significa que no exista interés de búsqueda.</p>}
+      </div>}
       <h4>{result.ai ? "Análisis de IA" : "Resumen calculado"}</h4>
       <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{result.explanation}</p>
-      {result.status === "source_unavailable" && <p>{result.source.detail}</p>}
       {result.data && <>
         <h4>Consultas relacionadas</h4>
         {(["top", "rising"] as const).map(category => <div key={category}>
