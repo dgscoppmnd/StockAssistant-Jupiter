@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { createPurchaseRecommendation, fetchCompetition, fetchExternalSourceStatuses, fetchFinancialSummary, fetchRisks, fetchSalesForecast, fetchStockAlerts, processReviewBatch } from "../api";
 import type { ExternalSourceStatus, FinancialSummary, ProductOption, PurchaseRecommendation, SalesForecast, StockAlert } from "../types";
 import SectionIcon from "./components/SectionIcon";
@@ -7,6 +8,10 @@ import CustomerSupportChat from "./components/CustomerSupportChat";
 import PurchaseRecommendationInfo from "./components/PurchaseRecommendationInfo";
 import ReviewBatchInfo from "./components/ReviewBatchInfo";
 import MarketTrendsCard from "./components/MarketTrendsCard";
+
+const sourceModes: Record<string, string> = { read_only: 'Solo lectura', disabled: 'Deshabilitada' };
+const formatNumber = (value: number) => Number(value).toLocaleString('es-ES', { maximumFractionDigits: 2 });
+const formatAmount = (value: number) => Number(value).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function AgentsOperationsPage() {
   const [sources, setSources] = useState<ExternalSourceStatus[]>([]);
@@ -27,12 +32,16 @@ export default function AgentsOperationsPage() {
   const [financial, setFinancial] = useState<FinancialSummary | null>(null);
   const [competition, setCompetition] = useState<Record<string, unknown> | null>(null);
   const [risks, setRisks] = useState<Array<{ type: string; product_name: string; return_rate: number }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
 
   const load = async () => {
+    setLoading(true);
     try {
       const [nextSources, nextAlerts, nextRisks] = await Promise.all([fetchExternalSourceStatuses(), fetchStockAlerts(), fetchRisks()]);
-      setSources(nextSources); setAlerts(nextAlerts); setRisks(nextRisks.alerts); setStatus("Agentes sincronizados con los datos internos."); setError("");
-    } catch (err) { setError(err instanceof Error ? err.message : "No se pudieron cargar los agentes"); }
+      setSources(nextSources); setAlerts(nextAlerts); setRisks(nextRisks.alerts); setLoaded(true); setStatus("Datos internos sincronizados"); setError("");
+    } catch (err) { setError(err instanceof Error ? err.message : "No se pudieron cargar los agentes"); setStatus("No se pudieron actualizar los datos internos"); }
+    finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, []);
 
@@ -40,7 +49,7 @@ export default function AgentsOperationsPage() {
     event.preventDefault();
     if (!canAnalyze) return;
     setError(""); setAnalyzing(true);
-    try { setRecommendation(await createPurchaseRecommendation(Number(productId))); setStatus("Recomendacion calculada con evidencia disponible."); }
+    try { setRecommendation(await createPurchaseRecommendation(Number(productId))); setStatus("Recomendación calculada con evidencia disponible."); }
     catch (err) { setError(err instanceof Error ? err.message : "No se pudo crear la recomendacion"); }
     finally { setAnalyzing(false); }
   };
@@ -59,58 +68,60 @@ export default function AgentsOperationsPage() {
     try {
       const id = Number(productId);
       const [nextForecast, nextFinancial, nextCompetition] = await Promise.all([fetchSalesForecast(id), fetchFinancialSummary(id), fetchCompetition(id)]);
-      setForecast(nextForecast); setFinancial(nextFinancial); setCompetition(nextCompetition); setStatus("Prevision, margen y competencia calculados con evidencia."); setError("");
+      setForecast(nextForecast); setFinancial(nextFinancial); setCompetition(nextCompetition); setStatus("Previsión, margen y competencia calculados con evidencia."); setError("");
     } catch (err) { setError(err instanceof Error ? err.message : "No se pudo analizar el producto"); }
     finally { setAnalyzing(false); }
   };
 
-  return <div className="grid agent-operations">
-    <section className="card agent-hero"><p className="section-label">Fase 3 · Operacion comercial y analisis</p><h3><SectionIcon kind="assistant" />Señales reales, decisiones humanas</h3><p>Los agentes calculan stock, previsiones y márgenes con datos verificables. Las fuentes externas son solo de lectura.</p><p className="status-line">{status}</p>{error && <p className="error-line">{error}</p>}</section>
-    <section className="grid two-columns">
-      <article className="card"><p className="section-label">Agente de stock</p><h3><SectionIcon kind="alert" />Alertas de reposicion</h3><div className="inventory-table">{alerts.map((alert) => <div className="inventory-table-row" key={`${alert.product_id}-${alert.warehouse_id}`}><span>{alert.product_name}</span><span>{alert.warehouse_name}</span><strong>{alert.available_qty}/{alert.reorder_point} {alert.base_unit_code}</strong></div>)}{!alerts.length && <p className="muted">No hay productos bajo el punto de pedido.</p>}</div></article>
-      <article className="card"><p className="section-label">Fuentes externas</p><h3><SectionIcon kind="source" />Disponibilidad y modo</h3><div className="inventory-list">{sources.map((source) => <div className="inventory-list-item" key={source.name}><strong>{source.name}</strong><span className={source.available ? "source-live" : "source-offline"}>{source.available ? "Disponible" : "No disponible"}</span><small>{source.detail}</small></div>)}</div></article>
+  return <div className="agent-operations operations-workspace">
+    <section className="card operations-header">
+      <div className="operations-header-top"><div><p className="section-label">Operación comercial · inteligencia de negocio</p><h3><SectionIcon kind="assistant"/>Agentes y análisis</h3><p className="operations-description">Datos internos verificables y fuentes externas de solo lectura.</p></div><div className="operations-header-actions"><Link className="chip-btn" to="/agentes/reglas">Editor de reglas <span aria-hidden="true">↗</span></Link><button className="chip-btn" disabled={loading} onClick={()=>void load()}>{loading ? 'Actualizando…' : 'Actualizar datos'}</button></div></div>
+      <div className="operations-overview"><div><span className="operations-dot operations-dot--amber"/><strong>{loaded ? alerts.length : '—'}</strong><span>Alertas de stock</span></div><div><span className="operations-dot operations-dot--green"/><strong>{loaded ? `${sources.filter(s=>s.available).length}/${sources.length}` : '—'}</strong><span>Fuentes disponibles</span></div><div><span className="operations-dot operations-dot--rose"/><strong>{loaded ? risks.length : '—'}</strong><span>Riesgos de devolución</span></div></div>
+      <div className="operations-feedback" role="status" aria-live="polite"><span className="operations-dot"/>{loading ? 'Sincronizando datos internos…' : status}</div>
+      {error && <div className="operations-error" role="alert"><span>{error}</span><button type="button" className="chip-btn" disabled={loading} onClick={()=>void load()}>Reintentar carga</button></div>}
     </section>
-    <section className="grid two-columns">
-      <article className="card"><p className="section-label">Agente de compras</p>
-        <div className="routing-info-heading"><h3><SectionIcon kind="cart" />Recomendación con evidencia</h3><PurchaseRecommendationInfo /></div>
-        <form className="stack" onSubmit={recommend}>
-          <ProductCombobox selectedProduct={selectedProduct} selectedId={Number(productId)}
-            disabled={analyzing}
-            onSelect={(product) => {
-              if (product.pk_product === Number(productId)) return;
-              setSelectedProduct(product); setProductId(String(product.pk_product));
-              setRecommendation(null); setForecast(null); setFinancial(null); setCompetition(null);
-              setError("");
-            }} />
-          <button className="primary-btn" disabled={!canAnalyze} type="submit">Analizar compra</button>
-        </form>
-        <button className="chip-btn" disabled={!canAnalyze} onClick={() => void analyzeProduct()} type="button">Analisis comercial</button>
-        {recommendation && <div className="agent-result">
-          <strong>{recommendation.product_name}</strong>
-          <p>Pedido sugerido: {recommendation.recommended_qty} {recommendation.base_unit_code}</p>
-          <p>Coste estimado: {recommendation.estimated_landed_cost ?? "Sin oferta"} {recommendation.currency}</p>
-          <p>{recommendation.explanation}</p>
-          <small>Ofertas comparables: {recommendation.offers.length}</small>
-        </div>}
-      </article>
-      <article className="card"><p className="section-label">Agente de valoraciones</p>
-        <div className="routing-info-heading"><h3><SectionIcon kind="review" />Procesar lote</h3><ReviewBatchInfo /></div>
-        <form className="stack" onSubmit={submitReviews}>
-          <ProductCombobox selectedProduct={selectedReviewProduct} selectedId={Number(reviewProductId)}
-            disabled={processingReviews}
-            onSelect={(product) => { setSelectedReviewProduct(product); setReviewProductId(String(product.pk_product)); setError(""); }} />
-          <textarea required disabled={processingReviews} placeholder="Una valoracion por linea" value={reviews} onChange={(event) => setReviews(event.target.value)} rows={5} />
-          <button className="chip-btn" disabled={!canProcessReviews} type="submit">{processingReviews ? "Procesando…" : "Clasificar valoraciones"}</button>
-        </form>
-      </article>
+    <nav className="operations-nav" aria-label="Secciones de agentes"><a href="#agent-signals">Señales del negocio</a><a href="#agent-tools">Herramientas de análisis</a><a href="#agent-results">Resultados comerciales</a><a href="#agent-support">Soporte y mercado</a></nav>
+    <section className="operations-section" id="agent-signals" aria-labelledby="agent-signals-title">
+      <div className="operations-section-heading"><h3 id="agent-signals-title"><span>01</span>Señales del negocio</h3><span>Stock y disponibilidad de fuentes</span></div>
+      <div className="operations-columns operations-monitor">
+        <article className="card operations-alerts" aria-busy={loading}><div className="operations-card-heading"><div><p className="section-label">Agente de stock</p><h3><SectionIcon kind="alert"/>Alertas de reposición</h3></div><span className="operations-count">{loaded ? alerts.length : '—'}</span></div>
+          {alerts.length ? <div className="operations-stock-list"><div className="operations-stock-labels" aria-hidden="true"><span>Producto / almacén</span><span>Disponible / umbral</span></div>{alerts.map(alert=><div className="operations-stock-row" key={`${alert.product_id}-${alert.warehouse_id}`}><div><strong>{alert.product_name}</strong><span>{alert.warehouse_name}</span></div><div><strong>{alert.available_qty.toLocaleString('es-ES')}<span> / {alert.reorder_point.toLocaleString('es-ES')}</span></strong><small>{alert.base_unit_code}</small></div></div>)}</div> : <div className="operations-empty"><SectionIcon kind="stock"/><strong>{loading ? 'Revisando niveles de stock…' : loaded ? 'Sin alertas de reposición' : 'Stock pendiente de consulta'}</strong><p>{loaded ? 'No hay productos que necesiten reposición por este criterio.' : 'Las alertas aparecerán cuando se sincronicen los datos.'}</p></div>}
+        </article>
+        <article className="card" aria-busy={loading}><div className="operations-card-heading"><div><p className="section-label">Fuentes externas</p><h3><SectionIcon kind="source"/>Disponibilidad y modo</h3></div><span className="operations-badge">Solo lectura</span></div>
+          <div className="operations-sources">{sources.map(source=><div className="operations-source" key={source.name}><div><strong>{source.name}</strong><span className={`operations-badge ${source.available ? 'operations-badge--green' : 'operations-badge--amber'}`}><span className="operations-dot"/>{source.available ? 'Disponible' : 'No disponible'}</span></div><p>{source.detail}</p><small>Modo: {sourceModes[source.mode] ?? source.mode}</small></div>)}{!sources.length && <p className="operations-empty">{loading ? 'Consultando fuentes…' : loaded ? 'No hay fuentes externas configuradas.' : 'Disponibilidad pendiente de consulta.'}</p>}</div>
+        </article>
+      </div>
     </section>
-    <section className="grid two-columns">
-      <article className="card"><p className="section-label">Ventas y finanzas</p><h3><SectionIcon kind="trend" />Prevision y margen</h3>{forecast ? <div className="agent-result"><strong>{forecast.product_name}</strong><p>Prevision: {forecast.forecast_qty} unidades en {forecast.horizon_days} dias.</p><p>Tendencia: {forecast.trend}. Media diaria: {forecast.daily_average}.</p></div> : <p className="muted">Selecciona un producto y ejecuta Analisis comercial.</p>}{financial && <div className="agent-result"><p>Ingresos: {financial.revenue}</p><p>Coste: {financial.cost}</p><strong>Margen: {financial.margin} ({financial.margin_percent}%)</strong></div>}</article>
-      <article className="card"><p className="section-label">Competencia y riesgos</p><h3><SectionIcon kind="risk" />Datos con vigencia</h3>{competition ? <div className="agent-result"><p>Ofertas comparables: {Array.isArray(competition.offers) ? competition.offers.length : 0}</p><small>La fuente y fecha se devuelven en cada consulta.</small></div> : <p className="muted">No se ha consultado competencia.</p>}<div className="inventory-list">{risks.map((risk, index) => <div className="inventory-list-item" key={`${risk.product_name}-${index}`}><strong>{risk.product_name}</strong><span>Devoluciones: {(risk.return_rate * 100).toFixed(1)}%</span></div>)}{!risks.length && <p className="muted">No hay riesgos de devolucion sobre el umbral.</p>}</div></article>
+    <section className="operations-section" id="agent-tools" aria-labelledby="agent-tools-title">
+      <div className="operations-section-heading"><h3 id="agent-tools-title"><span>02</span>Herramientas de análisis</h3><span>Selecciona un producto para empezar</span></div>
+      <div className="operations-columns">
+        <article className="card operations-purchasing"><p className="section-label">Agente de compras</p><div className="routing-info-heading"><h3><SectionIcon kind="cart"/>Recomendación con evidencia</h3><PurchaseRecommendationInfo/></div><p className="operations-hint">Consulta cantidades sugeridas y ofertas comparables para un producto.</p>
+          <form className="stack" onSubmit={recommend}><ProductCombobox selectedProduct={selectedProduct} selectedId={Number(productId)} disabled={analyzing} onSelect={product=>{if(product.pk_product===Number(productId))return;setSelectedProduct(product);setProductId(String(product.pk_product));setRecommendation(null);setForecast(null);setFinancial(null);setCompetition(null);setError('');}}/>
+            <div className="operations-form-actions"><button className="primary-btn" disabled={!canAnalyze} type="submit">{analyzing ? 'Analizando…' : 'Analizar compra'}</button><button className="chip-btn" disabled={!canAnalyze} onClick={()=>void analyzeProduct()} type="button">Análisis comercial</button></div>
+          </form>
+          {analyzing && <p className="operations-hint" role="status">Consultando la evidencia disponible para el producto…</p>}
+          {recommendation && <div className="agent-result" role="status"><span className="operations-result-label">Recomendación de compra</span><strong>{recommendation.product_name}</strong><dl className="operations-result-metrics"><div><dt>Pedido sugerido</dt><dd>{formatNumber(recommendation.recommended_qty)} <small>{recommendation.base_unit_code}</small></dd></div><div><dt>Coste estimado</dt><dd>{recommendation.estimated_landed_cost == null ? 'Sin oferta' : formatAmount(recommendation.estimated_landed_cost)} <small>{recommendation.currency}</small></dd></div></dl><p>{recommendation.explanation}</p><small>Ofertas comparables: {recommendation.offers.length}</small></div>}
+        </article>
+        <article className="card operations-reviews"><p className="section-label">Agente de valoraciones</p><div className="routing-info-heading"><h3><SectionIcon kind="review"/>Procesar valoraciones</h3><ReviewBatchInfo/></div><p className="operations-hint">Añade las opiniones de un producto, una por línea.</p>
+          <form className="stack" onSubmit={submitReviews}><ProductCombobox selectedProduct={selectedReviewProduct} selectedId={Number(reviewProductId)} disabled={processingReviews} onSelect={product=>{setSelectedReviewProduct(product);setReviewProductId(String(product.pk_product));setError('');}}/>
+            <label>Valoraciones<textarea required disabled={processingReviews} placeholder={'El producto es excelente.\nLa entrega llegó tarde.\nBuen acabado y presentación.'} value={reviews} onChange={event=>setReviews(event.target.value)} rows={4}/></label>
+            <div className="operations-form-actions"><span className="operations-hint">{reviews.split('\n').filter(line=>line.trim()).length} líneas con texto</span><button className="primary-btn" disabled={!canProcessReviews} type="submit">{processingReviews ? 'Procesando…' : 'Clasificar valoraciones'}</button></div>
+          </form>
+        </article>
+      </div>
     </section>
-    <section className="grid two-columns">
-      <CustomerSupportChat />
-      <MarketTrendsCard />
+    <section className="operations-section" id="agent-results" aria-labelledby="agent-results-title">
+      <div className="operations-section-heading"><h3 id="agent-results-title"><span>03</span>Resultados comerciales</h3><span>Previsión, margen y riesgo</span></div>
+      <div className="operations-columns">
+        <article className="card"><p className="section-label">Ventas y finanzas</p><h3><SectionIcon kind="trend"/>Previsión y margen</h3>{forecast ? <div className="agent-result"><strong>{forecast.product_name}</strong><dl className="operations-result-metrics"><div><dt>Previsión · {forecast.horizon_days} días</dt><dd>{formatNumber(forecast.forecast_qty)} <small>unidades</small></dd></div><div><dt>Media diaria</dt><dd>{formatNumber(forecast.daily_average)}</dd></div></dl><p>Tendencia: {forecast.trend}</p></div> : <div className="operations-empty"><SectionIcon kind="trend"/><strong>Tu análisis aparecerá aquí</strong><p>Selecciona un producto en compras y ejecuta «Análisis comercial».</p><a href="#agent-tools">Ir al análisis de producto <span aria-hidden="true">↑</span></a></div>}{financial && <dl className="operations-financial"><div><dt>Ingresos</dt><dd>{formatAmount(financial.revenue)}</dd></div><div><dt>Coste</dt><dd>{formatAmount(financial.cost)}</dd></div><div><dt>Margen</dt><dd>{formatAmount(financial.margin)} <span>({formatNumber(financial.margin_percent)} %)</span></dd></div></dl>}</article>
+        <article className="card"><p className="section-label">Competencia y riesgos</p><h3><SectionIcon kind="risk"/>Datos con vigencia</h3>{competition ? <div className="operations-competition"><span>Ofertas comparables</span><strong>{Array.isArray(competition.offers) ? competition.offers.length : 0}</strong><small>La fuente y fecha se devuelven en cada consulta.</small></div> : <p className="operations-hint">Ejecuta «Análisis comercial» para consultar la competencia.</p>}<div className="operations-risks">{risks.map((risk,index)=><div className="operations-risk" key={`${risk.product_name}-${index}`}><strong>{risk.product_name}</strong><span className="operations-badge operations-badge--rose">Devoluciones: {(risk.return_rate*100).toFixed(1)} %</span></div>)}{!risks.length && <p className="operations-hint">{loading ? 'Revisando riesgos…' : loaded ? 'No hay riesgos de devolución sobre el umbral.' : 'Riesgos pendientes de consulta.'}</p>}</div></article>
+      </div>
+    </section>
+    <section className="operations-section" id="agent-support" aria-labelledby="agent-support-title">
+      <div className="operations-section-heading"><h3 id="agent-support-title"><span>04</span>Soporte y mercado</h3><span>Consultas con fuentes</span></div>
+      <div className="operations-columns"><CustomerSupportChat/>
+        <MarketTrendsCard />
+      </div>
     </section>
   </div>;
 }
