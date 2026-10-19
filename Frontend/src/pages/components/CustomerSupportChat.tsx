@@ -13,7 +13,10 @@ export default function CustomerSupportChat() {
   const [pending, setPending] = useState(false);
   const [product, setProduct] = useState<ProductOption | null>(null);
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, [messages, pending]);
+  useEffect(() => {
+    if (!messages.length && !pending) return;
+    end.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'nearest' });
+  }, [messages, pending]);
 
   const send = async (event: FormEvent) => {
     event.preventDefault();
@@ -37,8 +40,7 @@ export default function CustomerSupportChat() {
     <p className="section-label">Atención al cliente · RAG</p>
     <div className="routing-info-heading"><h3><SectionIcon kind="assistant" />Asistente con fuentes vigentes</h3><CustomerSupportInfo /></div>
     <p className="muted">Consulta los documentos procesados de Base de conocimiento. Puedes añadir un producto para consultar su stock actual.</p>
-    <label>Producto opcional</label>
-    <ProductCombobox selectedProduct={product} selectedId={product?.pk_product ?? 0} disabled={pending}
+    <ProductCombobox label="Producto opcional (código o nombre)" selectedProduct={product} selectedId={product?.pk_product ?? 0} disabled={pending}
       onSelect={(next) => { setProduct(next); setMessages([]); }} />
     {product && <button className="chip-btn" disabled={pending} type="button" onClick={() => { setProduct(null); setMessages([]); }}>Quitar producto</button>}
     <div className="support-chat-messages" role="log" aria-label="Conversación con atención al cliente" aria-live="polite">
