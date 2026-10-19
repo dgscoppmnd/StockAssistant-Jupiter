@@ -451,3 +451,4 @@ crear regla → simular → activar → observar ejecución → revisar propuest
 
 Cualquier dato de demostración debe estar identificado y separado
 de los indicadores reales.
+.
