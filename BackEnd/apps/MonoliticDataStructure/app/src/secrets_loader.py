@@ -11,6 +11,7 @@ SSM_PREFIX = "/stockassistant/prod"
 # variable de entorno -> parámetro SSM (SecureString)
 SECRET_PARAMETERS = {
     "OPENAI_API_KEY": "openai_api_key",
+    "SERPAPI_API_KEY": "serpapi_api_key",
     "GOOGLE_CLIENT_ID": "google_client_id",
     "STOCKASSISTANT_API_KEYS": "api_keys",
     "STOCKASSISTANT_SESSION_SECRET": "session_secret",
