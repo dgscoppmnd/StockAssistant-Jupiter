@@ -27,10 +27,10 @@ variable "github_repository" {
   default = "dgscoppmnd/StockAssistant-Jupiter"
 }
 
-variable "github_branch" {
-  description = "Rama de GitHub autorizada a asumir el rol de despliegue (debe coincidir con el workflow)."
+variable "github_environment" {
+  description = "Entorno GitHub autorizado por OIDC. Restringir sus deployment branches a master en GitHub."
   type        = string
-  default     = "master"
+  default     = "production"
 }
 
 variable "create_github_oidc_provider" {
@@ -142,7 +142,7 @@ data "aws_iam_policy_document" "github_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:ref:refs/heads/${var.github_branch}"]
+      values   = ["repo:${var.github_repository}:environment:${var.github_environment}"]
     }
   }
 }

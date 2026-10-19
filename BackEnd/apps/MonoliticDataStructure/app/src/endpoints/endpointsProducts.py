@@ -28,6 +28,7 @@ from DataBaseManagement.dbManagementProductImages import (
 )
 from DataBaseManagement.dbservicesProducts import ProductServicesManager
 from DataBaseManagement.dbManagementProducts import (
+	CATALOG_READ_ONLY,
 	count_active_products,
 	get_product_option,
 	get_products_by_external_codes,
@@ -46,6 +47,11 @@ from DataBaseManagement.schemasProducts import (
 )
 
 router = APIRouter()
+
+
+def require_writable_catalog():
+	if CATALOG_READ_ONLY:
+		raise HTTPException(status_code=status.HTTP_405_METHOD_NOT_ALLOWED, detail="Cat?logo de solo lectura en este entorno")
 logger = logging.getLogger("api.endpointsProducts")
 
 PRODUCT_IMAGE_MAX_BYTES = int(os.getenv("PRODUCT_IMAGE_MAX_BYTES", str(100 * 1024 * 1024)))
@@ -173,7 +179,7 @@ def _to_product_image_response(image_row: dict) -> dict:
 	}
 
 
-@router.post("/products/{product_id}/images/upload", response_model=ProductImageUploadResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/products/{product_id}/images/upload", response_model=ProductImageUploadResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_writable_catalog)])
 async def subir_imagen_producto(
 	product_id: int,
 	file: UploadFile = File(...),
@@ -283,7 +289,7 @@ def listar_imagenes_producto(product_id: int, db=Depends(get_db_products)):
 	return [_to_product_image_response(row) for row in rows]
 
 
-@router.put("/products/{product_id}/images/{image_id}/default", response_model=ProductImageResponse)
+@router.put("/products/{product_id}/images/{image_id}/default", response_model=ProductImageResponse, dependencies=[Depends(require_writable_catalog)])
 def seleccionar_imagen_default_producto(product_id: int, image_id: int, db=Depends(get_db_products)):
 	manager: ProductServicesManager = ProductServicesManager(db)
 	try:
@@ -303,7 +309,7 @@ def seleccionar_imagen_default_producto(product_id: int, image_id: int, db=Depen
 	return _to_product_image_response(updated)
 
 
-@router.delete("/products/{product_id}/images/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/products/{product_id}/images/{image_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_writable_catalog)])
 def borrar_imagen_producto(product_id: int, image_id: int, db=Depends(get_db_products)):
 	manager: ProductServicesManager = ProductServicesManager(db)
 	try:
@@ -342,7 +348,7 @@ def borrar_imagen_producto(product_id: int, image_id: int, db=Depends(get_db_pro
 	return None
 
 
-@router.post("/products/sync-qdrant")
+@router.post("/products/sync-qdrant", dependencies=[Depends(require_writable_catalog)])
 def sincronizar_productos_qdrant():
 	logger.info("event=full_product_vector_sync_start")
 	return StreamingResponse(
@@ -352,7 +358,7 @@ def sincronizar_productos_qdrant():
 	)
 
 
-@router.post("/products/import-csv")
+@router.post("/products/import-csv", dependencies=[Depends(require_writable_catalog)])
 async def importar_productos_csv(file: UploadFile = File(...), progress: bool = Query(default=False)):
 	try:
 		if not (file.filename or "").lower().endswith(".csv"):
@@ -425,7 +431,7 @@ def _stream_product_import(source):
 			yield json.dumps({"stage": "error", "detail": "No se pudo importar el CSV. No se ha guardado ningún producto."}) + "\n"
 
 
-@router.post("/products/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/products/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_writable_catalog)])
 def crear_producto(product: ProductCreate, db=Depends(get_db_products)):
 	logger.info("event=create_product_start name=%s", product.name_product)
 	manager: ProductServicesManager = ProductServicesManager(db)
@@ -435,7 +441,7 @@ def crear_producto(product: ProductCreate, db=Depends(get_db_products)):
 	return created_product
 
 
-@router.put("/products/{product_id}", response_model=ProductResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.put("/products/{product_id}", response_model=ProductResponse, status_code=status.HTTP_202_ACCEPTED, dependencies=[Depends(require_writable_catalog)])
 def actualizar_producto(product_id: int, product_update: ProductUpdate, db=Depends(get_db_products)):
 	logger.info("event=update_product_start product_id=%s", product_id)
 	manager: ProductServicesManager = ProductServicesManager(db)
@@ -449,7 +455,7 @@ def actualizar_producto(product_id: int, product_update: ProductUpdate, db=Depen
 		raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_writable_catalog)])
 def borrar_producto(product_id: int, db=Depends(get_db_products)):
 	logger.info("event=delete_product_start product_id=%s", product_id)
 	manager: ProductServicesManager = ProductServicesManager(db)
@@ -467,7 +473,7 @@ def borrar_producto(product_id: int, db=Depends(get_db_products)):
 	return None
 
 
-@router.put("/products/status/{product_id}", response_model=ProductResponse)
+@router.put("/products/status/{product_id}", response_model=ProductResponse, dependencies=[Depends(require_writable_catalog)])
 def set_product_status(product_id: int, db=Depends(get_db_products)):
 	logger.info("event=set_product_status product_id=%s", product_id)
 	manager: ProductServicesManager = ProductServicesManager(db)
