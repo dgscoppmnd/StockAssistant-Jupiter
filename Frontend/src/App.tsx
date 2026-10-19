@@ -7,6 +7,7 @@ import UsersPage from "./pages/UsersPage";
 import InventoryPage from "./pages/InventoryPage";
 import StockOrdersPage from "./pages/StockOrdersPage";
 import AgentsOperationsPage from "./pages/AgentsOperationsPage";
+import MarketingAnalysisPage from "./pages/MarketingAnalysisPage";
 import ExecutivePage from "./pages/ExecutivePage";
 import AgentControlPage from "./pages/AgentControlPage";
 import AgentRulesPage from "./pages/AgentRulesPage";
@@ -40,6 +41,7 @@ const groups: MenuGroup[] = [
     children: [
       { to: "/dashboard", label: "Resumen ejecutivo" },
       { to: "/agentes", label: "Alertas, análisis y agentes de compras" },
+      { to: "/marketing", label: "Análisis de Marketing" },
       { to: "/ejecutivo", label: "Compras y automatizaciones" },
       { to: "/agentes/control", label: "Centro de control de agentes" },
       { to: "/agentes/reglas", label: "Editor de reglas" },
@@ -232,6 +234,7 @@ function PortalShell({
             <Route path="/jupiter" element={<StockAssistantPage />} />
             <Route path="/chat" element={<ChatHistoryPage />} />
             <Route path="/agentes" element={<AgentsOperationsPage />} />
+            <Route path="/marketing" element={<MarketingAnalysisPage />} />
             <Route path="/ejecutivo" element={<ExecutivePage />} />
             <Route path="/agentes/control" element={<AgentControlPage />} />
             <Route path="/agentes/reglas" element={<AgentRulesPage />} />

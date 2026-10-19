@@ -42,6 +42,11 @@ class CommercialContentRequest(BaseModel):
     channel: str = Field(default="product_page", min_length=2, max_length=40)
 
 
+class MarketingOpportunitiesRequest(BaseModel):
+    limit: int = Field(default=3, ge=1, le=3)
+    country: str = Field(default="ES", pattern=r"^[A-Za-z]{2}$")
+
+
 class SupportTurn(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(min_length=1, max_length=4000)

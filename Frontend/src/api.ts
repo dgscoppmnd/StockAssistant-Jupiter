@@ -1,4 +1,5 @@
 import type {
+  MarketingResult,
   AuthSessionResponse,
   AuthUser,
   AgentChatRequest,
@@ -524,6 +525,12 @@ export async function fetchCompetition(productId: number): Promise<Record<string
 
 export async function fetchMarketIntelligence(term: string): Promise<Record<string, unknown>> {
   return request(`${API_BASE}/agents/market-intelligence`, { method: "POST", body: JSON.stringify({ term }) });
+}
+
+export async function fetchMarketingOpportunities(): Promise<MarketingResult> {
+  return request<MarketingResult>(`${API_BASE}/agents/marketing/opportunities`, {
+    method: "POST", body: JSON.stringify({ limit: 3, country: "ES" }),
+  });
 }
 
 export async function askCustomerSupport(question: string, productId?: number, history: SupportTurn[] = []): Promise<CustomerSupportAnswer> {
