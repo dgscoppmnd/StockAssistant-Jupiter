@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { automationRequest, runAutomationRule } from '../api';
 import ObservedAi from './components/ObservedAi';
 import TraceInterpretation from './components/TraceInterpretation';
+import PurchaseOfferLines from './components/PurchaseOfferLines';
+import {recommendedOfferLines,offerKey,offerError,quoteForProposal,type OfferDraft} from '../utils/proposalOffers';
 
 export type Rule = {latest_run_status?:string;pending_proposals?:number;executed_actions?:number;last_provider_signal?:string;failures?:number;id: number; name: string; code: string; description: string; current_version: number; is_active: boolean; last_run_at: string | null; next_run_at: string | null; config: Record<string, unknown> | null};
 type Run = {id: number; rule_id: number; rule_code: string; rule_name: string; status: string; rule_version: number; started_at: string; completed_at: string | null; latency_ms: number | null; result: Record<string, unknown> | null; error_message: string | null; config_snapshot?: {allow_unmetered_paid_ai?: boolean} | null};
@@ -38,7 +40,7 @@ export default function AgentControlPage() {
   const [version,setVersion] = useState(''), [model,setModel] = useState('');
   const [error, setError] = useState(''), [loading, setLoading] = useState(true), [connected, setConnected] = useState(false), [stopped, setStopped] = useState(false);
   const [permissions, setPermissions] = useState<string[]>([]), [busy, setBusy] = useState(false), [reason, setReason] = useState('');
-  const [quote, setQuote] = useState({supplier_id: '', unit_price: '', valid_until: '', reference: ''}), [physical, setPhysical] = useState(false);
+  const [offers,setOffers]=useState<Record<string,OfferDraft>>({}), [physical,setPhysical]=useState(false);
   const [receiptFor,setReceiptFor]=useState<number | null>(null), [receiptQty,setReceiptQty]=useState(''), [receiptKey,setReceiptKey]=useState(''), [receiptPhysical,setReceiptPhysical]=useState(false);
   const load = async () => {
     try {
@@ -66,6 +68,7 @@ export default function AgentControlPage() {
   }, [selected]);
   const action = async (fn: () => Promise<unknown>) => {setBusy(true); try {await fn(); await load();} catch(e) {setError(e instanceof Error ? e.message : String(e));} finally {setBusy(false);setPhysical(false);}};
   const filteredProposals = proposals.filter(p => (!ruleFilter || p.rule_id === Number(ruleFilter)) && (!product || p.product_id === Number(product)) && (!warehouse || p.warehouse_id === Number(warehouse)));
+  const offerRows=recommendedOfferLines(selected===null?filteredProposals:proposals,selected,eventsRunId===selected?events:[]);
   const filteredRuns = runs.filter(r => (!ruleFilter || r.rule_id === Number(ruleFilter)) && (!stateFilter || r.status === stateFilter) && (!version || r.rule_version === Number(version)) && (!model || (r.result?.ai as {model?:string} | undefined)?.model === model) &&
     new Date(r.started_at).getTime() >= Date.now() - Number(days)*86400000 && ((!product && !warehouse) || filteredProposals.some(p => p.run_id === r.id)));
   const lastPhase = events.length ? events[events.length - 1].phase : null;
@@ -110,20 +113,15 @@ export default function AgentControlPage() {
       <TraceInterpretation key={selected} runId={selected} ready={eventsRunId===selected} revision={`${events[events.length-1]?.id ?? 0}:${runs.find(r=>r.id===selected)?.status ?? ''}`} />
     </section>}
     <section className="card"><h3>Revisar propuestas y resultados</h3><label>Motivo de aprobación o rechazo<input value={reason} onChange={e => setReason(e.target.value)} minLength={3} maxLength={500} /></label>
-      <details><summary>Oferta de compra confirmada para la siguiente ejecución</summary><div className="agent-fields">
-        <label>Proveedor (ID)<input type="number" min="1" value={quote.supplier_id} onChange={e => setQuote({...quote,supplier_id:e.target.value})} /></label>
-        <label>Precio por unidad base (EUR)<input type="number" min="0.0001" step="0.0001" value={quote.unit_price} onChange={e => setQuote({...quote,unit_price:e.target.value})} /></label>
-        <label>Oferta válida hasta<input type="datetime-local" value={quote.valid_until} onChange={e => setQuote({...quote,valid_until:e.target.value})} /></label>
-        <label>Referencia de oferta<input value={quote.reference} onChange={e => setQuote({...quote,reference:e.target.value})} /></label>
-      </div></details>
+      <PurchaseOfferLines rows={offerRows} drafts={offers} busy={busy} onChange={(key,draft)=>setOffers(current=>({...current,[key]:draft}))} />
       <label><input type="checkbox" checked={physical} onChange={e => setPhysical(e.target.checked)} /> Confirmo que el traslado seleccionado se ha realizado físicamente</label>
       {!filteredProposals.length && <p>No hay propuestas para estos filtros.</p>}{filteredProposals.map(p => <article className="agent-rule" id={`proposal-${p.id}`} key={p.id}>
         <h4>#{p.id} · {labels[p.action] ?? p.action} · {p.product_name}</h4><p>{p.warehouse_name} · {p.plan.action.quantity} {p.plan.unit} · {p.status} · caduca {date(p.expires_at)}</p><p>{p.plan.reason}</p>
         <button className="chip-btn" onClick={() => setSelected(p.run_id)}>Ver ejecución #{p.run_id}</button>
         <details><summary>Evidencias, cálculos y alternativas</summary><pre>{JSON.stringify(p.plan,null,2)}</pre></details>
         {p.status === 'pending_approval' && <><button className="chip-btn" disabled={busy || reason.trim().length < 3 || !permissions.includes('approve')} onClick={() => void action(() => automationRequest(`/proposals/${p.id}/decision`,'POST',{approve:true,reason}))}>Aprobar</button><button className="chip-btn" disabled={busy || reason.trim().length < 3 || !permissions.includes('approve')} onClick={() => void action(() => automationRequest(`/proposals/${p.id}/decision`,'POST',{approve:false,reason}))}>Rechazar</button></>}
-        {p.status === 'approved' && <button className="primary-btn" disabled={busy || stopped || !permissions.includes('execute')} onClick={() => void action(() => automationRequest(`/proposals/${p.id}/execute`,'POST',{
-          physical_confirmed: physical, quote: p.action === 'replenish' ? {supplier_id:Number(quote.supplier_id),unit_price:quote.unit_price,currency_code:'EUR',valid_until:quote.valid_until ? new Date(quote.valid_until).toISOString() : '',reference:quote.reference} : null
+        {p.status === 'approved' && <button className="primary-btn" title={p.action==='replenish'?offerError(p.product_id,offers[offerKey(p.run_id,p.product_id,p.warehouse_id)]):undefined} disabled={busy || stopped || !permissions.includes('execute') || (p.action==='replenish'&&!!offerError(p.product_id,offers[offerKey(p.run_id,p.product_id,p.warehouse_id)]))} onClick={() => void action(() => automationRequest(`/proposals/${p.id}/execute`,'POST',{
+          physical_confirmed: physical, quote: p.action === 'replenish' ? quoteForProposal(p,offers) : null
         }))}>Ejecutar acción aprobada #{p.id}</button>}
         {p.status === 'executed' && p.action === 'replenish' && <><p>Pendiente de recepción: {display(p.purchase_pending_qty)} {p.plan.unit}</p><button className="chip-btn" disabled={busy || !permissions.includes('execute') || Number(p.purchase_pending_qty) <= 0} onClick={()=>{setReceiptFor(p.id);setReceiptQty('');setReceiptKey(crypto.randomUUID());setReceiptPhysical(false);}}>Registrar recepción física del pedido #{p.id}</button></>}
         {receiptFor === p.id && <form className="stack" onSubmit={e=>{e.preventDefault();void action(async()=>{await automationRequest(`/proposals/${p.id}/receipt`,'POST',{operation_key:receiptKey,quantity:receiptQty,physical_confirmed:receiptPhysical,reason});setReceiptFor(null);});}}>

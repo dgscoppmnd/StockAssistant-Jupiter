@@ -2136,6 +2136,9 @@ body[data-theme="day"] .observed-ai-logo { filter: none; }
 .rule-scope-actions .rule-scope-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: .4rem; }
 .rule-scope-icon svg { width: 20px; height: 20px; }
 .rule-scope-actions .rule-scope-close { margin-left: auto; }
+.purchase-offer-lines { margin: 1rem 0; }
+.purchase-offer-line { min-width: 0; margin: 1rem 0; border-radius: .6rem; }
+.purchase-offer-line legend { float: none; width: auto; padding: 0 .4rem; font-size: .95rem; }
 .agent-flow { display: flex; flex-wrap: wrap; gap: 1.5rem; padding-left: 1.5rem; }
 .agent-flow [aria-current="step"] { font-weight: bold; text-decoration: underline; }
 .agent-control :focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
