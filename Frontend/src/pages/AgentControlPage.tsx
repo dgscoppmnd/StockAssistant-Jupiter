@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { automationRequest, runAutomationRule } from '../api';
 import ObservedAi from './components/ObservedAi';
+import TraceInterpretation from './components/TraceInterpretation';
 
 export type Rule = {latest_run_status?:string;pending_proposals?:number;executed_actions?:number;last_provider_signal?:string;failures?:number;id: number; name: string; code: string; description: string; current_version: number; is_active: boolean; last_run_at: string | null; next_run_at: string | null; config: Record<string, unknown> | null};
 type Run = {id: number; rule_id: number; rule_code: string; rule_name: string; status: string; rule_version: number; started_at: string; completed_at: string | null; latency_ms: number | null; result: Record<string, unknown> | null; error_message: string | null; config_snapshot?: {allow_unmetered_paid_ai?: boolean} | null};
@@ -31,6 +32,7 @@ function Series({title,points,unit}: {title:string; points:{label:string;value:n
 export default function AgentControlPage() {
   const [rules, setRules] = useState<Rule[]>([]), [runs, setRuns] = useState<Run[]>([]), [proposals, setProposals] = useState<Proposal[]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null), [events, setEvents] = useState<Event[]>([]);
+  const [eventsRunId,setEventsRunId] = useState<number | null>(null);
   const [selected, setSelected] = useState<number | null>(null), [ruleFilter, setRuleFilter] = useState(''), [stateFilter, setStateFilter] = useState('');
   const [days, setDays] = useState('30'), [product, setProduct] = useState(''), [warehouse, setWarehouse] = useState('');
   const [version,setVersion] = useState(''), [model,setModel] = useState('');
@@ -56,11 +58,11 @@ export default function AgentControlPage() {
     if (!selected) return;
     let cancelled = false, timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
-      try { const data = await automationRequest<Event[]>(`/runs/${selected}/events`); if (!cancelled) setEvents(data); }
+      try { const data = await automationRequest<Event[]>(`/runs/${selected}/events`); if (!cancelled) {setEvents(data);setEventsRunId(selected);} }
       catch (e) {if (!cancelled) setError(String(e));}
       if (!cancelled) timer = setTimeout(poll, 10000);
     };
-    setEvents([]); void poll(); return () => {cancelled = true; clearTimeout(timer);};
+    setEvents([]);setEventsRunId(null); void poll(); return () => {cancelled = true; clearTimeout(timer);};
   }, [selected]);
   const action = async (fn: () => Promise<unknown>) => {setBusy(true); try {await fn(); await load();} catch(e) {setError(e instanceof Error ? e.message : String(e));} finally {setBusy(false);setPhysical(false);}};
   const filteredProposals = proposals.filter(p => (!ruleFilter || p.rule_id === Number(ruleFilter)) && (!product || p.product_id === Number(product)) && (!warehouse || p.warehouse_id === Number(warehouse)));
@@ -105,6 +107,7 @@ export default function AgentControlPage() {
     {selected && <section className="card"><h3>Traza de ejecución #{selected}</h3><p>Último evento observado: {lastPhase ?? "Sin eventos"}</p><ol className="agent-flow" aria-label="Flujo observado">{phases.map(p => <li key={p} aria-current={current === p ? 'step' : undefined}>{p}{current === p ? ' · actual' : ''}</li>)}</ol>
       {!events.length && <p>Cargando eventos o ejecución sin eventos.</p>}<ol>{events.map(e => <li key={e.id}><strong>{e.phase} · {date(e.created_at)}</strong><details><summary>Evidencias y resultado</summary><pre>{JSON.stringify(e.detail,null,2)}</pre></details></li>)}</ol>
       {filteredProposals.filter(p => p.run_id === selected).map(p => <a key={p.id} href={`#proposal-${p.id}`}>Abrir propuesta #{p.id} </a>)}
+      <TraceInterpretation key={selected} runId={selected} ready={eventsRunId===selected} revision={`${events[events.length-1]?.id ?? 0}:${runs.find(r=>r.id===selected)?.status ?? ''}`} />
     </section>}
     <section className="card"><h3>Revisar propuestas y resultados</h3><label>Motivo de aprobación o rechazo<input value={reason} onChange={e => setReason(e.target.value)} minLength={3} maxLength={500} /></label>
       <details><summary>Oferta de compra confirmada para la siguiente ejecución</summary><div className="agent-fields">

@@ -423,6 +423,24 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(checked,[TRANSACTION_STATUS_IDLE])
         self.assertFalse(self.s.action_proposals())
 
+    def test_trace_interpretation_does_not_write_or_hold_transaction_during_ai(self):
+        with self.ai('wait'):
+            result = self.s.run_rule(self.rid)
+        run_id = result['run_id']
+        before_events = self.s.trace(run_id)
+        before_stock = self.s._all('SELECT * FROM public.inventory_stock_levels ORDER BY id')
+        from psycopg2.extensions import TRANSACTION_STATUS_IDLE
+        def explain(*args,**kwargs):
+            self.assertEqual(self.c.get_transaction_status(),TRANSACTION_STATUS_IDLE)
+            return {'response':'La regla terminó sin propuestas persistidas.','provider':'ollama','model':'test'}
+        with patch('trace_interpretation.generate_ai',side_effect=explain) as generate:
+            interpretation = self.s.interpret_trace(run_id)
+        self.assertEqual(interpretation['source'],'ai')
+        generate.assert_called_once()
+        self.assertEqual(self.s.trace(run_id),before_events)
+        self.assertEqual(before_stock,self.s._all('SELECT * FROM public.inventory_stock_levels ORDER BY id'))
+        self.assertFalse(self.s.action_proposals())
+
     def test_observation_cannot_create_or_execute_actions(self):
         config=self.config.model_copy(update={'mode':'observation'})
         self.s.save_rule(RuleDraft(name='Observar',reason='Solo observar',expected_version=1,config=config),'tester',self.rid,True)

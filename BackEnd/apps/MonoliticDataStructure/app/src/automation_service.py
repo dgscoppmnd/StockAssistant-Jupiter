@@ -22,6 +22,7 @@ from inventory_service import InventoryService
 from automation_contracts import RuleConfig, RuleDraft, parse_model_turn, model_turn_schema, replenishment, conditions_match, dec, forecast_metrics
 from rules_policy import validate_rule_objective
 from SystemPrompts.rules_agents import rules_agent_system_prompt
+from trace_interpretation import interpret_trace
 
 logger = logging.getLogger(__name__)
 
@@ -578,6 +579,20 @@ class AutomationService:
 
     def trace(self, run_id):
         return self._all('SELECT * FROM public.automation_events WHERE run_id=%s ORDER BY id', (run_id,))
+
+    def interpret_trace(self, run_id, retry=False):
+        run = self._one('''SELECT r.*,a.name AS rule_name,a.code AS rule_code FROM public.automation_runs r
+            JOIN public.automation_rules a ON a.id=r.rule_id WHERE r.id=%s''', (run_id,))
+        if not run:
+            self.connection.rollback()
+            raise ValueError('Ejecución no encontrada')
+        events = self.trace(run_id)
+        proposals = self._all('''SELECT id,status,action,product_id,warehouse_id,updated_at,
+            plan->'action' AS calculated_action,action_result FROM public.agent_action_proposals
+            WHERE run_id=%s ORDER BY id''', (run_id,))
+        # Release the read transaction before contacting a provider. No operational data is written.
+        self.connection.rollback()
+        return interpret_trace(run,events,proposals,retry=retry)
 
     def revalidate(self, p):
         rule = self._one('SELECT * FROM public.automation_rules WHERE id=%s FOR UPDATE', (p['rule_id'],))

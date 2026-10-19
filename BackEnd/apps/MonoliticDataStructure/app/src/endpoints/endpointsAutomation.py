@@ -101,6 +101,12 @@ def trace(run_id: int, svc: Service):
     return svc.trace(run_id)
 
 
+@router.post('/runs/{run_id}/interpretation')
+def interpretation(run_id: int, svc: Service, retry: bool = False):
+    permit(svc, 'read')
+    return execute(svc.interpret_trace, run_id, retry)
+
+
 @router.get('/proposals')
 def proposals(svc: Service):
     permit(svc, 'read')
