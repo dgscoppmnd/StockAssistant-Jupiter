@@ -95,6 +95,16 @@ No trasladar los historicos aqui sin revisar que efectos repetirian.
   No guardar contrasenas en variables GitHub.
 - Mantener usuario `migrator` propietario de los objetos a alterar y privilegios
   por defecto para `app`. Las tablas nuevas se crean en `public`.
+- En instalaciones existentes ejecutar como `dbadmin`, conectado a
+  `stockassistant`, [05-migration-permissions.sql](../05-migration-permissions.sql).
+  Se puede repetir: instala las extensiones, transfiere a `migrator` las tablas,
+  vistas, funciones y secuencias del esquema de la aplicacion y concede a `app`
+  DML y uso de secuencias sobre objetos existentes y futuros. Las tablas de
+  historial quedan protegidas. El listado de objetos es explicito: actualizarlo
+  si se agregan objetos canonicos que deban repararse en instalaciones antiguas.
+  No cambia contrasenas, no crea roles ni concede roles administrativos a `app`.
+  La pertenencia temporal del ejecutor a `migrator` se retira solo si el propio
+  script la agrego. Las pertenencias previas se conservan.
 - `init.sql` usa extensiones `uuid-ossp`, `pgcrypto` y `pg_trgm`: deben existir
   o el migrador debe disponer de los permisos necesarios para instalarlas.
   Configurar `DB_LEGACY_TIMEZONE` en el entorno GitHub `production` con la zona
@@ -112,3 +122,36 @@ Validacion local opcional:
 Comprueba tambien el bloque y las instrucciones de `init.sql`, sin conectarse:
 la validacion real de tablas, columnas y restricciones ocurre durante la ejecucion.
 Dependencias: [requirements-migrations.txt](../../scripts/requirements-migrations.txt).
+
+## Error PostgreSQL 42501 en AWS
+
+El codigo indica permisos insuficientes en PostgreSQL. No significa un error
+IAM ni de contrasena si ya se ha conectado y empezado a aplicar `init.sql`.
+El ejecutor informa archivo, numero de instruccion, operacion y SQLSTATE sin
+imprimir SQL, mensajes del servidor ni datos. Una operacion `UNKNOWN` puede ser
+un bloque `DO`; el indice identifica el bloque completo, no su sentencia interna.
+
+1. Conectar a `stockassistant` como `dbadmin` y ejecutar el diagnostico de solo
+   lectura [diagnose-migration-permissions.sql](../diagnose-migration-permissions.sql).
+2. Ejecutar como `dbadmin` [05-migration-permissions.sql](../05-migration-permissions.sql)
+   para reparar permisos y propiedad de los objetos de la aplicacion.
+   Para preparar solamente extensiones tambien existe
+   [00-migration-extensions.sql](../00-migration-extensions.sql).
+   `CREATE ON SCHEMA public` no equivale a `CREATE ON DATABASE stockassistant`.
+   Preinstalarlas evita ampliar los permisos del migrador para instalarlas.
+3. Si la reparacion falla, revisar objetos de la aplicacion cuyo propietario no sea `migrator` ni un rol
+   cuyos permisos de propietario herede. Para ALTER/DROP o CREATE OR REPLACE de
+   funciones no basta con `GRANT ALL ON TABLES`.
+   Transferir solo los objetos identificados de la aplicacion con
+   `ALTER TABLE ... OWNER TO migrator`, `ALTER VIEW ... OWNER TO migrator` o
+   `ALTER FUNCTION nombre(tipos) OWNER TO migrator`, segun corresponda.
+   La cuenta administradora necesita poder actuar como el propietario actual
+   y asignar al nuevo propietario; en RDS puede requerir temporalmente
+   `GRANT migrator TO dbadmin`, retirandolo despues con
+   `REVOKE migrator FROM dbadmin`. No reasignar objetos internos ni extensiones.
+4. Reintentar el job. El `init.sql` fallido se revierte y su hash no se registra;
+   la tabla `schema_migrations`, creada previamente, puede permanecer vacia.
+
+No volver a ejecutar `01-roles.sql` completo para reparar una instalacion:
+sus instrucciones `CREATE ROLE` presuponen que los roles no existen todavia.
+No conceder `dbadmin`, superusuario ni pertenencia a `migrator` al usuario `app`.
