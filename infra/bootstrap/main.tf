@@ -219,6 +219,12 @@ data "aws_iam_policy_document" "github_deploy" {
     actions   = ["ssm:GetParameter"]
     resources = ["arn:aws:ssm:${var.region}:${local.account_id}:parameter/stockassistant/prod/google_client_id"]
   }
+
+  statement {
+    sid       = "DatabaseMigrationCredential"
+    actions   = ["ssm:GetParameter"]
+    resources = ["arn:aws:ssm:${var.region}:${local.account_id}:parameter/stockassistant/prod/db/migrator_password"]
+  }
 }
 
 resource "aws_iam_role_policy" "github_deploy" {

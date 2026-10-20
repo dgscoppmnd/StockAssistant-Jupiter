@@ -6,13 +6,17 @@ on:
     paths:
       - "BackEnd/apps/MonoliticDataStructure/app/**"
       - "Frontend/**"
+      - "infra/sql/migrations/**"
+      - "infra/scripts/migrate.py"
+      - "infra/scripts/requirements-migrations.txt"
+      - "infra/scripts/tests/test_migrate.py"
       - ".github/workflows/deploy-aws.yml"
   workflow_dispatch:
     inputs:
       target:
         description: "Qué desplegar"
         type: choice
-        options: [all, backend, frontend]
+        options: [all, backend, frontend, migrations]
         default: all
 
 concurrency:
@@ -52,16 +56,46 @@ jobs:
           filters: |
             backend:
               - "BackEnd/apps/MonoliticDataStructure/app/**"
+              - "infra/sql/migrations/**"
+              - "infra/scripts/migrate.py"
+              - "infra/scripts/requirements-migrations.txt"
+              - "infra/scripts/tests/test_migrate.py"
               - ".github/workflows/deploy-aws.yml"
             frontend:
               - "Frontend/**"
               - ".github/workflows/deploy-aws.yml"
 
-  backend:
+  migration-tests:
     needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: migrator
+          POSTGRES_PASSWORD: migration-test-only
+          POSTGRES_DB: migrations_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U migrator -d migrations_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r infra/scripts/requirements-migrations.txt
+      - run: python infra/scripts/migrate.py --check
+      - run: python -m unittest discover -s infra/scripts/tests -p test_migrate.py -v
+        env:
+          MIGRATIONS_TEST_DSN: "host=127.0.0.1 dbname=migrations_test user=migrator password=migration-test-only"
+
+  backend-build:
+    needs: [changes, migration-tests]
     if: >-
       (github.event_name == 'push' && needs.changes.outputs.backend == 'true') ||
-      (github.event_name == 'workflow_dispatch' && inputs.target != 'frontend')
+      (github.event_name == 'workflow_dispatch' && (inputs.target == 'all' || inputs.target == 'backend'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
@@ -94,11 +128,65 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  migrations:
+    needs: [changes, migration-tests, backend-build]
+    if: >-
+      always() && !cancelled() &&
+      needs.changes.result == 'success' && needs.migration-tests.result == 'success' &&
+      (needs.backend-build.result == 'success' ||
+       (github.event_name == 'workflow_dispatch' && inputs.target == 'migrations'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r infra/scripts/requirements-migrations.txt
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Aplicar migraciones pendientes
+        env:
+          PGHOST: ${{ vars.DB_MIGRATION_HOST }}
+          PGDATABASE: ${{ vars.DB_MIGRATION_DATABASE }}
+          PGUSER: migrator
+          PGPORT: "5432"
+          PGSSLMODE: verify-full
+          PGSSLROOTCERT: ${{ runner.temp }}/rds-global-bundle.pem
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PGHOST" || { echo "::error::Falta DB_MIGRATION_HOST en production"; exit 1; }
+          test -n "$PGDATABASE" || { echo "::error::Falta DB_MIGRATION_DATABASE en production"; exit 1; }
+          curl --fail --silent --show-error --retry 3 \
+            https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -o "$PGSSLROOTCERT"
+          PGPASSWORD="$(aws ssm get-parameter --name /stockassistant/prod/db/migrator_password \
+            --with-decryption --query Parameter.Value --output text)"
+          test -n "$PGPASSWORD" && test "$PGPASSWORD" != "None"
+          echo "::add-mask::$PGPASSWORD"
+          export PGPASSWORD
+          trap 'unset PGPASSWORD' EXIT
+          python infra/scripts/migrate.py
+
+  backend:
+    needs: [backend-build, migrations]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
       - name: Actualizar Lambda
         run: |
+          account="$(aws sts get-caller-identity --query Account --output text)"
           aws lambda update-function-code \
             --function-name "$FUNCTION_NAME" \
-            --image-uri "${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}" \
+            --image-uri "${account}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}:${GITHUB_SHA}" \
             --query LastUpdateStatus --output text
           aws lambda wait function-updated --function-name "$FUNCTION_NAME"
 
@@ -110,10 +198,15 @@ jobs:
           case "$code" in 200|401|403) ;; *) exit 1 ;; esac
 
   frontend:
-    needs: changes
+    needs: [changes, migration-tests, backend-build, migrations, backend]
     if: >-
-      (github.event_name == 'push' && needs.changes.outputs.frontend == 'true') ||
-      (github.event_name == 'workflow_dispatch' && inputs.target != 'backend')
+      always() && !cancelled() &&
+      needs.changes.result == 'success' && needs.migration-tests.result == 'success' &&
+      (needs.backend-build.result == 'success' || needs.backend-build.result == 'skipped') &&
+      (needs.migrations.result == 'success' || needs.migrations.result == 'skipped') &&
+      (needs.backend.result == 'success' || needs.backend.result == 'skipped') &&
+      ((github.event_name == 'push' && needs.changes.outputs.frontend == 'true') ||
+       (github.event_name == 'workflow_dispatch' && (inputs.target == 'all' || inputs.target == 'frontend')))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
