@@ -93,4 +93,4 @@ Comprobación local del 8 de septiembre de 2026:
 
 Qdrant está fijado en `1.19.1` y su cliente Python en `1.19.0`. La imagen utiliza PyTorch `2.8.0` para CPU y NumPy `1.26.4` compatible con pandas `2.1.0`. La carga vectorial se realiza al invocar su ruta, sin bloquear el arranque del login. Si la colección aún no existe, la búsqueda devuelve `items: []`.
 
-Las pruebas anteriores no certifican las integraciones externas de Google, Ollama, OpenAI o SerpAPI. Los comandos para repetirlas y diagnosticar un acceso lento están en [Instalación](readmeIntalacion.md).
+Las pruebas anteriores no certifican las integraciones externas de Google, Ollama, OpenAI o SerpAPI. Los comandos para repetirlas y diagnosticar un acceso lento están en [Instalación](readmeIntalacion.md)..
