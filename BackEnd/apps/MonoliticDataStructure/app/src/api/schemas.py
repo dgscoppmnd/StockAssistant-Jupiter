@@ -10,12 +10,12 @@ from decimal import Decimal
 # =============================================
 
 class ProductBase(BaseModel):
-    product_id: str
+    product_id: Optional[str] = None
     product_name: str
-    description: str
-    product_category: str
+    description: Optional[str] = None
+    product_category: Optional[str] = None
     brand: Optional[str] = None
-    sku: str
+    sku: Optional[str] = None
     product_cost_usd: Optional[Decimal] = None
     selling_price_usd: Optional[Decimal] = None
 

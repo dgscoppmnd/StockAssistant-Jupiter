@@ -1,6 +1,4 @@
 import logging
-import os
-import re
 from contextlib import nullcontext
 from typing import Any
 from psycopg2.extras import RealDictCursor
@@ -21,13 +19,10 @@ logger = logging.getLogger("api.dbProducts")
 
 TableNameProducts = "productos"
 
-# Relaci?n desde la que se LEE el cat?logo. En local es la tabla productos; en AWS
-# apunta a la vista productos_catalogo (sobre public.products). Las escrituras
-# siguen yendo siempre a TableNameProducts.
-READ_RELATION = os.getenv("PRODUCTS_READ_RELATION", TableNameProducts).strip()
-if not re.fullmatch(r"[a-z_][a-z0-9_]*", READ_RELATION):
-	raise RuntimeError("PRODUCTS_READ_RELATION no es un identificador v?lido")
-CATALOG_READ_ONLY = READ_RELATION != TableNameProducts
+# The updatable compatibility view projects the single physical products table.
+# Ignore the retired PRODUCTS_READ_RELATION switch, including old Lambda settings.
+READ_RELATION = TableNameProducts
+CATALOG_READ_ONLY = False
 MAX_UNPAGED_ROWS = 1000
 
 

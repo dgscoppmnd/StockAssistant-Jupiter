@@ -63,8 +63,9 @@ export default function MasterDataEditorModal({ title, fields, record, values, s
                     <span>Habilitado</span>
                   </label>
                 ) : (
-                  <input id={inputId} required={field.required} placeholder={field.placeholder} step={field.type === "decimal" ? "0.000001" : undefined} type={field.type === "decimal" || field.type === "number" ? "number" : "text"} value={String(values[field.key] ?? "")} onChange={(event) => onChange(field.key, event.target.value)} />
+                  <input id={inputId} required={field.required} placeholder={field.placeholder} pattern={field.key === "country_code" ? "[A-Za-z]{2}" : undefined} title={field.key === "country_code" ? "Introduce dos letras, por ejemplo ES para España" : undefined} aria-describedby={field.key === "country_code" ? `${inputId}-help` : undefined} step={field.type === "decimal" ? "0.000001" : undefined} type={field.type === "decimal" || field.type === "number" ? "number" : "text"} value={String(values[field.key] ?? "")} onChange={(event) => onChange(field.key, event.target.value)} />
                 )}
+                {field.key === "country_code" && <small id={`${inputId}-help`} className="muted">Dos letras: ES para España. Introduce el nombre completo en País.</small>}
               </div>
             );
           })}

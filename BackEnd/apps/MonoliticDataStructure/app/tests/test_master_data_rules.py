@@ -52,6 +52,27 @@ class MasterDataRulesTests(unittest.TestCase):
         }, creating=False)
         self.assertNotIn("client_code", values)
 
+    def test_address_country_code_is_trimmed_and_uppercased(self):
+        values = self.service._values(RESOURCES["global-addresses"], {
+            "address_line_1": "Calle Mayor 1", "city": "Madrid", "country_code": " es ",
+        }, creating=True)
+        self.assertEqual(values["country_code"], "ES")
+
+    def test_invalid_country_code_is_rejected_on_create_and_update(self):
+        for creating in (True, False):
+            for code in ("España", "ESP", "E", "12", "ÉS", "", None, 12):
+                with self.subTest(creating=creating, code=code):
+                    with self.assertRaises(MasterDataError) as error:
+                        self.service._values(RESOURCES["global-addresses"], {
+                            "address_line_1": "Calle Mayor 1", "city": "Madrid", "country_code": code,
+                        }, creating=creating)
+                    self.assertEqual(error.exception.status_code, 400)
+                    self.assertIn("dos letras", str(error.exception))
+
+    def test_partial_address_update_does_not_require_country_code(self):
+        values = self.service._values(RESOURCES["global-addresses"], {"city": "Madrid"}, creating=False)
+        self.assertEqual(values, {"city": "Madrid"})
+
 
 if __name__ == "__main__":
     unittest.main()

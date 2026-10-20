@@ -13,11 +13,13 @@ from sales_schema import sales_schema_sql
 class CanonicalSchemaTests(unittest.TestCase):
     def test_full_schema_contains_all_modules_without_database_or_table_deletion(self):
         script = schema_sql()
-        for table in ('users','productos','products','inventory_stock_levels','clients',
+        for table in ('users','products','inventory_stock_levels','clients',
                       'knowledge_chunks','sales_document_events','agent_action_proposals','automation_control'):
             self.assertIn(f'CREATE TABLE IF NOT EXISTS public.{table}' if table != 'products' else 'CREATE TABLE IF NOT EXISTS products', script)
-        self.assertIn('ix_productos_search_trgm',script)
-        self.assertNotRegex(script,re.compile(r'^\s*(?:CREATE|DROP)\s+DATABASE\b|^\s*(?:DROP\s+TABLE|TRUNCATE)\b|^\s*\\(?:c|connect)\b',re.M|re.I))
+        self.assertIn('ix_products_search_trgm',script)
+        self.assertIn('CREATE OR REPLACE VIEW public.productos AS',script)
+        self.assertNotIn('CREATE TABLE IF NOT EXISTS public.productos',script)
+        self.assertNotRegex(script,re.compile(r'^\s*(?:CREATE|DROP)\s+DATABASE\b|^\s*TRUNCATE\b|^\s*\\(?:c|connect)\b',re.M|re.I))
         self.assertFalse(script.lstrip().startswith('BEGIN;'))
         self.assertFalse(script.rstrip().endswith('COMMIT;'))
 

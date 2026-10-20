@@ -5,6 +5,11 @@ from pydantic import BaseModel, Field
 
 
 class ProductCreate(BaseModel):
+	product_category: Optional[str] = Field(default=None, max_length=50)
+	brand: Optional[str] = Field(default=None, max_length=50)
+	sku: Optional[str] = Field(default=None, max_length=50)
+	product_cost_usd: Optional[float] = Field(default=None, ge=0)
+	selling_price_usd: Optional[float] = Field(default=None, ge=0)
 	cdgo_producto_externo: Optional[str] = Field(default=None, min_length=1, max_length=200, description="Codigo externo del producto")
 	name_product: str = Field(min_length=1, max_length=200, description="Nombre del producto")
 	description_product: Optional[str] = Field(default=None, min_length=1, max_length=1000, description="Descripcion del producto")
@@ -25,6 +30,11 @@ class ProductCreate(BaseModel):
 
 
 class ProductUpdate(BaseModel):
+	product_category: Optional[str] = Field(default=None, max_length=50)
+	brand: Optional[str] = Field(default=None, max_length=50)
+	sku: Optional[str] = Field(default=None, max_length=50)
+	product_cost_usd: Optional[float] = Field(default=None, ge=0)
+	selling_price_usd: Optional[float] = Field(default=None, ge=0)
 	cdgo_producto_externo: Optional[str] = Field(default=None, min_length=1, max_length=200, description="Edita codigo externo del producto")
 	name_product: str = Field(min_length=1, max_length=200, description="Edita nombre del producto")
 	description_product: Optional[str] = Field(default=None, min_length=1, max_length=1000, description="Edita descripcion del producto")
@@ -45,6 +55,11 @@ class ProductUpdate(BaseModel):
 
 
 class ProductResponse(BaseModel):
+	product_category: Optional[str] = None
+	brand: Optional[str] = None
+	sku: Optional[str] = None
+	product_cost_usd: Optional[float] = None
+	selling_price_usd: Optional[float] = None
 	pk_product: int
 	cdgo_producto_externo: Optional[str] = None
 	name_product: str

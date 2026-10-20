@@ -239,7 +239,7 @@ class DatabaseTests(unittest.TestCase):
     def setUp(self):
         self.c = self.connect(); self.s = AutomationService(self.c)
         with self.c.cursor() as c:
-            c.execute('TRUNCATE public.productos,public.automation_rules,public.inventory_warehouses RESTART IDENTITY CASCADE')
+            c.execute('TRUNCATE public.products,public.automation_rules,public.inventory_warehouses RESTART IDENTITY CASCADE')
             c.execute("UPDATE public.automation_control SET stopped=FALSE")
             c.execute("INSERT INTO public.productos(name_product) VALUES('Producto de prueba') RETURNING pk_product"); self.pid=c.fetchone()[0]
             c.execute("INSERT INTO public.inventory_warehouses(code,name) VALUES('A','Origen'),('B','Destino')")

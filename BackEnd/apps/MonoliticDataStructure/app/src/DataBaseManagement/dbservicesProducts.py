@@ -78,7 +78,7 @@ class ProductServicesManager:
 
 	def add_Product(self, product_create: ProductCreate) -> dict[str, Any]:
 		payload = {
-			"cdgo_producto_externo": self._clean_text(product_create.cdgo_producto_externo),
+			"cdgo_producto_externo": self._clean_text(product_create.cdgo_producto_externo) or None,
 			"name_product": self._clean_text(product_create.name_product),
 			"description_product": self._clean_text(product_create.description_product),
 			"disabled": product_create.disabled,
@@ -96,6 +96,8 @@ class ProductServicesManager:
 			"last_update": product_create.last_update,
 			"supplier": self._clean_text(product_create.supplier),
 		}
+		for field in ("product_category", "brand", "sku", "product_cost_usd", "selling_price_usd"):
+			payload[field] = getattr(product_create, field)
 		created = insert_product(payload, connection=self.db)
 		return self._serialize_Product(created)
 
@@ -129,7 +131,7 @@ class ProductServicesManager:
 
 	def update_Product(self, product_id: int, product_update: ProductUpdate) -> dict[str, Any]:
 		payload = {
-			"cdgo_producto_externo": self._clean_text(product_update.cdgo_producto_externo),
+			"cdgo_producto_externo": self._clean_text(product_update.cdgo_producto_externo) or None,
 			"name_product": self._clean_text(product_update.name_product),
 			"description_product": self._clean_text(product_update.description_product),
 			"disabled": product_update.disabled,
@@ -148,6 +150,9 @@ class ProductServicesManager:
 			"supplier": self._clean_text(product_update.supplier),
 		}
 
+		for field in ("product_category", "brand", "sku", "product_cost_usd", "selling_price_usd"):
+			if field in product_update.model_fields_set:
+				payload[field] = getattr(product_update, field)
 		updated = update_product(product_id, payload, connection=self.db)
 		if not updated:
 			raise ValueError(f"Producto con ID {product_id} no encontrado")

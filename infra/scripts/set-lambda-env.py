@@ -22,7 +22,7 @@ STATIC = {
     "DOCUMENTS_BUCKET": "stockassistant-files-118645514410-eu-west-1",
     "AWS_LWA_PASS_THROUGH_PATH": "/internal/index",
     "SECRETS_FROM_SSM": "true",
-    "PRODUCTS_READ_RELATION": "productos_catalogo",
+    "PRODUCTS_READ_RELATION": "productos",
 }
 
 # La imagen (>= v5) los lee de SSM al arrancar; no deben estar en la función
