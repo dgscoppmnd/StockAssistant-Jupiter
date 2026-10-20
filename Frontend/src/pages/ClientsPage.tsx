@@ -43,11 +43,11 @@ export default function ClientsPage() {
   const saveAddress = async (event: FormEvent) => { event.preventDefault(); if (!selected) return; setSaving(true); try { const { address_type, id: _associationId, global_address_id: _globalAddressId, ...globalValues } = addressValues; if (editingAddress) { await updateMasterRecord("global-addresses", editingAddress.global_address_id, globalValues); await updateClientAddress(selected.id, editingAddress.id, String(address_type)); } else { const global = await createMasterRecord("global-addresses", globalValues); await addClientAddress(selected.id, global.id, String(address_type)); } setAddressValues({}); setEditingAddress(null); await loadAddresses(selected); await load(); setError(""); } catch (err) { setError(err instanceof Error ? err.message : "No se pudo guardar la dirección."); } finally { setSaving(false); } };
   const columns = [{ dataField: "id", text: "ID", sort: true }, { dataField: "client_code", text: "Código de cliente", sort: true }, { dataField: "name", text: "Cliente", sort: true }, { dataField: "fk_type_client", text: "Tipo", formatter: (value: number) => types.find((type) => type.id === value)?.name ?? value }, { dataField: "actions", text: "Acciones", isDummyField: true, formatter: (_: unknown, row: MasterRecord) => <div className="actions-row"><button className="chip-btn" onClick={() => setClientValues({ id: row.id, client_code: row.client_code ?? "", name: row.name, description: row.description ?? "", fk_type_client: row.fk_type_client })} type="button" title="Editar" aria-label="Editar">✏️</button><button className="danger-btn" disabled={Boolean(row.is_in_use)} onClick={() => void deleteMasterRecord("clients", row.id).then(load).catch((err) => setError(err.message))} type="button" title="Borrar" aria-label="Borrar">🗑️</button></div> }];
   return <div className="grid clients-master-detail">
-    <section className="card"><div className="actions-row"><div>
+    <section className="card"><div className="clients-card-header"><div>
       <p className="section-label">Configuración · Clientes</p>
       <h3>Clientes</h3>
     </div>
-      <button className="primary-btn"
+      <div className="clients-card-actions"><button className="primary-btn"
         onClick={() => setClientValues(
           {
             client_code: "",
@@ -60,6 +60,7 @@ export default function ClientsPage() {
         type="button" disabled={importing} aria-expanded={showImport} aria-controls="client-csv-import">
         Importar CSV
       </button>
+      </div>
     </div>{
         error && <p className="error-line">{error}</p>}
       {importResult && <p role="status">{importResult}</p>}
@@ -98,11 +99,15 @@ export default function ClientsPage() {
       </div>
     </section>
     <section className="card">
+      <div className="clients-card-header">
+      <div>
       <div className="client-address-tab">Direcciones{selected ? ` · ${String(selected.name)}` : ""}
       </div>
-      {selected ? <><div className="actions-row">
+      {selected &&
           <p className="muted">Direcciones asociadas al cliente seleccionado.</p>
-          <button className="primary-btn"
+      }
+      </div>
+      {selected && <div className="clients-card-actions"><button className="primary-btn"
             onClick={() => {
               setEditingAddress(null);
               setAddressValues(
@@ -111,8 +116,9 @@ export default function ClientsPage() {
                   country_code: "ES"
                 });
             }}
-            type="button">Agregar dirección</button>
-        </div>
+            type="button">Agregar dirección</button></div>}
+      </div>
+      {selected ? <>
         <div className="master-table-wrapper">
           <BootstrapTable keyField="id"
             data={addresses}

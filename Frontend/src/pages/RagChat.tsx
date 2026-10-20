@@ -96,15 +96,15 @@ export default function RagChat() {
   };
 
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', minHeight: '520px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid var(--border-color, #ccc)' }}>
+    <div className="card rag-chat" style={{ display: 'flex', flexDirection: 'column', minHeight: '520px', color: 'var(--text-main)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid var(--line)' }}>
         <span style={{ fontSize: '20px' }}>🤖</span>
         <h2 style={{ margin: 0 }}>Asistente RAG Jupiter</h2>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '60vh' }}>
         {messages.length === 0 ? (
-          <p style={{ textAlign: 'center', opacity: 0.6, margin: 'auto' }}>
+          <p style={{ textAlign: 'center', color: 'var(--text-soft)', margin: 'auto' }}>
             Haz una pregunta sobre la documentación técnica o inventario.
           </p>
         ) : (
@@ -116,15 +116,15 @@ export default function RagChat() {
                 maxWidth: '80%',
                 padding: '10px 14px',
                 borderRadius: '8px',
-                background: msg.sender === 'user' ? '#4f46e5' : 'rgba(255,255,255,0.08)',
-                color: msg.sender === 'user' ? '#fff' : 'inherit',
+                background: msg.sender === 'user' ? '#4f46e5' : 'var(--surface-soft)',
+                color: msg.sender === 'user' ? '#fff' : 'var(--text-main)',
                 whiteSpace: 'pre-wrap',
               }}
             >
               <strong>{msg.sender === 'user' ? 'Tú: ' : 'IA: '}</strong>
               {msg.text}
               {msg.citations && msg.citations.length > 0 && (
-                <div style={{ marginTop: '8px', fontSize: '12px', opacity: 0.8 }}>
+                <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-soft)' }}>
                   <strong>Fuentes:</strong>
                   <ul style={{ margin: '4px 0' }}>
                     {msg.citations.map((citation, index) => (
@@ -145,7 +145,7 @@ export default function RagChat() {
         )}
 
         {isLoading && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.7 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-soft)' }}>
             <span>⏳</span>
             <span>Consultando la base de conocimiento...</span>
           </div>
@@ -161,21 +161,21 @@ export default function RagChat() {
             onChange={(e) => setInputQuery(e.target.value)}
             placeholder="Escribe tu pregunta sobre inventario, ventas, etc..."
             disabled={isLoading}
-            style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }}
+            style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid var(--line-strong)' }}
           />
-          <button type="submit" disabled={isLoading || !inputQuery.trim()} style={{ padding: '10px 16px', cursor: 'pointer' }}>
+          <button className="primary-btn" type="submit" disabled={isLoading || !inputQuery.trim()} style={{ padding: '10px 16px', cursor: 'pointer' }}>
             Enviar
           </button>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
-          <label htmlFor="zone-select" style={{ opacity: 0.8 }}>Filtrar zona:</label>
+          <label htmlFor="zone-select" style={{ color: 'var(--text-soft)' }}>Filtrar zona:</label>
           <select 
             id="zone-select"
             value={selectedZone} 
             onChange={(e) => setSelectedZone(e.target.value)}
             disabled={isLoading}
-            style={{ padding: '6px', borderRadius: '4px', border: '1px solid #ccc', background: 'var(--bg-input, #fff)', color: 'inherit' }}
+            style={{ padding: '6px', borderRadius: '4px', border: '1px solid var(--line-strong)' }}
           >
             <option value="general">🔍 General</option>
             <option value="auto">🔍 Automático (toda la base)</option>
