@@ -1,13 +1,19 @@
 import os
+from contextlib import closing
 from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+import re
+from uuid import uuid4
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from migrate import load_migrations, load_update, main, migrate, pending_migrations
+from migrate import execute_statements, load_migrations, load_update, main, migrate, pending_migrations
 from database_schema import SCHEMA_PATH
+from schema_update_core import validate_schema
+
+PERMISSIONS_SQL = Path(__file__).resolve().parents[2] / 'sql/05-migration-permissions.sql'
 
 
 class MigrationFilesTests(unittest.TestCase):
@@ -54,6 +60,34 @@ class MigrationFilesTests(unittest.TestCase):
             with self.assertLogs('stockassistant.migrations', level='ERROR'):
                 self.assertEqual(main(), 1)
             connect.assert_not_called()
+
+    def test_permission_diagnostic_reports_location_without_sql_or_server_message(self):
+        import psycopg2
+
+        class PermissionError(psycopg2.Error):
+            pgcode = '42501'
+
+        cursor = MagicMock()
+        cursor.execute.side_effect = PermissionError('sensitive server message')
+        with self.assertLogs('stockassistant.migrations', level='ERROR') as logs:
+            with self.assertRaises(PermissionError):
+                execute_statements(cursor, ["INSERT INTO private_table VALUES ('secret-value');"], 'init.sql')
+        output = '\n'.join(logs.output)
+        self.assertIn('init.sql statement 1/1 (INSERT)', output)
+        self.assertIn('SQLSTATE=42501', output)
+        self.assertIn('diagnose-migration-permissions.sql', output)
+        for secret in ('private_table', 'secret-value', 'sensitive server message'):
+            self.assertNotIn(secret, output)
+
+    def test_permission_repair_covers_canonical_relations(self):
+        canonical = set(re.findall(
+            r'^\s*CREATE\s+(?:OR\s+REPLACE\s+)?(?:TABLE|VIEW)\s+'
+            r'(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?([a-z_][a-z0-9_]*)',
+            SCHEMA_PATH.read_text(encoding='utf-8'), re.I | re.M))
+        repair = PERMISSIONS_SQL.read_text(encoding='utf-8')
+        for name in canonical | {'schema_migrations', 'productos_catalogo'}:
+            with self.subTest(name=name):
+                self.assertIn(repr(name), repair)
 
     def test_normalize_windows_line_endings_and_bom(self):
         path = self.write("SELECT 1;\n")
@@ -167,6 +201,129 @@ class MigrationDatabaseTests(unittest.TestCase):
         self.assertEqual(self.scalar("SELECT count(*) FROM public.schema_migrations"), 0)
         self.write("CREATE TABLE public.migration_probe(id INTEGER);")
         self.assertEqual(migrate(self.connection, load_migrations(self.path), "retry-sha"), 1)
+
+    def test_dml_grants_do_not_allow_altering_admin_owned_tables(self):
+        import psycopg2
+        with self.connection:
+            with self.connection.cursor() as cursor:
+                cursor.execute('RESET ROLE')
+                cursor.execute('CREATE TABLE public.migration_probe(id integer)')
+                cursor.execute('GRANT ALL ON public.migration_probe TO migration_runner_test')
+                cursor.execute('SET ROLE migration_runner_test')
+        self.write('ALTER TABLE public.migration_probe ADD COLUMN label text;')
+        with self.assertLogs('stockassistant.migrations', level='ERROR') as logs:
+            with self.assertRaises(psycopg2.errors.InsufficientPrivilege):
+                migrate(self.connection, load_migrations(self.path), 'denied')
+        self.assertIn('statement 1/1 (ALTER)', '\n'.join(logs.output))
+        self.assertIn('SQLSTATE=42501', '\n'.join(logs.output))
+        self.assertEqual(self.scalar('SELECT count(*) FROM public.schema_migrations'), 0)
+
+    def test_permission_repair_enables_real_schema_migration_without_superuser(self):
+        import psycopg2
+        from psycopg2 import sql
+        from psycopg2.extensions import parse_dsn
+        suffix = uuid4().hex
+        database = 'migration_permissions_' + suffix
+        administrator = 'permission_admin_' + suffix
+        runner = 'permission_runner_' + suffix
+        application = 'permission_app_' + suffix
+        parameters = parse_dsn(self.dsn)
+        control = psycopg2.connect(self.dsn)
+        control.autocommit = True
+        created_roles = []
+        created_database = False
+        try:
+            with control.cursor() as cursor:
+                cursor.execute(sql.SQL('CREATE ROLE {} CREATEROLE NOSUPERUSER INHERIT').format(
+                    sql.Identifier(administrator)))
+                created_roles.append(administrator)
+                cursor.execute(sql.SQL('CREATE DATABASE {} OWNER {}').format(
+                    sql.Identifier(database), sql.Identifier(administrator)))
+                created_database = True
+                cursor.execute(sql.SQL('SET ROLE {}').format(sql.Identifier(administrator)))
+                for role in (runner, application):
+                    cursor.execute(sql.SQL('CREATE ROLE {} NOSUPERUSER').format(sql.Identifier(role)))
+                    created_roles.append(role)
+                cursor.execute('RESET ROLE')
+            parameters['dbname'] = database
+            repair = PERMISSIONS_SQL.read_text(encoding='utf-8').replace('stockassistant', database)
+            repair = re.sub(r'\bmigrator\b', runner, repair)
+            repair = re.sub(r'\bapp\b', application, repair)
+            _, original_statements = load_update()
+            statements = [re.sub(r'\bapp\b', application, statement) for statement in original_statements]
+            with closing(psycopg2.connect(**parameters)) as connection:
+                def run(query, values=None):
+                    with connection:
+                        with connection.cursor() as cursor:
+                            cursor.execute(query, values)
+                            row = cursor.fetchone() if cursor.description else None
+                            return row[0] if row else None
+
+                run(sql.SQL('SET ROLE {}').format(sql.Identifier(administrator)))
+                # Simulate an existing installation created by dbadmin, including
+                # serial/identity sequences, views and functions.
+                with connection, connection.cursor() as cursor:
+                    for statement in statements:
+                        cursor.execute(statement)
+                    cursor.execute('CREATE TABLE public.schema_migrations(version text)')
+                    cursor.execute('CREATE TABLE public.unrelated_permission_probe(id serial)')
+                member_before = run('SELECT pg_has_role(current_user,%s,\'MEMBER\')', (runner,))
+                inherited_before = run('SELECT pg_has_role(current_user,%s,\'USAGE\')', (runner,))
+                with self.assertRaisesRegex(psycopg2.errors.RaiseException, 'Connect to stockassistant'):
+                    run(PERMISSIONS_SQL.read_text(encoding='utf-8'))
+                for _ in range(2):
+                    run(repair)
+                self.assertEqual(run('SELECT pg_has_role(current_user,%s,\'MEMBER\')', (runner,)), member_before)
+                self.assertEqual(run('SELECT pg_has_role(current_user,%s,\'USAGE\')', (runner,)), inherited_before)
+                self.assertEqual(run("SELECT pg_get_userbyid(relowner) FROM pg_class "
+                                     "WHERE oid='public.unrelated_permission_probe'::regclass"), administrator)
+                self.assertEqual(run("SELECT pg_get_userbyid(relowner) FROM pg_class "
+                                     "WHERE oid='public.products'::regclass"), runner)
+                self.assertFalse(run('SELECT rolsuper FROM pg_roles WHERE rolname=%s', (runner,)))
+
+                # A pre-existing membership must survive, including independent
+                # SET/INHERIT flags and grantors on PostgreSQL 16+.
+                if connection.server_version >= 160000:
+                    run(sql.SQL('GRANT {} TO {} WITH INHERIT FALSE, SET FALSE GRANTED BY {}').format(
+                        sql.Identifier(runner), sql.Identifier(administrator), sql.Identifier(administrator)))
+                else:
+                    run(sql.SQL('GRANT {} TO {}').format(sql.Identifier(runner), sql.Identifier(administrator)))
+                membership_query = ('SELECT jsonb_agg(to_jsonb(m) ORDER BY grantor) FROM pg_auth_members m '
+                                    'WHERE roleid=%s::regrole AND member=%s::regrole')
+                membership_before = run(membership_query, (runner, administrator))
+                run(repair)
+                self.assertEqual(run(membership_query, (runner, administrator)), membership_before)
+
+                run('RESET ROLE')
+                run(sql.SQL('SET ROLE {}').format(sql.Identifier(runner)))
+                # The prepared migration account does not need database CREATE.
+                self.assertFalse(run("SELECT has_database_privilege(current_user,current_database(),'CREATE')"))
+                with connection, connection.cursor() as cursor:
+                    for statement in statements:
+                        cursor.execute(statement)
+                    validate_schema(connection)
+                run('RESET ROLE')
+                run(sql.SQL('SET ROLE {}').format(sql.Identifier(application)))
+                record_id = run("INSERT INTO public.products(product_id,product_name) "
+                                "VALUES('permission-probe','CSV compatible product') RETURNING id")
+                run('UPDATE public.products SET product_name=%s WHERE id=%s', ('updated', record_id))
+                self.assertEqual(run('SELECT product_name FROM public.products WHERE id=%s', (record_id,)), 'updated')
+                run('DELETE FROM public.products WHERE id=%s', (record_id,))
+                self.assertFalse(run('SELECT pg_has_role(current_user,%s,\'MEMBER\')', (runner,)))
+                self.assertFalse(run("SELECT has_schema_privilege(current_user,'public','CREATE')"))
+                for table in ('schema_migrations', 'app_schema_updates', 'app_schema_update_history'):
+                    self.assertFalse(run('SELECT has_table_privilege(current_user,%s,\'INSERT\')', ('public.' + table,)))
+                run('SELECT checksum FROM public.app_schema_updates')
+                with self.assertRaises(psycopg2.errors.InsufficientPrivilege):
+                    run('ALTER TABLE public.products ADD COLUMN forbidden integer')
+        finally:
+            with control.cursor() as cursor:
+                cursor.execute('RESET ROLE')
+                if created_database:
+                    cursor.execute(sql.SQL('DROP DATABASE {} WITH (FORCE)').format(sql.Identifier(database)))
+                for role in reversed(created_roles):
+                    cursor.execute(sql.SQL('DROP ROLE {}').format(sql.Identifier(role)))
+            control.close()
 
     def test_previous_files_remain_committed_after_later_failure(self):
         import psycopg2

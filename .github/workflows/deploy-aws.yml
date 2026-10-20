@@ -7,6 +7,7 @@ on:
       - "BackEnd/apps/MonoliticDataStructure/app/**"
       - "Frontend/**"
       - "infra/sql/migrations/**"
+      - "infra/sql/05-migration-permissions.sql"
       - "infra/scripts/migrate.py"
       - "infra/scripts/requirements-migrations.txt"
       - "infra/scripts/tests/test_migrate.py"
@@ -57,6 +58,7 @@ jobs:
             backend:
               - "BackEnd/apps/MonoliticDataStructure/app/**"
               - "infra/sql/migrations/**"
+              - "infra/sql/05-migration-permissions.sql"
               - "infra/scripts/migrate.py"
               - "infra/scripts/requirements-migrations.txt"
               - "infra/scripts/tests/test_migrate.py"

@@ -1,6 +1,10 @@
 CREATE ROLE migrator LOGIN PASSWORD :'migpass' CONNECTION LIMIT 5;
 CREATE ROLE app      LOGIN PASSWORD :'apppass' CONNECTION LIMIT 20;
 
+-- Solo para una instalacion nueva. Para una base existente ejecutar como dbadmin
+-- 05-migration-permissions.sql: instala extensiones, repara propietarios y concede
+-- permisos sobre los objetos actuales sin recrear roles ni cambiar contrasenas.
+
 REVOKE ALL ON DATABASE stockassistant FROM PUBLIC;
 GRANT CONNECT ON DATABASE stockassistant TO migrator, app;
 
