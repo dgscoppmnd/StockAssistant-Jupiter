@@ -124,7 +124,7 @@ def load_csv_to_table(conn, table_info):
     
     table = table_info["table"]
     filepath = table_info["file"]
-    columns = table_info["columns"]
+    columns = list(table_info["columns"])
     conflict = table_info["conflict"]
     
     # Verificar que el archivo existe
@@ -177,6 +177,14 @@ def load_csv_to_table(conn, table_info):
             'predicted_reorder_quantity': 0
         })
         
+        # An analytical CSV now also populates the operational catalog in the
+        # same physical table. Preserve the old AWS selling-price projection.
+        if table == "products":
+            df["price"] = df["selling_price_usd"]
+            df["final_price"] = df["selling_price_usd"]
+            df["currency"] = "USD"
+            columns.extend(["price", "final_price", "currency"])
+
         # Convertir a lista de tuplas
         data = [tuple(row) for row in df[columns].values]
         

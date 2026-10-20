@@ -83,6 +83,9 @@ def _parse_product_rows(text):
                     cdgo_producto_externo=row["product_id"], name_product=row["product_name"],
                     description_product=description or None, price=prices[0], final_price=prices[1],
                     currency="USD", creation_date=created_at,
+                    product_category=row["product_category"] or None,
+                    brand=row["brand"] or None, sku=row["sku"] or None,
+                    product_cost_usd=prices[0], selling_price_usd=prices[1],
                 )
             except ValidationError as exc:
                 details = "; ".join(f"{error['loc'][0]}: {error['msg']}" for error in exc.errors())
@@ -141,15 +144,18 @@ def import_product_csv_events(content, connection):
                     existing = {row[0] for row in cursor.fetchall()}
                     values = [
                         (product.cdgo_producto_externo, product.name_product, product.description_product,
-                         product.price, product.final_price, product.currency, product.creation_date, currency[0])
+                         product.price, product.final_price, product.currency, product.creation_date,
+                         product.product_category, product.brand, product.sku,
+                         product.product_cost_usd, product.selling_price_usd, currency[0])
                         for product in batch if product.cdgo_producto_externo not in existing
                     ]
                     if values:
-                        placeholders = ",".join(["(%s, %s, %s, %s, %s, %s, %s, %s)"] * len(values))
+                        placeholders = ",".join(["(" + ", ".join(["%s"] * 13) + ")"] * len(values))
                         cursor.execute(
                             """INSERT INTO public.productos
                             (cdgo_producto_externo, name_product, description_product, price,
-                             final_price, currency, creation_date, fk_currency) VALUES """ + placeholders,
+                             final_price, currency, creation_date, product_category, brand,
+                             sku, product_cost_usd, selling_price_usd, fk_currency) VALUES """ + placeholders,
                             tuple(value for row in values for value in row),
                         )
                         imported += len(values)

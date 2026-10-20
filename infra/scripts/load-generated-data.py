@@ -100,6 +100,13 @@ def main() -> None:
                             1024 * 1024,
                         )
                         loaded = cursor.rowcount
+                        if table == "products":
+                            # This loader only COPYs into an empty table. Match
+                            # the former AWS catalog view for these new rows.
+                            cursor.execute("""UPDATE public.products
+                                              SET price=selling_price_usd,
+                                                  final_price=selling_price_usd,
+                                                  currency='USD'""")
                     connection.commit()
                 except Exception as error:
                     connection.rollback()

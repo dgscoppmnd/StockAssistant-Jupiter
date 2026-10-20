@@ -1,6 +1,6 @@
 """Modelos SQLAlchemy para la base de datos"""
 
-from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, Numeric
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, ForeignKey, Numeric, BigInteger, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -10,14 +10,15 @@ from .database import Base
 class Product(Base):
     __tablename__ = "products"
     
-    product_id = Column(String(20), primary_key=True)
-    product_name = Column(String(150), nullable=False)
-    description = Column(String(500), nullable=False)
-    product_category = Column(String(50), nullable=False)
+    id = Column(BigInteger, primary_key=True)
+    product_id = Column(String(200), unique=True)
+    product_name = Column(String(200), nullable=False)
+    description = Column(Text)
+    product_category = Column(String(50))
     brand = Column(String(50))
-    sku = Column(String(50), unique=True, nullable=False)
-    product_cost_usd = Column(Numeric(12, 2))
-    selling_price_usd = Column(Numeric(12, 2))
+    sku = Column(String(50), unique=True)
+    product_cost_usd = Column(Numeric(18, 4))
+    selling_price_usd = Column(Numeric(18, 4))
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     
