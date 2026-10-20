@@ -1,6 +1,7 @@
 """Apply pending canonical init.sql and ordered, immutable PostgreSQL migrations."""
 
 import argparse
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 import hashlib
@@ -23,6 +24,28 @@ LOGGER = logging.getLogger("stockassistant.migrations")
 DIRECTORY = Path(__file__).resolve().parents[1] / "sql" / "migrations"
 LOCK_ID = LOCK_KEY
 NAME = re.compile(r"V([0-9]{14})__([a-z][a-z0-9_]*)\.sql")
+
+
+@contextmanager
+def database_phase(phase):
+    """Report a safe location, never PostgreSQL messages, SQL or row contents."""
+    try:
+        yield
+    except psycopg2.Error as exc:
+        LOGGER.error("Database phase failed: %s; SQLSTATE=%s", phase, exc.pgcode or "unknown")
+        if exc.pgcode == "42501":
+            LOGGER.error("Insufficient privileges for migrator. Check object ownership and extension "
+                         "installation using infra/sql/diagnose-migration-permissions.sql. "
+                         "GRANT on tables does not grant ALTER/DROP ownership rights.")
+        raise
+
+
+def execute_statements(cursor, statements, source):
+    for index, statement in enumerate(statements, 1):
+        # get_type returns a SQL operation, not literals or identifiers.
+        operation = sqlparse.parse(statement)[0].get_type()
+        with database_phase(f"{source} statement {index}/{len(statements)} ({operation})"):
+            cursor.execute(statement)
 
 
 @dataclass(frozen=True)
@@ -103,21 +126,23 @@ def apply_schema_update(connection, update) -> bool:
                         applied = True
                         break
             if applied:
-                validate_schema(connection)
+                with database_phase("init.sql existing schema validation"):
+                    validate_schema(connection)
                 LOGGER.info("init.sql already applied; schema validated")
                 return False
             LOGGER.info("Applying canonical init.sql (%s)", checksum)
-            for statement in statements:
-                cursor.execute(statement)
-            validated = validate_schema(connection)
-            cursor.execute("""INSERT INTO public.app_schema_updates
+            execute_statements(cursor, statements, "init.sql")
+            with database_phase("init.sql schema validation"):
+                validated = validate_schema(connection)
+            with database_phase("init.sql application ledger"):
+                cursor.execute("""INSERT INTO public.app_schema_updates
                 (id,checksum,run_id,actor_id,statement_count,validated_constraints)
                 VALUES (1,%s,%s,0,%s,%s) ON CONFLICT (id) DO UPDATE SET
                 checksum=EXCLUDED.checksum,run_id=EXCLUDED.run_id,actor_id=EXCLUDED.actor_id,
                 applied_at=CURRENT_TIMESTAMP,statement_count=EXCLUDED.statement_count,
                 validated_constraints=EXCLUDED.validated_constraints""",
-                (checksum, str(uuid4()), len(statements), validated))
-            cursor.execute("""INSERT INTO public.app_schema_update_history
+                    (checksum, str(uuid4()), len(statements), validated))
+                cursor.execute("""INSERT INTO public.app_schema_update_history
                 (checksum,run_id,applied_at,statement_count,validated_constraints)
                 SELECT checksum,run_id,applied_at,statement_count,validated_constraints
                 FROM public.app_schema_updates WHERE id=1""")
@@ -156,10 +181,10 @@ def migrate(connection, migrations: list[Migration], revision: str, *, schema_up
                 with connection.cursor() as cursor:
                     cursor.execute("SET LOCAL lock_timeout = '5s'")
                     cursor.execute("SET LOCAL statement_timeout = '120s'")
-                    for statement in migration.statements:
-                        cursor.execute(statement)
+                    execute_statements(cursor, migration.statements, migration.name)
                     if schema_update is not None:
-                        validate_schema(connection)
+                        with database_phase(f"{migration.name} schema validation"):
+                            validate_schema(connection)
                         cursor.execute("SELECT version,filename,checksum,git_revision,applied_at,applied_by "
                                        "FROM public.schema_migrations LIMIT 0")
                     cursor.execute("""INSERT INTO public.schema_migrations
