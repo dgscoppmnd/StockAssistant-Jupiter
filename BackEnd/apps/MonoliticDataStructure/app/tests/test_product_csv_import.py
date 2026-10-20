@@ -86,7 +86,7 @@ class ProductCsvImportTests(unittest.TestCase):
             self.assertEqual(result, {"imported": 10001, "skipped": 0, "total": 10001})
             inserts = [call for call in cursor.execute.call_args_list if "INSERT INTO" in call.args[0]]
             self.assertEqual(len(inserts), 11)
-            self.assertTrue(all(len(call.args[1]) <= IMPORT_BATCH_SIZE * 8 for call in inserts))
+            self.assertTrue(all(len(call.args[1]) <= IMPORT_BATCH_SIZE * 13 for call in inserts))
             self.assertFalse(source.closed)
 
     def test_example_file(self):
@@ -103,6 +103,11 @@ class ProductCsvImportTests(unittest.TestCase):
         self.assertIn('Descripción, con "comillas"\ny salto', product.description_product)
         self.assertIn("Categoría: Home\nMarca: Marca\nSKU: SKU1", product.description_product)
         self.assertEqual(product.currency, "USD")
+        self.assertEqual(product.product_category, "Home")
+        self.assertEqual(product.brand, "Marca")
+        self.assertEqual(product.sku, "SKU1")
+        self.assertEqual(product.product_cost_usd, 12.3)
+        self.assertEqual(product.selling_price_usd, 25.5)
         self.assertIsNotNone(product.creation_date.tzinfo)
 
     def test_invalid_fields(self):

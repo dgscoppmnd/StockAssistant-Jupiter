@@ -155,6 +155,10 @@ class MasterDataService:
         for field, value in values.items():
             if isinstance(value, str):
                 value = value.strip()
+            if definition.table == "public.globlal_addresses" and field == "country_code":
+                if not isinstance(value, str) or len(value) != 2 or not value.isascii() or not value.isalpha():
+                    raise MasterDataError("El código país debe contener dos letras, por ejemplo ES para España")
+                value = value.upper()
             if field in definition.nullable and value == "":
                 value = None
             if field in definition.numeric and value is not None:

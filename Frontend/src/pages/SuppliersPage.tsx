@@ -42,10 +42,12 @@ export default function SuppliersPage() {
 
   return <div className="grid clients-master-detail">
     <section className="card">
-      <div className="actions-row">
+      <div className="clients-card-header">
         <div><p className="section-label">Configuración · Proveedores</p><h3>Proveedores</h3></div>
+        <div className="clients-card-actions">
         <button className="primary-btn" onClick={() => setSupplierValues({ supplier_code: "", name: "", email: "", phone: "" })} type="button">Agregar proveedor</button>
         <button className="primary-btn" onClick={() => { setShowImport(!showImport); setCsvFile(null); setImportError(""); setImportProgress(null); }} type="button" disabled={importing} aria-expanded={showImport} aria-controls="supplier-csv-import">Importar CSV</button>
+        </div>
       </div>
       {error && <p className="error-line">{error}</p>}
       {importResult && <p role="status">{importResult}</p>}
@@ -74,8 +76,16 @@ export default function SuppliersPage() {
       <div className="master-table-wrapper"><BootstrapTable keyField="id" data={suppliers} columns={supplierColumns} rowEvents={{ onClick: (_: unknown, row: MasterRecord) => setSelected(row) }} classes="users-table master-data-table" bordered={false} noDataIndication="No hay proveedores." /></div>
     </section>
     <section className="card">
-      <div className="client-address-tab">Direcciones{selected ? ` · ${String(selected.name)}` : ""}</div>
-      {selected ? <><div className="actions-row"><p className="muted">Direcciones asociadas al proveedor seleccionado.</p><button className="primary-btn" onClick={() => { setEditing(null); setAddressValues({ address_type: "Dirección principal", country_code: "ES" }); }} type="button">Agregar dirección</button></div><BootstrapTable keyField="id" data={addresses} columns={[{ dataField: "address_type", text: "Tipo" }, { dataField: "address_line_1", text: "Dirección" }, { dataField: "city", text: "Ciudad" }, { dataField: "actions", text: "Acciones", isDummyField: true, formatter: (_: unknown, row: ClientAddress) => <div className="actions-row"><button className="chip-btn" onClick={() => { setEditing(row); setAddressValues({ ...row }); }} type="button" title="Editar" aria-label="Editar">✏️</button><button className="danger-btn" onClick={() => void deleteSupplierAddress(selected.id, row.id).then(async () => { await loadAddresses(selected); await load(); }).catch((err) => setError(err.message))} type="button" title="Quitar" aria-label="Quitar">🗑️</button></div> }]} classes="users-table master-data-table" bordered={false} noDataIndication="No hay direcciones asociadas." /></> : <p className="muted">Selecciona un proveedor en la tabla superior.</p>}
+      <div className="clients-card-header">
+        <div>
+          <div className="client-address-tab">Direcciones{selected ? ` · ${String(selected.name)}` : ""}</div>
+          {selected && <p className="muted">Direcciones asociadas al proveedor seleccionado.</p>}
+        </div>
+        {selected && <div className="clients-card-actions">
+          <button className="primary-btn" onClick={() => { setEditing(null); setAddressValues({ address_type: "Dirección principal", country_code: "ES" }); }} type="button">Agregar dirección</button>
+        </div>}
+      </div>
+      {selected ? <BootstrapTable keyField="id" data={addresses} columns={[{ dataField: "address_type", text: "Tipo" }, { dataField: "address_line_1", text: "Dirección" }, { dataField: "city", text: "Ciudad" }, { dataField: "actions", text: "Acciones", isDummyField: true, formatter: (_: unknown, row: ClientAddress) => <div className="actions-row"><button className="chip-btn" onClick={() => { setEditing(row); setAddressValues({ ...row }); }} type="button" title="Editar" aria-label="Editar">✏️</button><button className="danger-btn" onClick={() => void deleteSupplierAddress(selected.id, row.id).then(async () => { await loadAddresses(selected); await load(); }).catch((err) => setError(err.message))} type="button" title="Quitar" aria-label="Quitar">🗑️</button></div> }]} classes="users-table master-data-table" bordered={false} noDataIndication="No hay direcciones asociadas." /> : <p className="muted">Selecciona un proveedor en la tabla superior.</p>}
     </section>
     {Object.keys(supplierValues).length > 0 && <MasterDataEditorModal title="proveedor" record={supplierValues.id ? { id: Number(supplierValues.id) } : null} values={supplierValues} saving={saving} error={error} onChange={(key, value) => setSupplierValues((current) => ({ ...current, [key]: value }))} onSubmit={(event) => void saveSupplier(event)} onClose={() => setSupplierValues({})} fields={[{ key: "supplier_code", label: "Código de proveedor" }, { key: "name", label: "Nombre", required: true }, { key: "email", label: "Email" }, { key: "phone", label: "Teléfono" }]} />}
     {Object.keys(addressValues).length > 0 && <ClientAddressEditorModal title="dirección del proveedor" record={editing ? { id: editing.id } : null} values={addressValues} saving={saving} error={error} onChange={(key, value) => setAddressValues((current) => ({ ...current, [key]: value }))} onSubmit={(event) => void saveAddress(event)} onClose={() => { setAddressValues({}); setEditing(null); }} />}

@@ -4,15 +4,8 @@ from sqlalchemy.orm import declarative_base
 Base = declarative_base()
 
 
-class Product(Base):
-    __tablename__ = "products"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    product_id = Column(Integer)
-    product_name = Column(String)
-    description = Column(String)
-    name = Column(String)
-    category = Column(String)
+# Compatibility import for callers of the historical database module.
+from src.api.models import Product
 
 
 class Supplier(Base):

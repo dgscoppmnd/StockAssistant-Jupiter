@@ -72,6 +72,31 @@ class JupiterIntegrationTests(unittest.TestCase):
         self.call("GET", "/api/master-data/unknown", expected=404)
         self.call("POST", "/api/master-data/unit-conversions", {"values": {"from_unit_id": 1, "to_unit_id": 2, "factor": 0}}, 400)
 
+    def test_both_product_api_contracts_share_the_canonical_record(self):
+        suffix = uuid4().hex[:12]
+        code = 'UNIFY-' + suffix
+        product = self.call('POST', '/api/products/', {
+            'cdgo_producto_externo': code, 'name_product': 'Unified ' + suffix,
+            'description_product': 'Single canonical record',
+            'product_category': 'Integration', 'brand': 'Test brand', 'sku': suffix,
+            'price': 10.1234, 'final_price': 15.5678, 'currency': 'EUR',
+            'product_cost_usd': 3.1234, 'selling_price_usd': 4.5678,
+        }, 201)
+        try:
+            analytical = self.call('GET', '/api/v1/products/' + code)
+            self.assertEqual(analytical['product_name'], product['name_product'])
+            self.assertEqual(analytical['sku'], suffix)
+            self.assertEqual(analytical['product_cost_usd'], 3.1234)
+            self.assertEqual(product['price'], 10.1234)
+            update_payload = {key: (None if value == '' else value) for key, value in product.items()}
+            updated = self.call('PUT', f'/api/products/{product["pk_product"]}',
+                                {**update_payload, 'name_product': 'Renamed ' + suffix}, 202)
+            self.assertEqual(updated['sku'], suffix)
+            self.assertEqual(self.call('GET', '/api/v1/products/' + code)['product_name'], 'Renamed ' + suffix)
+        finally:
+            self.call('DELETE', f'/api/products/{product["pk_product"]}', expected=204)
+        self.call('GET', '/api/v1/products/' + code, expected=404)
+
     def test_inventory_executive_and_automation_end_to_end(self):
         suffix = uuid4().hex[:8]
         product = self.call("POST", "/api/products/", {"name_product": "Integration " + suffix}, 201)
