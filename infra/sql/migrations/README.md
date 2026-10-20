@@ -13,16 +13,21 @@ El nombre anterior es un ejemplo: no existe una migracion inicial de prueba.
 
 ## Flujo del desarrollador
 
-1. Crear un SQL incremental compatible con el esquema actual y probarlo con
-   datos representativos. No ejecutar `init_db()` ni copiar el inicializador
-   completo como migracion.
-2. Actualizar tambien el esquema para instalaciones locales nuevas en
+1. Actualizar el esquema canonico en
    [init.sql](../../../BackEnd/apps/MonoliticDataStructure/app/docker/init-scripts/init.sql).
-   AWS no lo ejecuta automaticamente.
+   El despliegue AWS lo comprueba y aplica automaticamente cuando su hash no
+   consta en el historial compartido con Configuracion. Para tablas existentes,
+   incluir `ALTER TABLE` o bloques de reconciliacion idempotentes: cambiar solo
+   `CREATE TABLE IF NOT EXISTS` no actualiza columnas, tipos ni restricciones.
+2. Si hace falta una migracion incremental adicional, crear aqui un SQL compatible
+   con el esquema canonico y probarlo con datos representativos. Se ejecuta
+   despues de `init.sql`; no duplicar sus efectos ni copiar el inicializador
+   completo como migracion. No ejecutar `init_db()` desde las migraciones.
 3. Incluir en el PR efecto sobre datos, verificacion y recuperacion. Preferir
    cambios aditivos compatibles con la version anterior de la aplicacion.
-4. Integrar en `master`. El CD valida, construye la imagen, aplica migraciones
-   pendientes con `migrator` y solo entonces actualiza Lambda y publica frontend.
+4. Integrar en `master`. El CD valida, construye la imagen, aplica
+   el `init.sql` pendiente y las migraciones con `migrator` y solo entonces
+   actualiza Lambda y publica frontend.
    Tambien existe Actions -> Deploy AWS -> Run workflow -> target `migrations`.
    La rama autorizada sigue siendo `master`.
 
@@ -32,16 +37,35 @@ el YAML por si solo no impone una aprobacion humana.
 
 ## Ejecucion y versionado
 
+- Se valida primero el historial de migraciones versionadas; despues se aplica
+  el bloque `JUPITER SCHEMA` de `init.sql` si su hash es nuevo, en una transaccion
+  propia. Se validan las tablas y columnas esenciales y las restricciones antes
+  de registrar el hash y confirmar. El archivo completo determina el hash, con
+  la misma lectura y normalizacion de saltos de linea que Configuracion.
+- `app_schema_updates` registra la ultima aplicacion de `init.sql` y
+  `app_schema_update_history` conserva todos los hashes aplicados. El actor `0`
+  identifica el despliegue automatico. Una version aplicada desde Configuracion
+  tampoco se repite en CD, ni se repite al volver a un archivo antiguo.
+- Si el hash ya existe, se valida el esquema esencial sin repetir el SQL.
+  No se calcula un diff automatico de PostgreSQL: los cambios para estructuras
+  existentes deben estar expresados en el SQL. El archivo se ejecuta completo
+  cuando el hash es nuevo, incluyendo sus instrucciones de datos.
 - `public.schema_migrations` registra version, nombre, SHA-256, commit Git,
   fecha y usuario. Es una tabla tecnica nueva, no un recurso AWS.
 - Orden lexicografico ascendente; solo se aplican versiones pendientes.
 - Una migracion aplicada no se edita, renombra ni elimina: crear otra version.
   El ejecutor rechaza cambios de checksum, archivos aplicados ausentes y
   versiones nuevas anteriores a las ya aplicadas.
-- El checksum normaliza CRLF a LF y elimina BOM UTF-8 para Windows/Linux.
-- Un bloqueo asesor PostgreSQL impide dos ejecutores simultaneos.
+- El checksum de las migraciones versionadas normaliza CRLF a LF y elimina
+  BOM UTF-8 para Windows/Linux. El de `init.sql` conserva el algoritmo de
+  Configuracion para reconocer el historial existente.
+- Un bloqueo asesor PostgreSQL, compartido con Configuracion e inicializacion,
+  impide ejecutar ambos mecanismos simultaneamente.
 - Cada archivo y su registro se confirman en la misma transaccion. Si falla,
   se revierte ese archivo y se detiene el CD; los anteriores quedan aplicados.
+  Esto incluye `init.sql`: si ya se confirmo y una migracion posterior falla,
+  el esquema canonico permanece aplicado. Cada migracion posterior tambien
+  valida la compatibilidad estructural antes de confirmar.
 - No incluir `BEGIN`, `COMMIT`, `ROLLBACK`, comandos de psql o cambios de sesion,
   roles o permisos del propio ejecutor. No modificar `schema_migrations`.
 - No usar operaciones incompatibles con transacciones, como
@@ -54,9 +78,10 @@ el YAML por si solo no impone una aprobacion humana.
 
 Los SQL historicos `infra/sql/01-roles.sql` a `04-integrated-automation.sql`
 no se ejecutan ni se marcan automaticamente como aplicados. La primera ejecucion
-crea solo el historial si esta carpeta no contiene SQL.
-Antes de integrar una funcionalidad, verificar que RDS tiene sus prerrequisitos;
-este ejecutor no detecta ni corrige divergencias previas de esquema.
+crea `schema_migrations` y aplica el `init.sql` pendiente, aunque esta carpeta no
+contenga SQL. Los bloques de reconciliacion del esquema canonico se ejecutan
+como parte del archivo; la validacion estructural no sustituye una comparacion
+exhaustiva del esquema ni las pruebas funcionales.
 No trasladar los historicos aqui sin revisar que efectos repetirian.
 
 ## Preparacion unica del administrador
@@ -70,6 +95,11 @@ No trasladar los historicos aqui sin revisar que efectos repetirian.
   No guardar contrasenas en variables GitHub.
 - Mantener usuario `migrator` propietario de los objetos a alterar y privilegios
   por defecto para `app`. Las tablas nuevas se crean en `public`.
+- `init.sql` usa extensiones `uuid-ossp`, `pgcrypto` y `pg_trgm`: deben existir
+  o el migrador debe disponer de los permisos necesarios para instalarlas.
+  Configurar `DB_LEGACY_TIMEZONE` en el entorno GitHub `production` con la zona
+  usada por las fechas historicas de productos, si corresponde. Se transmite a
+  la transaccion del esquema; si esta vacia se conserva la zona de la conexion.
 - El runner usa el endpoint publico existente, SSL `verify-full` y certificado
   oficial RDS. Depende de la accesibilidad actual confirmada por el administrador;
   no abre puertos ni agrega IPs. Si se restringe la red, el job fallara.
@@ -79,4 +109,6 @@ No trasladar los historicos aqui sin revisar que efectos repetirian.
 
 Validacion local opcional:
 `python infra/scripts/migrate.py --check`.
+Comprueba tambien el bloque y las instrucciones de `init.sql`, sin conectarse:
+la validacion real de tablas, columnas y restricciones ocurre durante la ejecucion.
 Dependencias: [requirements-migrations.txt](../../scripts/requirements-migrations.txt).
