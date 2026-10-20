@@ -5,6 +5,41 @@
 BEGIN;
 -- BEGIN JUPITER SCHEMA
 
+-- Last confirmed manual schema update; written atomically by the Setup operation.
+CREATE TABLE IF NOT EXISTS public.app_schema_updates (
+    id SMALLINT PRIMARY KEY CHECK (id=1),
+    checksum VARCHAR(64) NOT NULL,
+    run_id VARCHAR(36) NOT NULL,
+    actor_id BIGINT NOT NULL,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    statement_count INTEGER NOT NULL,
+    validated_constraints INTEGER NOT NULL
+);
+REVOKE ALL ON public.app_schema_updates FROM PUBLIC;
+-- Durable execution ledger: a previously applied file must never run again.
+CREATE TABLE IF NOT EXISTS public.app_schema_update_history (
+    checksum VARCHAR(64) PRIMARY KEY,
+    run_id VARCHAR(36) NOT NULL,
+    applied_at TIMESTAMPTZ NOT NULL,
+    statement_count INTEGER NOT NULL,
+    validated_constraints INTEGER NOT NULL
+);
+INSERT INTO public.app_schema_update_history
+    (checksum,run_id,applied_at,statement_count,validated_constraints)
+SELECT checksum,run_id,applied_at,statement_count,validated_constraints
+FROM public.app_schema_updates ON CONFLICT (checksum) DO NOTHING;
+REVOKE ALL ON public.app_schema_update_history FROM PUBLIC;
+DO $schema_update_permissions$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='app') THEN
+        REVOKE INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER ON public.app_schema_updates FROM app;
+        GRANT SELECT ON public.app_schema_updates TO app;
+        REVOKE INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER ON public.app_schema_update_history FROM app;
+        GRANT SELECT ON public.app_schema_update_history TO app;
+    END IF;
+END;
+$schema_update_permissions$;
+
 -- Esquema analitico local conservado.
 -- Conectar a la base de datos
 

@@ -1,5 +1,6 @@
 import { FormEvent, useRef, useState } from "react";
 import { clearApiKey, getApiKey, setApiKey, validateApiKeyCandidate } from "../api";
+import SchemaUpdatePanel from "../components/SchemaUpdatePanel";
 
 export default function ConfigPage() {
   const initialApiKey = useRef<string>(getApiKey());
@@ -71,6 +72,7 @@ export default function ConfigPage() {
         </div>
       </form>
       <p className="status-line">{message}</p>
+      <SchemaUpdatePanel />
     </div>
   );
 }
