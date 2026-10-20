@@ -1,23 +1,19 @@
 """Apply only the bundled init.sql, with transactional validation and real progress."""
-import hashlib
 import logging
 import os
 import time
 from uuid import uuid4
 
 import psycopg2
-from psycopg2 import sql
 from psycopg2.extras import RealDictCursor
-import sqlparse
-from sqlparse import tokens as T
 
 from database_schema import SCHEMA_PATH
+from schema_update_core import LOCK_KEY, load_update as load_schema_update, validate_schema
 from DataBaseManagement.dbConectionPostgres import (
     _database_name, _get_env, _get_postgres_connection_server, db_context,
 )
 
 LOGGER = logging.getLogger('api.schema_update')
-LOCK_KEY = 702641903119
 
 
 def schema_admin_ids():
@@ -29,27 +25,7 @@ def schema_admin_ids():
 
 
 def load_update():
-    source = SCHEMA_PATH.read_text(encoding='utf-8')
-    begin, end = '-- BEGIN JUPITER SCHEMA\n', '-- END JUPITER SCHEMA'
-    if source.count(begin) != 1 or source.count(end) != 1:
-        raise ValueError('Bloque de esquema ausente o duplicado.')
-    body = source.split(begin, 1)[1].split(end, 1)[0].strip()
-    statements = []
-    for statement in sqlparse.parse(body):
-        meaningful = [token for token in statement.flatten()
-                      if not token.is_whitespace and token.ttype not in T.Comment]
-        if not meaningful or all(token.value == ';' for token in meaningful):
-            continue
-        first = meaningful[0].normalized.upper()
-        # An explicit COMMIT in a future init.sql would destroy rollback safety.
-        # Nested function/DO blocks are single statements, validated by PostgreSQL.
-        if first in {'BEGIN', 'START', 'COMMIT', 'END', 'ROLLBACK', 'ABORT', 'SAVEPOINT',
-                     'RELEASE', 'PREPARE', 'VACUUM', 'COPY', '\\'} or first.startswith('\\'):
-            raise ValueError('init.sql contiene una instrucción incompatible con la transacción única.')
-        statements.append(str(statement).strip())
-    if not statements:
-        raise ValueError('init.sql no contiene instrucciones para aplicar.')
-    return hashlib.sha256(source.encode('utf-8')).hexdigest(), statements
+    return load_schema_update(SCHEMA_PATH)
 
 
 def last_update(connection):
@@ -103,29 +79,6 @@ def migration_connection():
     if is_lambda:
         options.update(sslmode='verify-full', sslrootcert=os.getenv('PGSSLROOTCERT', '/opt/rds-global-bundle.pem'))
     return psycopg2.connect(dsn, **options)
-
-
-def validate_schema(connection):
-    with connection.cursor() as cursor:
-        # Resolve actual columns and relations used by the running application.
-        for query in (
-            'SELECT id, product_id, product_name FROM public.products LIMIT 0',
-            'SELECT pk_product, cdgo_producto_externo, name_product FROM public.productos LIMIT 0',
-            'SELECT id, email, status FROM public.users LIMIT 0',
-            'SELECT product_id, warehouse_id FROM public.inventory_stock_levels LIMIT 0',
-            'SELECT id FROM public.sales_orders LIMIT 0',
-            'SELECT id FROM public.automation_rules LIMIT 0',
-        ):
-            cursor.execute(query)
-        cursor.execute("""SELECT n.nspname,t.relname,c.conname FROM pg_constraint c
-                          JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
-                          WHERE n.nspname='public' AND c.contype IN ('c','f') AND NOT c.convalidated""")
-        constraints = cursor.fetchall()
-        for namespace, table, name in constraints:
-            cursor.execute(sql.SQL('ALTER TABLE {}.{} VALIDATE CONSTRAINT {}').format(
-                sql.Identifier(namespace), sql.Identifier(table), sql.Identifier(name)))
-        cursor.execute('SET CONSTRAINTS ALL IMMEDIATE')
-        return len(constraints)
 
 
 def apply_update(user_id, checksum, statements, *, connect=migration_connection, validate=validate_schema):

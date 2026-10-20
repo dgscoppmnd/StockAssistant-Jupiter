@@ -14,6 +14,14 @@ botón queda deshabilitado cuando ya está aplicada. Un fallo con rollback permi
 volver a intentarlo. Si se despliega un init.sql diferente, se habilita su nueva
 actualización manual. Volver a desplegar un archivo antiguo ya aplicado no lo repite.
 
+El despliegue AWS tambien comprueba y aplica el `init.sql` pendiente antes de
+las migraciones versionadas de `infra/sql/migrations`. Comparte el lector, las
+validaciones, el bloqueo y el historial de hashes con este panel: una version
+confirmada por cualquiera de las dos rutas no se repite por la otra. El actor
+`0` en `app_schema_updates` identifica una aplicacion automatica del despliegue.
+`schema_migrations` registra por separado los archivos incrementales versionados;
+no sustituye el historial de hashes del esquema canonico.
+
 El servidor divide las instrucciones respetando los bloques PostgreSQL, toma el
 mismo bloqueo de inicialización y ejecuta todo dentro de una transacción. Después
 comprueba las tablas y columnas esenciales, valida los CHECK y las claves foráneas
@@ -63,7 +71,7 @@ variables `VITE_*`, código frontend ni Git.
    El adaptador Lambda de esta imagen ya declara `response_stream`; el endpoint
    AWS que lo invoque debe admitir streaming para ver avances durante la ejecución.
 
-No se modifican los pasos actuales de publicación de contenedores. El botón aplica
+El botón aplica
 el archivo de la API desplegada; no descarga el archivo de GitHub ni despliega
 el frontend. Cambiar una definición `CREATE TABLE IF NOT EXISTS` no modifica una
 tabla existente: los nuevos cambios deben incluir `ALTER`/migraciones idempotentes
