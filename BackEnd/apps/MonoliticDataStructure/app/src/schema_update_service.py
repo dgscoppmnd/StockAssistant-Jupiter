@@ -21,8 +21,8 @@ LOCK_KEY = 702641903119
 
 
 def schema_admin_ids():
-    # Production requires an explicit allowlist; editable user profile fields
-    # and API keys alone never authorize schema mutations.
+    # Reserved for future role-based authorization. Setup endpoints temporarily
+    # ignore this allowlist; its configuration and parsing remain available.
     default = '' if os.getenv('AWS_LAMBDA_FUNCTION_NAME') else '1'
     return {int(value.strip()) for value in os.getenv('SCHEMA_ADMIN_USER_IDS', default).split(',')
             if value.strip().isdigit()}
