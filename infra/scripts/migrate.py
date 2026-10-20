@@ -1,4 +1,4 @@
-"""Apply ordered, immutable SQL migrations to an existing PostgreSQL database."""
+"""Apply pending canonical init.sql and ordered, immutable PostgreSQL migrations."""
 
 import argparse
 from dataclasses import dataclass
@@ -8,14 +8,20 @@ import logging
 import os
 from pathlib import Path
 import re
+import sys
+from uuid import uuid4
 
 import psycopg2
 import sqlparse
 from sqlparse import tokens
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] /
+                      "BackEnd/apps/MonoliticDataStructure/app/src"))
+from schema_update_core import LOCK_KEY, load_update, validate_schema
+
 LOGGER = logging.getLogger("stockassistant.migrations")
 DIRECTORY = Path(__file__).resolve().parents[1] / "sql" / "migrations"
-LOCK_ID = 702641903120
+LOCK_ID = LOCK_KEY
 NAME = re.compile(r"V([0-9]{14})__([a-z][a-z0-9_]*)\.sql")
 
 
@@ -78,7 +84,48 @@ def pending_migrations(migrations: list[Migration], history: list[tuple]) -> lis
     return pending
 
 
-def migrate(connection, migrations: list[Migration], revision: str) -> int:
+def apply_schema_update(connection, update) -> bool:
+    """Use Setup's hash ledger; actor 0 denotes an automated deployment."""
+    checksum, statements = update
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute("SET LOCAL lock_timeout = '5s'")
+            cursor.execute("SET LOCAL statement_timeout = '120s'")
+            timezone = os.environ.get("DB_LEGACY_TIMEZONE")
+            if timezone:
+                cursor.execute("SELECT set_config('TimeZone', %s, true)", (timezone,))
+            applied = False
+            for table in ("app_schema_update_history", "app_schema_updates"):
+                cursor.execute("SELECT to_regclass(%s)", (f"public.{table}",))
+                if cursor.fetchone()[0] is not None:
+                    cursor.execute(f"SELECT 1 FROM public.{table} WHERE checksum=%s", (checksum,))
+                    if cursor.fetchone() is not None:
+                        applied = True
+                        break
+            if applied:
+                validate_schema(connection)
+                LOGGER.info("init.sql already applied; schema validated")
+                return False
+            LOGGER.info("Applying canonical init.sql (%s)", checksum)
+            for statement in statements:
+                cursor.execute(statement)
+            validated = validate_schema(connection)
+            cursor.execute("""INSERT INTO public.app_schema_updates
+                (id,checksum,run_id,actor_id,statement_count,validated_constraints)
+                VALUES (1,%s,%s,0,%s,%s) ON CONFLICT (id) DO UPDATE SET
+                checksum=EXCLUDED.checksum,run_id=EXCLUDED.run_id,actor_id=EXCLUDED.actor_id,
+                applied_at=CURRENT_TIMESTAMP,statement_count=EXCLUDED.statement_count,
+                validated_constraints=EXCLUDED.validated_constraints""",
+                (checksum, str(uuid4()), len(statements), validated))
+            cursor.execute("""INSERT INTO public.app_schema_update_history
+                (checksum,run_id,applied_at,statement_count,validated_constraints)
+                SELECT checksum,run_id,applied_at,statement_count,validated_constraints
+                FROM public.app_schema_updates WHERE id=1""")
+    LOGGER.info("Canonical init.sql committed and validated")
+    return True
+
+
+def migrate(connection, migrations: list[Migration], revision: str, *, schema_update=None) -> int:
     with connection.cursor() as cursor:
         cursor.execute("SELECT pg_try_advisory_lock(%s)", (LOCK_ID,))
         if not cursor.fetchone()[0]:
@@ -97,8 +144,12 @@ def migrate(connection, migrations: list[Migration], revision: str) -> int:
                     applied_by TEXT NOT NULL DEFAULT current_user
                 )""")
                 cursor.execute("REVOKE ALL ON public.schema_migrations FROM app")
+                cursor.execute("SELECT version,filename,checksum,git_revision,applied_at,applied_by "
+                               "FROM public.schema_migrations LIMIT 0")
                 cursor.execute("SELECT version,filename,checksum FROM public.schema_migrations ORDER BY version")
                 pending = pending_migrations(migrations, cursor.fetchall())
+        if schema_update is not None:
+            apply_schema_update(connection, schema_update)
         for migration in pending:
             LOGGER.info("Applying %s", migration.name)
             with connection:
@@ -107,6 +158,10 @@ def migrate(connection, migrations: list[Migration], revision: str) -> int:
                     cursor.execute("SET LOCAL statement_timeout = '120s'")
                     for statement in migration.statements:
                         cursor.execute(statement)
+                    if schema_update is not None:
+                        validate_schema(connection)
+                        cursor.execute("SELECT version,filename,checksum,git_revision,applied_at,applied_by "
+                                       "FROM public.schema_migrations LIMIT 0")
                     cursor.execute("""INSERT INTO public.schema_migrations
                         (version,filename,checksum,git_revision) VALUES (%s,%s,%s,%s)""",
                         (migration.version, migration.name, migration.checksum, revision))
@@ -128,8 +183,10 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     try:
         migrations = load_migrations(DIRECTORY)
+        schema_update = load_update()
         if args.check:
-            LOGGER.info("Validated %d migration files", len(migrations))
+            LOGGER.info("Validated init.sql (%d statements) and %d migration files; "
+                        "database validation requires execution", len(schema_update[1]), len(migrations))
             return 0
         if os.environ.get("PGUSER") != "migrator":
             raise ValueError("PGUSER must be migrator; do not use application credentials")
@@ -140,7 +197,7 @@ def main() -> int:
                 raise ValueError(f"{name} is required")
         connection = psycopg2.connect(connect_timeout=15, application_name="stockassistant-migrations")
         try:
-            migrate(connection, migrations, os.environ["GITHUB_SHA"])
+            migrate(connection, migrations, os.environ["GITHUB_SHA"], schema_update=schema_update)
         finally:
             connection.close()
         return 0

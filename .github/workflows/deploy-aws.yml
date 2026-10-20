@@ -148,7 +148,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
-      - name: Aplicar migraciones pendientes
+      - name: Validar y aplicar init.sql y migraciones pendientes
         env:
           PGHOST: ${{ vars.DB_MIGRATION_HOST }}
           PGDATABASE: ${{ vars.DB_MIGRATION_DATABASE }}
@@ -156,6 +156,7 @@ jobs:
           PGPORT: "5432"
           PGSSLMODE: verify-full
           PGSSLROOTCERT: ${{ runner.temp }}/rds-global-bundle.pem
+          DB_LEGACY_TIMEZONE: ${{ vars.DB_LEGACY_TIMEZONE }}
         shell: bash
         run: |
           set -euo pipefail

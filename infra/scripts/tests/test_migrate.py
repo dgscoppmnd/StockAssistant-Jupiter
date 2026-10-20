@@ -3,9 +3,11 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from migrate import load_migrations, migrate, pending_migrations
+from migrate import load_migrations, load_update, main, migrate, pending_migrations
+from database_schema import SCHEMA_PATH
 
 
 class MigrationFilesTests(unittest.TestCase):
@@ -22,6 +24,36 @@ class MigrationFilesTests(unittest.TestCase):
     def test_empty_directory_does_not_replay_historical_files(self):
         (self.path / "README.md").write_text("Documentation", encoding="utf-8")
         self.assertEqual(load_migrations(self.path), [])
+
+    def test_canonical_init_is_loaded_without_outer_transaction(self):
+        checksum, statements = load_update()
+        self.assertEqual(len(checksum), 64)
+        self.assertTrue(any('CREATE TABLE IF NOT EXISTS public.app_schema_updates' in s for s in statements))
+        self.assertFalse(statements[-1].rstrip().upper() == 'COMMIT;')
+
+    def test_init_requires_unique_markers_and_rejects_transaction_control(self):
+        path = self.path / 'init.sql'
+        for source in ('SELECT 1;', '-- BEGIN JUPITER SCHEMA\n-- END JUPITER SCHEMA',
+                       '-- BEGIN JUPITER SCHEMA\nCOMMIT;\n-- END JUPITER SCHEMA'):
+            path.write_text(source, encoding='utf-8')
+            with self.subTest(source=source), self.assertRaises(ValueError):
+                load_update(path)
+
+    def test_init_hash_matches_manual_service_normalization(self):
+        path = self.path / 'init.sql'
+        source = '-- BEGIN JUPITER SCHEMA\nSELECT 1;\n-- END JUPITER SCHEMA\n'
+        path.write_bytes(source.encode())
+        checksum = load_update(path)[0]
+        path.write_bytes(source.replace('\n', '\r\n').encode())
+        self.assertEqual(checksum, load_update(path)[0])
+
+    def test_check_rejects_invalid_init_without_connecting(self):
+        with patch('sys.argv', ['migrate.py', '--check']), \
+                patch('migrate.load_update', side_effect=ValueError('Invalid init.sql')), \
+                patch('migrate.psycopg2.connect') as connect:
+            with self.assertLogs('stockassistant.migrations', level='ERROR'):
+                self.assertEqual(main(), 1)
+            connect.assert_not_called()
 
     def test_normalize_windows_line_endings_and_bom(self):
         path = self.write("SELECT 1;\n")
@@ -97,7 +129,8 @@ class MigrationDatabaseTests(unittest.TestCase):
                 cursor.execute("GRANT USAGE ON SCHEMA public TO app")
                 cursor.execute("ALTER DEFAULT PRIVILEGES FOR ROLE migration_runner_test IN SCHEMA public "
                                "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app")
-                cursor.execute("DROP TABLE IF EXISTS public.schema_migrations, public.migration_probe")
+                cursor.execute("DROP TABLE IF EXISTS public.schema_migrations, public.migration_probe, "
+                               "public.app_schema_update_history, public.app_schema_updates")
                 cursor.execute("SET ROLE migration_runner_test")
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
@@ -166,6 +199,102 @@ class MigrationDatabaseTests(unittest.TestCase):
             "SELECT has_table_privilege('app', 'public.migration_probe', 'INSERT')"))
         self.assertFalse(self.scalar(
             "SELECT has_table_privilege('app', 'public.schema_migrations', 'UPDATE')"))
+
+    def schema_update(self, sql, checksum='a'*64):
+        # Use the real ledger DDL, including grants and legacy history backfill.
+        ledger = SCHEMA_PATH.read_text(encoding='utf-8').split('-- BEGIN JUPITER SCHEMA\n')[1]
+        ledger = ledger.split('-- Esquema analitico local conservado.')[0]
+        import sqlparse
+        return checksum, [*sqlparse.split(ledger), sql]
+
+    def test_init_new_hash_and_incremental_changes_are_applied_once(self):
+        update = self.schema_update('CREATE TABLE public.migration_probe(id integer);')
+        with patch('migrate.validate_schema', return_value=0):
+            migrate(self.connection, [], 'first', schema_update=update)
+            migrate(self.connection, [], 'repeat', schema_update=update)
+            changed = self.schema_update('ALTER TABLE public.migration_probe ADD COLUMN label text;', 'b'*64)
+            migrate(self.connection, [], 'new', schema_update=changed)
+            # An older hash must not replay its CREATE TABLE.
+            migrate(self.connection, [], 'old', schema_update=update)
+            self.write("INSERT INTO public.migration_probe VALUES (1, 'ok');")
+            migrate(self.connection, load_migrations(self.path), 'incremental', schema_update=changed)
+        self.assertEqual(self.scalar('SELECT count(*) FROM public.app_schema_update_history'), 2)
+        self.assertEqual(self.scalar('SELECT actor_id FROM public.app_schema_updates'), 0)
+        self.assertEqual(self.scalar('SELECT label FROM public.migration_probe'), 'ok')
+        self.assertEqual(self.scalar('SELECT count(*) FROM public.schema_migrations'), 1)
+
+    def test_init_failure_rolls_back_ddl_and_ledgers_and_allows_retry(self):
+        import psycopg2
+        update = self.schema_update('CREATE TABLE public.migration_probe(id integer); SELECT 1/0;')
+        with self.assertRaises(psycopg2.errors.DivisionByZero):
+            migrate(self.connection, [], 'failed', schema_update=update)
+        self.assertIsNone(self.scalar("SELECT to_regclass('public.app_schema_updates')"))
+        self.assertIsNone(self.scalar("SELECT to_regclass('public.migration_probe')"))
+        self.assertEqual(self.scalar('SELECT count(*) FROM public.schema_migrations'), 0)
+        with patch('migrate.validate_schema', return_value=0):
+            migrate(self.connection, [], 'retry', schema_update=self.schema_update(
+                'CREATE TABLE public.migration_probe(id integer);'))
+        self.assertEqual(self.scalar('SELECT count(*) FROM public.app_schema_update_history'), 1)
+
+    def test_init_validation_failure_rolls_back(self):
+        with patch('migrate.validate_schema', side_effect=ValueError('Invalid schema')):
+            with self.assertRaisesRegex(ValueError, 'Invalid schema'):
+                migrate(self.connection, [], 'failed', schema_update=self.schema_update(
+                    'CREATE TABLE public.migration_probe(id integer);'))
+        self.assertIsNone(self.scalar("SELECT to_regclass('public.migration_probe')"))
+        self.assertIsNone(self.scalar("SELECT to_regclass('public.app_schema_update_history')"))
+
+    def test_manual_ledger_is_respected_and_existing_hash_still_validated(self):
+        update = self.schema_update('CREATE TABLE public.migration_probe(id integer);')
+        with self.connection:
+            with self.connection.cursor() as cursor:
+                for statement in update[1]:
+                    cursor.execute(statement)
+                cursor.execute("""INSERT INTO public.app_schema_updates
+                    (id,checksum,run_id,actor_id,statement_count,validated_constraints)
+                    VALUES(1,%s,'manual-run',1,1,0)""", (update[0],))
+        with patch('migrate.validate_schema', return_value=0) as validate:
+            migrate(self.connection, [], 'manual-already-applied', schema_update=update)
+            validate.assert_called_once_with(self.connection)
+        self.assertEqual(self.scalar('SELECT actor_id FROM public.app_schema_updates'), 1)
+        with patch('migrate.validate_schema', side_effect=ValueError('Schema drift')):
+            with self.assertRaisesRegex(ValueError, 'Schema drift'):
+                migrate(self.connection, [], 'drift', schema_update=update)
+
+    def test_incremental_validation_failure_preserves_init_but_rolls_back_file(self):
+        update = self.schema_update('CREATE TABLE public.migration_probe(id integer);')
+        self.write('ALTER TABLE public.migration_probe ADD COLUMN invalid_column integer;')
+        with patch('migrate.validate_schema', side_effect=[0, ValueError('Invalid incremental schema')]):
+            with self.assertRaisesRegex(ValueError, 'Invalid incremental schema'):
+                migrate(self.connection, load_migrations(self.path), 'failed', schema_update=update)
+        self.assertEqual(self.scalar('SELECT count(*) FROM public.app_schema_update_history'), 1)
+        self.assertEqual(self.scalar('SELECT count(*) FROM public.schema_migrations'), 0)
+        self.assertEqual(self.scalar("SELECT count(*) FROM information_schema.columns "
+                                     "WHERE table_name='migration_probe' AND column_name='invalid_column'"), 0)
+
+    def test_manual_update_and_deployment_share_lock(self):
+        import psycopg2
+        from schema_update_core import LOCK_KEY
+        with psycopg2.connect(self.dsn) as other:
+            with other.cursor() as cursor:
+                cursor.execute('SELECT pg_advisory_xact_lock(%s)', (LOCK_KEY,))
+            with self.assertRaisesRegex(RuntimeError, 'lock'):
+                migrate(self.connection, [], 'concurrent', schema_update=load_update())
+
+    def test_canonical_init_on_real_database_and_repeat(self):
+        # Trusted extensions need CREATE on this isolated database.
+        with self.connection:
+            with self.connection.cursor() as cursor:
+                cursor.execute('RESET ROLE')
+                cursor.execute('GRANT CREATE ON DATABASE migrations_test TO migration_runner_test')
+                cursor.execute('SET ROLE migration_runner_test')
+        update = load_update()
+        migrate(self.connection, [], 'canonical', schema_update=update)
+        migrate(self.connection, [], 'repeat', schema_update=update)
+        self.assertEqual(self.scalar('SELECT checksum FROM public.app_schema_updates'), update[0])
+        self.assertEqual(self.scalar('SELECT count(*) FROM public.app_schema_update_history'), 1)
+        self.assertIsNotNone(self.scalar("SELECT to_regclass('public.schema_migrations')"))
+        self.assertIsNotNone(self.scalar("SELECT to_regclass('public.inventory_stock_levels')"))
 
 
 if __name__ == "__main__":
