@@ -8,7 +8,7 @@ from psycopg2.extras import RealDictCursor
 
 from DataBaseManagement.dbConectionPostgres import db_context
 from security import extract_bearer_token, verify_session_token
-from schema_update_service import apply_update, load_update, schema_admin_ids, update_status
+from schema_update_service import apply_update, load_update, update_status
 
 router = APIRouter(prefix='/setup/database', tags=['Setup'])
 
@@ -36,8 +36,8 @@ class SchemaUpdateRequest(BaseModel):
 
 @router.get('/status')
 def database_status(user_id: int = Depends(setup_user)):
-    if user_id not in schema_admin_ids():
-        return {'can_update': False}
+    # SCHEMA_ADMIN_USER_IDS is intentionally ignored until user roles are added.
+    # setup_user still requires a valid session and an active, unexpired account.
     try:
         return {'can_update': True, **update_status()}
     except Exception:
@@ -46,8 +46,7 @@ def database_status(user_id: int = Depends(setup_user)):
 
 @router.post('/update')
 def update_database(payload: SchemaUpdateRequest, user_id: int = Depends(setup_user)):
-    if user_id not in schema_admin_ids():
-        raise HTTPException(403, 'Solo el administrador autorizado puede actualizar el esquema.')
+    # Same temporary authorization policy as /status; keep session validation.
     try:
         checksum, statements = load_update()
     except Exception:

@@ -30,8 +30,11 @@ sustituye las pruebas funcionales de un cambio de negocio.
 
 ## Local
 
-La cuenta activa con ID 1 está autorizada por defecto. Para cambiarla, definir
-`SCHEMA_ADMIN_USER_IDS=1,5` en el entorno del backend; el compose permite configurarlo.
+Temporalmente, cualquier usuario con sesión válida y cuenta activa y no caducada
+puede consultar el estado y ejecutar la actualización pendiente. La variable
+`SCHEMA_ADMIN_USER_IDS` y su función de lectura se conservan para futuras versiones,
+pero no restringen estas operaciones, aunque estén vacías o no incluyan al usuario.
+Una API key por sí sola no sustituye la sesión de usuario requerida por este panel.
 Se usa la conexión actual de PostgreSQL, que debe tener permisos de propietario
 para los objetos modificados. Opcionalmente `JUPITER_MIGRATION_DSN` proporciona
 una conexión separada a la misma base, host y puerto. Nunca colocar este DSN en
@@ -40,9 +43,8 @@ variables `VITE_*`, código frontend ni Git.
 ## AWS Lambda
 
 1. Desplegar la imagen de API y el frontend que contienen este cambio.
-2. Definir `SCHEMA_ADMIN_USER_IDS` en Lambda con el ID del administrador autorizado.
-   En Lambda la lista está vacía por defecto: no se presupone que el usuario 1
-   sea administrador de producción.
+2. Iniciar sesión con una cuenta activa del portal. No hace falta configurar
+   `SCHEMA_ADMIN_USER_IDS`: temporalmente se ignora hasta incorporar roles.
 3. Crear el parámetro **SecureString** de SSM
    `/stockassistant/prod/db/migration_dsn`, con un DSN PostgreSQL de migración
    (`host=... port=5432 dbname=... user=... password=... sslmode=verify-full`).

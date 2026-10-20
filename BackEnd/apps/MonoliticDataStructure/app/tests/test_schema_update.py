@@ -95,18 +95,32 @@ class SchemaUpdateTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 service.load_update()
 
-    def test_permissions_and_stale_checksum(self):
+    def test_authenticated_users_ignore_reserved_allowlist(self):
         app = FastAPI()
         app.include_router(endpoints.router)
         client = TestClient(app)
         self.assertEqual(client.post('/setup/database/update', json={'expected_checksum':'a'*64}).status_code, 401)
-        app.dependency_overrides[endpoints.setup_user] = lambda: 9999
-        self.assertEqual(client.get('/setup/database/status').json(), {'can_update':False})
-        self.assertEqual(client.post('/setup/database/update', json={'expected_checksum':'a'*64}).status_code, 403)
-        app.dependency_overrides[endpoints.setup_user] = lambda: 1
-        with patch.dict(os.environ, {'SCHEMA_ADMIN_USER_IDS':'1'}):
-            self.assertEqual(client.post('/setup/database/update', json={'expected_checksum':'a'*64}).status_code, 409)
-            self.assertEqual(client.post('/setup/database/update', json={'expected_checksum':'a'*64,'sql':'DROP TABLE users'}).status_code, 422)
+        self.assertEqual(client.get('/setup/database/status').status_code, 401)
+        self.assertEqual(client.post('/setup/database/update', headers={'X-API-Key':'test'}, json={'expected_checksum':'a'*64}).status_code, 401)
+        app.dependency_overrides[endpoints.setup_user] = lambda: 4
+        checksum = 'a'*64
+        for allowlist in ('', '1'):
+            with self.subTest(allowlist=allowlist), patch.dict(os.environ, {
+                'SCHEMA_ADMIN_USER_IDS':allowlist, 'AWS_LAMBDA_FUNCTION_NAME':'test-production',
+            }), patch.object(endpoints, 'update_status', return_value={'checksum':checksum,'pending':True}), \
+                    patch.object(endpoints, 'load_update', return_value=(checksum,['SELECT 1'])), \
+                    patch.object(endpoints, 'apply_update', return_value=iter([
+                        {'stage':'complete','percent':100,'result':{'checksum':checksum}},
+                    ])) as apply:
+                response = client.get('/setup/database/status')
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.json()['can_update'])
+                response = client.post('/setup/database/update', json={'expected_checksum':checksum})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()['stage'], 'complete')
+                apply.assert_called_once_with(4, checksum, ['SELECT 1'])
+                self.assertEqual(client.post('/setup/database/update', json={'expected_checksum':'b'*64}).status_code, 409)
+                self.assertEqual(client.post('/setup/database/update', json={'expected_checksum':checksum,'sql':'DROP TABLE users'}).status_code, 422)
 
 
 if __name__ == '__main__':
