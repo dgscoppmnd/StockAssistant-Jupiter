@@ -78,6 +78,8 @@ jobs:
       - name: Run backend tests
         id: tests
         working-directory: BackEnd/apps/MonoliticDataStructure/app
+        env:
+          PRODUCTS_TEST_PG_CONTAINER: ${{ job.services.postgres.id }}
         run: |
           mkdir -p test-results
           set +e
