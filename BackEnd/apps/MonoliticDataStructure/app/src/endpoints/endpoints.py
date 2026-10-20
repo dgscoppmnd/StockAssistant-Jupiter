@@ -19,6 +19,7 @@ from .endpointsMasterData import router as master_data_router
 from .endpointsChat import router as chat_router
 from .endpointRag import router as rag_router
 from .endpointsSales import router as sales_router
+from .endpointsSetup import router as setup_router
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
 public_router = APIRouter()
@@ -42,6 +43,7 @@ router.include_router(executive_router)
 router.include_router(automation_router)
 router.include_router(master_data_router)
 router.include_router(sales_router)
+router.include_router(setup_router)
 
 
 def init_fastapi():
