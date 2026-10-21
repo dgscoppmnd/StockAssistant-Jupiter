@@ -14,6 +14,7 @@ from database_schema import SCHEMA_PATH
 from schema_update_core import validate_schema
 
 PERMISSIONS_SQL = Path(__file__).resolve().parents[2] / 'sql/05-migration-permissions.sql'
+RUNTIME_MIGRATIONS = Path(__file__).resolve().parents[2] / 'sql/migrations'
 
 
 class MigrationFilesTests(unittest.TestCase):
@@ -88,6 +89,15 @@ class MigrationFilesTests(unittest.TestCase):
         for name in canonical | {'schema_migrations', 'productos_catalogo'}:
             with self.subTest(name=name):
                 self.assertIn(repr(name), repair)
+
+    def test_runtime_migration_covers_the_same_application_objects_as_admin_preparation(self):
+        repair = PERMISSIONS_SQL.read_text(encoding='utf-8')
+        runtime = (RUNTIME_MIGRATIONS /
+                   'V20261021120000__restore_app_runtime_permissions.sql').read_text(encoding='utf-8')
+        for declaration in ('application_relations', 'application_functions'):
+            pattern = declaration + r' text\[\] := ARRAY\[(.*?)\];'
+            self.assertEqual(set(re.findall(r"'([^']+)'", re.search(pattern, repair, re.S)[1])),
+                             set(re.findall(r"'([^']+)'", re.search(pattern, runtime, re.S)[1])))
 
     def test_normalize_windows_line_endings_and_bom(self):
         path = self.write("SELECT 1;\n")
@@ -276,7 +286,7 @@ class MigrationDatabaseTests(unittest.TestCase):
                 self.assertEqual(run('SELECT pg_has_role(current_user,%s,\'MEMBER\')', (runner,)), member_before)
                 self.assertEqual(run('SELECT pg_has_role(current_user,%s,\'USAGE\')', (runner,)), inherited_before)
                 self.assertEqual(run("SELECT pg_get_userbyid(relowner) FROM pg_class "
-                                     "WHERE oid='public.unrelated_permission_probe'::regclass"), administrator)
+                                     "WHERE oid='public.unrelated_permission_probe'::regclass"), runner)
                 self.assertEqual(run("SELECT pg_get_userbyid(relowner) FROM pg_class "
                                      "WHERE oid='public.products'::regclass"), runner)
                 self.assertFalse(run('SELECT rolsuper FROM pg_roles WHERE rolname=%s', (runner,)))
@@ -309,13 +319,38 @@ class MigrationDatabaseTests(unittest.TestCase):
                 run('UPDATE public.products SET product_name=%s WHERE id=%s', ('updated', record_id))
                 self.assertEqual(run('SELECT product_name FROM public.products WHERE id=%s', (record_id,)), 'updated')
                 run('DELETE FROM public.products WHERE id=%s', (record_id,))
-                self.assertFalse(run('SELECT pg_has_role(current_user,%s,\'MEMBER\')', (runner,)))
-                self.assertFalse(run("SELECT has_schema_privilege(current_user,'public','CREATE')"))
+                self.assertTrue(run('SELECT pg_has_role(current_user,%s,\'MEMBER\')', (runner,)))
+                self.assertTrue(run("SELECT has_schema_privilege(current_user,'public','CREATE')"))
                 for table in ('schema_migrations', 'app_schema_updates', 'app_schema_update_history'):
-                    self.assertFalse(run('SELECT has_table_privilege(current_user,%s,\'INSERT\')', ('public.' + table,)))
+                    self.assertTrue(run('SELECT has_table_privilege(current_user,%s,\'INSERT\')', ('public.' + table,)))
                 run('SELECT checksum FROM public.app_schema_updates')
-                with self.assertRaises(psycopg2.errors.InsufficientPrivilege):
-                    run('ALTER TABLE public.products ADD COLUMN forbidden integer')
+                run('ALTER TABLE public.products ADD COLUMN shared_owner_probe integer')
+                # Real app logins must create future objects as the common owner.
+                run('RESET ROLE')
+                run(sql.SQL('ALTER ROLE {} LOGIN PASSWORD %s').format(sql.Identifier(application)),
+                    ('shared-owner-test-only',))
+                app_parameters = {**parameters, 'user': application, 'password': 'shared-owner-test-only'}
+                with closing(psycopg2.connect(**app_parameters)) as app_connection:
+                    with app_connection, app_connection.cursor() as cursor:
+                        cursor.execute('SELECT session_user,current_user')
+                        self.assertEqual(cursor.fetchone(), (application, runner))
+                        cursor.execute('CREATE TABLE public.future_shared_owner_probe(id serial)')
+                        cursor.execute("CREATE FUNCTION public.future_shared_owner_function() RETURNS integer "
+                                       "LANGUAGE SQL AS 'SELECT 1'")
+                        cursor.execute("CREATE TYPE public.shared_owner_enum AS ENUM ('one')")
+                        cursor.execute('CREATE DOMAIN public.shared_owner_domain AS integer')
+                run(sql.SQL('SET ROLE {}').format(sql.Identifier(runner)))
+                run('ALTER TABLE public.future_shared_owner_probe ADD COLUMN label text')
+                run('CREATE OR REPLACE FUNCTION public.future_shared_owner_function() RETURNS integer '
+                    "LANGUAGE SQL AS 'SELECT 2'")
+                # Apply the forward migration after the administrative preparation.
+                with connection, connection.cursor() as cursor:
+                    for migration in load_migrations(RUNTIME_MIGRATIONS):
+                        for statement in migration.statements:
+                            cursor.execute(re.sub(r'\bapp\b', application, statement))
+                run('RESET ROLE')
+                run(sql.SQL('SET ROLE {}').format(sql.Identifier(administrator)))
+                run(repair)
         finally:
             with control.cursor() as cursor:
                 cursor.execute('RESET ROLE')
@@ -452,6 +487,115 @@ class MigrationDatabaseTests(unittest.TestCase):
         self.assertEqual(self.scalar('SELECT count(*) FROM public.app_schema_update_history'), 1)
         self.assertIsNotNone(self.scalar("SELECT to_regclass('public.schema_migrations')"))
         self.assertIsNotNone(self.scalar("SELECT to_regclass('public.inventory_stock_levels')"))
+
+    def test_bootstrap_grants_runtime_access_and_protects_existing_history(self):
+        from psycopg2 import sql
+        import sqlparse
+        suffix = uuid4().hex
+        runner, application = 'bootstrap_runner_' + suffix, 'bootstrap_app_' + suffix
+        administrator = self.scalar('SELECT session_user')
+        source = (RUNTIME_MIGRATIONS.parent / '01-roles.sql').read_text(encoding='utf-8')
+        source = source.replace('stockassistant', 'migrations_test')
+        source = source.replace(":'migpass'", "'bootstrap-test-only'")
+        source = source.replace(":'apppass'", "'bootstrap-test-only'")
+        for original, replacement in (('migrator', runner), ('app', application),
+                                      ('dbadmin', sql.Identifier(administrator).as_string(self.connection))):
+            source = re.sub(r'\b' + original + r'\b', replacement, source)
+        try:
+            with self.connection, self.connection.cursor() as cursor:
+                cursor.execute('RESET ROLE')
+                cursor.execute('CREATE TABLE public.bootstrap_probe(id serial)')
+                cursor.execute('CREATE TABLE public.schema_migrations(version text)')
+                cursor.execute('CREATE TABLE public.app_schema_updates(id integer)')
+                cursor.execute('CREATE TABLE public.app_schema_update_history(id integer)')
+                for statement in sqlparse.split(source):
+                    cursor.execute(statement)
+                for privilege in ('SELECT', 'INSERT', 'UPDATE', 'DELETE'):
+                    cursor.execute("SELECT has_table_privilege(%s,'public.bootstrap_probe',%s)",
+                                   (application, privilege))
+                    self.assertTrue(cursor.fetchone()[0])
+                cursor.execute("SELECT has_sequence_privilege(%s,'public.bootstrap_probe_id_seq','USAGE')",
+                               (application,))
+                self.assertTrue(cursor.fetchone()[0])
+                for table in ('schema_migrations', 'app_schema_updates', 'app_schema_update_history'):
+                    cursor.execute('SELECT has_table_privilege(%s,%s,\'INSERT\')', (application, 'public.' + table))
+                    self.assertFalse(cursor.fetchone()[0])
+                cursor.execute("SELECT has_schema_privilege(%s,'public','CREATE')", (application,))
+                self.assertTrue(cursor.fetchone()[0])
+                cursor.execute('SELECT pg_has_role(%s,%s,\'MEMBER\')', (application, runner))
+                self.assertTrue(cursor.fetchone()[0])
+        finally:
+            with self.connection, self.connection.cursor() as cursor:
+                cursor.execute('RESET ROLE')
+                cursor.execute('DROP TABLE IF EXISTS public.bootstrap_probe')
+                for role in (application, runner):
+                    cursor.execute('SELECT 1 FROM pg_roles WHERE rolname=%s', (role,))
+                    if cursor.fetchone():
+                        cursor.execute(sql.SQL('DROP OWNED BY {}').format(sql.Identifier(role)))
+                        cursor.execute(sql.SQL('DROP ROLE {}').format(sql.Identifier(role)))
+
+    def test_runtime_grants_restore_operations_without_granting_schema_or_history_writes(self):
+        with self.connection, self.connection.cursor() as cursor:
+            cursor.execute('RESET ROLE')
+            cursor.execute('GRANT CREATE ON DATABASE migrations_test TO migration_runner_test')
+            cursor.execute('SET ROLE migration_runner_test')
+        migrate(self.connection, [], 'canonical', schema_update=load_update())
+        with self.connection, self.connection.cursor() as cursor:
+            cursor.execute('CREATE TABLE public.unrelated_runtime_probe(id integer)')
+            cursor.execute('REVOKE ALL ON public.unrelated_runtime_probe FROM app')
+            cursor.execute('REVOKE ALL ON public.automation_rules, public.automation_events FROM app')
+            cursor.execute('REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM app')
+            cursor.execute('REVOKE ALL ON FUNCTION public.update_updated_at_column() FROM app, PUBLIC')
+        # The original DML repair remains immutable; shared DDL access is covered
+        # above after the administrator grants membership and the login setting.
+        migrations = load_migrations(RUNTIME_MIGRATIONS)[:1]
+        self.assertEqual(migrate(self.connection, migrations, 'restore'), len(migrations))
+        self.assertEqual(migrate(self.connection, migrations, 'repeat'), 0)
+        # The SQL itself is repeatable too, independently of the migration ledger.
+        with self.connection, self.connection.cursor() as cursor:
+            for migration in migrations:
+                execute_statements(cursor, migration.statements, migration.name)
+            cursor.execute('CREATE TABLE public.future_runtime_probe(id serial)')
+        def cleanup_probes():
+            with self.connection, self.connection.cursor() as cursor:
+                cursor.execute('RESET ROLE')
+                cursor.execute('DROP TABLE public.unrelated_runtime_probe, public.future_runtime_probe')
+        self.addCleanup(cleanup_probes)
+        for table in ('automation_rules', 'automation_events', 'inventory_warehouses',
+                      'clients', 'inventory_suppliers', 'future_runtime_probe'):
+            for privilege in ('SELECT', 'INSERT', 'UPDATE', 'DELETE'):
+                self.assertTrue(self.scalar(
+                    f"SELECT has_table_privilege('app', 'public.{table}', '{privilege}')"))
+        self.assertTrue(self.scalar("SELECT has_sequence_privilege('app', "
+                                    "'public.future_runtime_probe_id_seq', 'USAGE')"))
+        self.assertTrue(self.scalar("SELECT has_function_privilege('app', "
+                                    "'public.update_updated_at_column()', 'EXECUTE')"))
+        self.assertFalse(self.scalar("SELECT has_table_privilege('app', "
+                                     "'public.unrelated_runtime_probe', 'SELECT')"))
+        for table in ('schema_migrations', 'app_schema_updates', 'app_schema_update_history'):
+            for privilege in ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE'):
+                self.assertFalse(self.scalar(
+                    f"SELECT has_table_privilege('app', 'public.{table}', '{privilege}')"))
+        with self.connection, self.connection.cursor() as cursor:
+            cursor.execute('SET ROLE app')
+            cursor.execute('UPDATE public.automation_rules SET is_active=is_active')
+            cursor.execute("INSERT INTO public.automation_events(phase,detail) "
+                           "VALUES('permission_test','{}') RETURNING id")
+            self.assertGreater(cursor.fetchone()[0], 0)
+            cursor.execute("DELETE FROM public.automation_events WHERE phase='permission_test'")
+            cursor.execute("SELECT has_schema_privilege(current_user,'public','CREATE')")
+            self.assertFalse(cursor.fetchone()[0])
+            cursor.execute('RESET ROLE')
+            cursor.execute('SET ROLE migration_runner_test')
+
+    def test_shared_owner_migration_explains_missing_administrative_preparation(self):
+        migration = [item for item in load_migrations(RUNTIME_MIGRATIONS)
+                     if item.name.endswith('__shared_schema_owner_access.sql')]
+        with self.assertLogs('stockassistant.migrations', level='ERROR') as logs:
+            with self.assertRaisesRegex(Exception, '05-migration-permissions.sql'):
+                migrate(self.connection, migration, 'requires-admin')
+        self.assertIn('05-migration-permissions.sql as dbadmin', '\n'.join(logs.output))
+        self.assertEqual(self.scalar('SELECT count(*) FROM public.schema_migrations'), 0)
 
 
 if __name__ == "__main__":

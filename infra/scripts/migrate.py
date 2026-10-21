@@ -45,7 +45,14 @@ def execute_statements(cursor, statements, source):
         # get_type returns a SQL operation, not literals or identifiers.
         operation = sqlparse.parse(statement)[0].get_type()
         with database_phase(f"{source} statement {index}/{len(statements)} ({operation})"):
-            cursor.execute(statement)
+            try:
+                cursor.execute(statement)
+            except psycopg2.Error as exc:
+                if source.endswith('__shared_schema_owner_access.sql') and exc.pgcode == 'P0001':
+                    LOGGER.error('Shared ownership is not prepared. Execute infra/sql/'
+                                 '05-migration-permissions.sql as dbadmin in the application '
+                                 'database, reconnect app sessions and retry Deploy AWS.')
+                raise
 
 
 @dataclass(frozen=True)

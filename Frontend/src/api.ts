@@ -183,7 +183,9 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
-    if (sessionToken && (response.status === 401 || (response.status === 403 && !url.startsWith("/api/sales")))) {
+    // A forbidden action does not invalidate the authenticated session.
+    // Ignore stale failures from requests sent before a new login.
+    if (sessionToken && response.status === 401 && getSessionToken() === sessionToken) {
       clearSessionToken();
     }
     const detail = typeof parsed === "string" ? parsed : parsed === null ? "" : JSON.stringify(parsed, null, 2);
