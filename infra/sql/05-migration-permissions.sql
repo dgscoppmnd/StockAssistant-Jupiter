@@ -1,12 +1,15 @@
 -- Repair an existing installation: execute as dbadmin in stockassistant.
 -- Repeatable; no passwords, no role creation, no data changes.
 -- All grants/ownership changes roll back together if any operation fails.
--- Only the application objects listed below and their sequences are managed.
+-- Both app and migrator may change data and structure in public.
+-- Extension-owned objects and PostgreSQL system schemas are excluded.
 BEGIN;
 SET LOCAL lock_timeout = '15s';
 SET LOCAL statement_timeout = '120s';
 DO $repair_permissions$
 DECLARE
+    -- Historical inventory retained for checking coverage against the canonical
+    -- schema. Ownership reconciliation below includes ALL user objects in public.
     application_relations text[] := ARRAY[
         'agent_action_proposals', 'agent_decisions', 'app_schema_update_history',
         'app_schema_updates', 'automation_control', 'automation_events',
@@ -44,6 +47,9 @@ DECLARE
     temporary_membership boolean := false;
     previous_membership record;
     adjusted_membership boolean := false;
+    temporary_app_membership boolean := false;
+    previous_app_membership record;
+    adjusted_app_membership boolean := false;
 BEGIN
     IF current_database() <> 'stockassistant' THEN
         RAISE EXCEPTION 'Connect to stockassistant before repairing migration permissions';
@@ -80,6 +86,24 @@ BEGIN
         EXECUTE format('GRANT migrator TO %I', current_user);
         temporary_membership := true;
     END IF;
+    -- Preserve administrator access options when handling app-owned objects too.
+    IF current_setting('server_version_num')::integer >= 160000 THEN
+        IF NOT pg_has_role(current_user, 'app', 'USAGE')
+           OR NOT pg_has_role(current_user, 'app', 'SET') THEN
+            EXECUTE 'SELECT admin_option, inherit_option, set_option FROM pg_auth_members
+                     WHERE roleid = ''app''::regrole AND member = $1::regrole
+                       AND grantor = $1::regrole'
+                INTO previous_app_membership USING current_user;
+            temporary_app_membership := previous_app_membership.admin_option IS NULL;
+            EXECUTE format('GRANT app TO %I WITH INHERIT TRUE, SET TRUE GRANTED BY %I',
+                           current_user, current_user);
+            adjusted_app_membership := true;
+        END IF;
+    ELSIF NOT pg_has_role(current_user, 'app', 'MEMBER') THEN
+        EXECUTE format('GRANT app TO %I', current_user);
+        temporary_app_membership := true;
+    END IF;
+
     GRANT CONNECT ON DATABASE stockassistant TO migrator, app;
     REVOKE CREATE ON SCHEMA public FROM PUBLIC, app;
     GRANT USAGE, CREATE ON SCHEMA public TO migrator;
@@ -93,25 +117,17 @@ BEGIN
 
     SELECT coalesce(array_agg(c.oid), ARRAY[]::oid[]) INTO relation_oids
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = 'public' AND c.relname = ANY(application_relations)
+    WHERE n.nspname = 'public'
       AND c.relkind IN ('r', 'p', 'v', 'm')
       AND NOT EXISTS (SELECT FROM pg_depend d WHERE d.classid = 'pg_class'::regclass
                       AND d.objid = c.oid AND d.deptype = 'e');
 
-    -- Include both serial/identity sequences and sequences referenced by a
-    -- column default, without touching unrelated sequences in public.
+    -- Include existing standalone sequences as well as serial/identity sequences.
     SELECT coalesce(array_agg(c.oid), ARRAY[]::oid[]) INTO sequence_oids
     FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = 'public' AND c.relkind = 'S'
       AND NOT EXISTS (SELECT FROM pg_depend d WHERE d.classid = 'pg_class'::regclass
-                      AND d.objid = c.oid AND d.deptype = 'e')
-      AND (EXISTS (SELECT FROM pg_depend d WHERE d.classid = 'pg_class'::regclass
-                    AND d.objid = c.oid AND d.refclassid = 'pg_class'::regclass
-                    AND d.refobjid = ANY(relation_oids) AND d.deptype IN ('a', 'i'))
-           OR EXISTS (SELECT FROM pg_depend d JOIN pg_attrdef a ON a.oid = d.objid
-                       WHERE d.classid = 'pg_attrdef'::regclass
-                         AND d.refclassid = 'pg_class'::regclass AND d.refobjid = c.oid
-                         AND a.adrelid = ANY(relation_oids)));
+                      AND d.objid = c.oid AND d.deptype = 'e');
 
     FOR object IN
         SELECT c.oid, c.relname, c.relkind FROM pg_class c
@@ -153,12 +169,58 @@ BEGIN
         END LOOP;
     END LOOP;
 
+    -- Include user-defined routines beyond the original application inventory.
+    FOR object IN
+        SELECT p.oid::regprocedure AS signature, p.prokind
+        FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname='public' AND p.prokind IN ('f','p','w')
+          AND NOT EXISTS (SELECT FROM pg_depend d WHERE d.classid='pg_proc'::regclass
+                          AND d.objid=p.oid AND d.deptype='e')
+    LOOP
+        EXECUTE format('ALTER %s %s OWNER TO migrator',
+            CASE WHEN object.prokind='p' THEN 'PROCEDURE' ELSE 'FUNCTION' END, object.signature);
+    END LOOP;
+    FOR object IN
+        SELECT t.typname,t.typtype FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace
+        WHERE n.nspname='public' AND t.typtype IN ('e','d')
+          AND NOT EXISTS (SELECT FROM pg_depend d WHERE d.classid='pg_type'::regclass
+                          AND d.objid=t.oid AND d.deptype='e')
+    LOOP
+        EXECUTE format('ALTER %s public.%I OWNER TO migrator',
+            CASE WHEN object.typtype='d' THEN 'DOMAIN' ELSE 'TYPE' END, object.typname);
+    END LOOP;
+
+    -- Login as app, act as the common owner. No reciprocal role membership is needed.
+    -- Owner authority intentionally includes the schema/migration history tables;
+    -- direct REVOKE statements above cannot restrict inherited owner privileges.
+    IF current_setting('server_version_num')::integer >= 160000 THEN
+        EXECUTE 'GRANT migrator TO app WITH INHERIT TRUE, SET TRUE';
+    ELSE
+        ALTER ROLE app INHERIT;
+        GRANT migrator TO app;
+    END IF;
+    ALTER ROLE app IN DATABASE stockassistant SET role TO 'migrator';
+
     ALTER DEFAULT PRIVILEGES FOR ROLE migrator IN SCHEMA public
         GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app;
     ALTER DEFAULT PRIVILEGES FOR ROLE migrator IN SCHEMA public
         GRANT USAGE, SELECT ON SEQUENCES TO app;
     ALTER DEFAULT PRIVILEGES FOR ROLE migrator IN SCHEMA public
         GRANT EXECUTE ON FUNCTIONS TO app;
+
+    IF adjusted_app_membership THEN
+        IF temporary_app_membership THEN
+            EXECUTE format('REVOKE app FROM %I GRANTED BY %I', current_user, current_user);
+        ELSE
+            EXECUTE format('GRANT app TO %I WITH ADMIN %s, INHERIT %s, SET %s GRANTED BY %I',
+                           current_user,
+                           CASE WHEN previous_app_membership.admin_option THEN 'TRUE' ELSE 'FALSE' END,
+                           CASE WHEN previous_app_membership.inherit_option THEN 'TRUE' ELSE 'FALSE' END,
+                           CASE WHEN previous_app_membership.set_option THEN 'TRUE' ELSE 'FALSE' END, current_user);
+        END IF;
+    ELSIF temporary_app_membership THEN
+        EXECUTE format('REVOKE app FROM %I', current_user);
+    END IF;
 
     IF adjusted_membership THEN
         IF temporary_membership THEN

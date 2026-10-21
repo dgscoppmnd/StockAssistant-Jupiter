@@ -7,6 +7,7 @@ on:
       - "BackEnd/apps/MonoliticDataStructure/app/**"
       - "Frontend/**"
       - "infra/sql/migrations/**"
+      - "infra/sql/01-roles.sql"
       - "infra/sql/05-migration-permissions.sql"
       - "infra/scripts/migrate.py"
       - "infra/scripts/requirements-migrations.txt"
@@ -58,6 +59,7 @@ jobs:
             backend:
               - "BackEnd/apps/MonoliticDataStructure/app/**"
               - "infra/sql/migrations/**"
+              - "infra/sql/01-roles.sql"
               - "infra/sql/05-migration-permissions.sql"
               - "infra/scripts/migrate.py"
               - "infra/scripts/requirements-migrations.txt"
@@ -234,6 +236,9 @@ jobs:
 
       - name: Comprobar tipos
         run: npx --no-install tsc --noEmit
+
+      - name: Comprobar sesion y permisos HTTP
+        run: node --test tests/api-session.test.mjs
 
       - name: Build (Google client id público desde SSM)
         run: |

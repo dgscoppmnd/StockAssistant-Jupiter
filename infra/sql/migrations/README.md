@@ -11,6 +11,49 @@ versiones existentes/aplicadas. La descripcion usa minusculas ASCII y guiones
 bajos. Resolver colisiones y orden en el PR antes de integrar en `master`.
 El nombre anterior es un ejemplo: no existe una migracion inicial de prueba.
 
+## Datos y estructura para app y migrator (21 de octubre de 2026)
+
+Ambos roles pueden modificar datos y estructura de los objetos de usuario del
+esquema `public`. El propietario comun es `migrator`: `app` hereda ese rol y
+sus conexiones nuevas usan automaticamente `role=migrator`. De esta forma,
+los objetos futuros creados desde cualquiera de los dos logins pertenecen al
+mismo propietario y ambos pueden ejecutar ALTER, crear indices y reemplazar
+funciones. Un GRANT de DML por si solo no concede estos derechos de propietario.
+No se concede superusuario, CREATEROLE ni acceso a objetos del sistema.
+
+Antes del siguiente Deploy AWS hay que ejecutar una vez, como `dbadmin` en
+`stockassistant`, [05-migration-permissions.sql](../05-migration-permissions.sql).
+Reconciliara los objetos existentes de `public`, incluidas tablas, vistas,
+secuencias, funciones, procedimientos, enumeraciones y dominios. Excluye los
+objetos pertenecientes a extensiones. Configura la pertenencia de `app`, su rol
+efectivo de conexion y los privilegios futuros. Es transaccional y repetible.
+Las conexiones de `app` que ya estuvieran abiertas deben reconectarse.
+Los objetos nuevos deben crearse en `public` y conservar el rol efectivo;
+un RESET ROLE explicito puede volver a crear objetos propiedad de `app`.
+
+El CD actual solo dispone de la credencial `migrator`, sin capacidad para
+administrar roles. Por eso no puede ejecutar esa preparacion automaticamente.
+`V20261021130000__shared_schema_owner_access.sql` comprueba que este preparada
+y concede privilegios sobre objetos actuales y futuros durante el siguiente
+Deploy AWS (`all`, `backend` o `migrations`). Si falta la preparacion, devuelve
+un error que indica el archivo administrativo necesario. La migracion anterior
+`V20261021120000__restore_app_runtime_permissions.sql` se conserva sin cambios.
+Para nuevas instalaciones se configura el mismo modelo desde `01-roles.sql`.
+
+Con ambos roles capaces de alterar estructura, `app` tambien puede modificar
+los historiales tecnicos por sus derechos heredados de propietario. Los REVOKE
+sobre permisos directos no eliminan esa autoridad. Este modelo sustituye la
+separacion anterior entre el rol operativo y el de migraciones.
+
+Los privilegios PostgreSQL siguen siendo distintos de
+`public.users.automation_permissions`: activar una regla requiere tambien una
+sesion web cuyo usuario tenga `activate`. No se amplian permisos de usuarios web.
+
+Validacion: pruebas de migraciones con PostgreSQL, incluidas conexiones reales
+como `app` y ALTER de objetos creados por el otro login. Recuperacion: una nueva
+migracion administrativa que retire la pertenencia de `app` y restablezca su rol
+de conexion, seguida de reconexion; no editar versiones ya aplicadas.
+
 ## Flujo del desarrollador
 
 1. Actualizar el esquema canonico en
@@ -99,10 +142,9 @@ No trasladar los historicos aqui sin revisar que efectos repetirian.
   `stockassistant`, [05-migration-permissions.sql](../05-migration-permissions.sql).
   Se puede repetir: instala las extensiones, transfiere a `migrator` las tablas,
   vistas, funciones y secuencias del esquema de la aplicacion y concede a `app`
-  DML y uso de secuencias sobre objetos existentes y futuros. Las tablas de
-  historial quedan protegidas. El listado de objetos es explicito: actualizarlo
-  si se agregan objetos canonicos que deban repararse en instalaciones antiguas.
-  No cambia contrasenas, no crea roles ni concede roles administrativos a `app`.
+  derechos de datos y estructura sobre objetos existentes y futuros.
+  El recorrido incluye todos los objetos de usuario de public y excluye extensiones.
+  No cambia contrasenas ni concede superusuario o CREATEROLE a `app`.
   La pertenencia temporal del ejecutor a `migrator` se retira solo si el propio
   script la agrego. Las pertenencias previas se conservan.
 - `init.sql` usa extensiones `uuid-ossp`, `pgcrypto` y `pg_trgm`: deben existir
@@ -154,4 +196,5 @@ un bloque `DO`; el indice identifica el bloque completo, no su sentencia interna
 
 No volver a ejecutar `01-roles.sql` completo para reparar una instalacion:
 sus instrucciones `CREATE ROLE` presuponen que los roles no existen todavia.
-No conceder `dbadmin`, superusuario ni pertenencia a `migrator` al usuario `app`.
+No conceder `dbadmin`, superusuario ni CREATEROLE al usuario `app`.
+La pertenencia de `app` a `migrator` es intencional para permitir DDL a ambos roles.
