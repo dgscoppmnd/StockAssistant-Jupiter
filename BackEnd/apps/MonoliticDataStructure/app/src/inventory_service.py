@@ -414,17 +414,30 @@ class InventoryService:
     def priority_purchase_rows(self):
         """Shared source for dashboard priorities and default automation products."""
         return self._fetchall('''
-            SELECT s.product_id, p.name_product AS product_name, p.cdgo_producto_externo AS product_code,
-                   s.warehouse_id, w.name AS warehouse_name,
-                   s.physical_qty, s.reserved_qty, (s.physical_qty-s.reserved_qty) AS available_qty,
+            WITH demand AS (
+                SELECT l.product_id,o.warehouse_id,SUM(GREATEST(l.pending_qty-l.reserved_qty,0)) AS unreserved
+                FROM public.sales_order_lines l JOIN public.sales_orders o ON o.id=l.sales_order_id
+                WHERE o.status IN ('borrador','confirmado','parcial') AND l.pending_qty>0
+                GROUP BY l.product_id,o.warehouse_id
+            ), entities AS (
+                SELECT product_id,warehouse_id FROM public.inventory_stock_levels
+                UNION SELECT product_id,warehouse_id FROM demand
+            )
+            SELECT e.product_id, p.name_product AS product_name, p.cdgo_producto_externo AS product_code,
+                   e.warehouse_id, w.name AS warehouse_name,
+                   COALESCE(s.physical_qty,0) AS physical_qty, COALESCE(s.reserved_qty,0) AS reserved_qty,
+                   COALESCE(s.physical_qty-s.reserved_qty,0) AS available_qty,
                    c.reorder_point, c.reorder_quantity, u.code AS base_unit_code
-            FROM public.inventory_stock_levels s JOIN public.productos p ON p.pk_product=s.product_id
-            JOIN public.inventory_warehouses w ON w.id=s.warehouse_id
-            JOIN public.product_inventory_config c ON c.product_id=s.product_id
+            FROM entities e LEFT JOIN public.inventory_stock_levels s
+              ON s.product_id=e.product_id AND s.warehouse_id=e.warehouse_id
+            LEFT JOIN demand d ON d.product_id=e.product_id AND d.warehouse_id=e.warehouse_id
+            JOIN public.productos p ON p.pk_product=e.product_id
+            JOIN public.inventory_warehouses w ON w.id=e.warehouse_id
+            JOIN public.product_inventory_config c ON c.product_id=e.product_id
             JOIN public.inventory_units u ON u.id=c.base_unit_id
-            WHERE (s.physical_qty-s.reserved_qty)<=c.reorder_point
-            ORDER BY ((s.physical_qty-s.reserved_qty)-c.reorder_point) ASC, p.name_product ASC,
-                     s.product_id,s.warehouse_id LIMIT 12''')
+            WHERE COALESCE(s.physical_qty-s.reserved_qty,0)-COALESCE(d.unreserved,0)<=c.reorder_point
+            ORDER BY (COALESCE(s.physical_qty-s.reserved_qty,0)-COALESCE(d.unreserved,0)-c.reorder_point) ASC,
+                     p.name_product ASC,e.product_id,e.warehouse_id LIMIT 12''')
 
     def get_executive_dashboard(self, period_days: int = 30) -> dict[str, Any]:
         """Return auditable operational indicators without fabricating unavailable supplier data."""

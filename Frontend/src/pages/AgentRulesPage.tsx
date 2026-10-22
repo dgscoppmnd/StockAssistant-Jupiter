@@ -15,7 +15,7 @@ const hydrateScopeProducts=(ids:number[])=>automationRequest<ScopeOption[]>(`/sc
 function RuleScopeSummary({rule,defaults}:{rule:Rule;defaults:ScopeDefaults}){
   const products=(rule.config?.product_ids as number[] | undefined)??[],warehouses=(rule.config?.warehouse_ids as number[] | undefined)??[];
   return <p className="muted">Productos: {products.length?products.join(', '):`Compras prioritarias (${defaults.product_ids.join(', ')||'sin referencias actuales'})`}
-    {' · '}Almacenes: {warehouses.length?warehouses.join(', '):`Primer almacén activo (${defaults.warehouse_ids.join(', ')||'no disponible'})`}</p>;
+    {' · '}Almacenes: {warehouses.length?warehouses.join(', '):`Almacén activo con más existencias (${defaults.warehouse_ids.join(', ')||'no disponible'})`}</p>;
 }
 
 type Condition = {field: string; operator: string; value: string};
@@ -73,10 +73,10 @@ export default function AgentRulesPage() {
     return {...config,product_ids:parseScopeIds(productScope),warehouse_ids:parseScopeIds(warehouseScope)};
   };
   const load = async () => {const [r,c,o,d] = await Promise.all([automationRequest<Rule[]>('/rules'),automationRequest<{permissions:string[]}>('/control'),automationRequest<Record<string,string[]>>('/objectives'),automationRequest<ScopeDefaults>('/scope-defaults')]);setRules(r);setPermissions(c.permissions);setObjectives(o);setDefaults(d);return d;};
-  useEffect(() => {void load().then(d=>{setProductScope(value=>value||d.product_ids.join(','));setWarehouseScope(value=>value||d.warehouse_ids.join(','));setStatus('Reglas sincronizadas');}).catch(e => {setError(String(e));setStatus('No se pudieron sincronizar las reglas');}).finally(() => setLoading(false));},[]);
+  useEffect(() => {void load().then(()=>{setStatus('Reglas sincronizadas');}).catch(e => {setError(String(e));setStatus('No se pudieron sincronizar las reglas');}).finally(() => setLoading(false));},[]);
   const edit = async (r: Rule | null) => {
     const products=(r?.config?.product_ids as number[] | undefined)??[],warehouseIds=(r?.config?.warehouse_ids as number[] | undefined)??[];
-    setProductScope((products.length?products:defaults.product_ids).join(','));setWarehouseScope((warehouseIds.length?warehouseIds:defaults.warehouse_ids).join(','));
+    setProductScope(products.join(','));setWarehouseScope(warehouseIds.join(','));
     setSelected(r);setName(r?.name ?? '');setDescription(r?.description ?? '');setReason('');setSimulation(null);setError('');
     const kind = r?.code ?? initial.kind;
     setConfig(r?.config ? {...initial,...r.config} as Config : {...initial,kind,objective:objectives[kind]?.[0] ?? initial.objective});
@@ -127,7 +127,7 @@ export default function AgentRulesPage() {
             <fieldset className="rules-form-section"><legend><span>02</span>Alcance y programación</legend><div className="agent-fields">
               <RuleScopePicker label="Productos (IDs separados por comas)" hint="Vacío = productos de Compras prioritarias" value={productScope} onChange={value=>{setProductScope(value);setSimulation(null);}}
                 loadOptions={loadScopeProducts} hydrateOptions={hydrateScopeProducts} initialOptions={defaults.products} />
-              <RuleScopePicker label="Almacenes (IDs separados por comas)" hint="Vacío = primer almacén activo de la empresa (menor ID)" value={warehouseScope} onChange={value=>{setWarehouseScope(value);setSimulation(null);}}
+              <RuleScopePicker label="Almacenes (IDs separados por comas)" hint="Vacío = almacén activo con más existencias físicas totales (en empate, menor ID)" value={warehouseScope} onChange={value=>{setWarehouseScope(value);setSimulation(null);}}
                 loadOptions={loadWarehouses} hydrateOptions={hydrateWarehouses} initialOptions={warehouses} minQueryLength={1} />
               <label>Zona horaria<input required value={config.timezone} onChange={e=>change({timezone:e.target.value})}/></label>
               {numericFields(['interval_minutes','window_start_hour','window_end_hour','expires_hours','cooldown_hours','review_days'])}

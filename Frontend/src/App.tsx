@@ -57,20 +57,6 @@ const groups: MenuGroup[] = [
     ],
   },
   {
-    key: "jupiter",
-    label: "Proyecto Jupiter",
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 3 4 7v5c0 5.2 3.4 8.8 8 10 4.6-1.2 8-4.8 8-10V7l-8-4Zm0 3.3 4.7 2.3v3.2c0 3.5-2 6.1-4.7 7.2-2.7-1.1-4.7-3.7-4.7-7.2V8.6L12 6.3Zm-2 3.2h4c1.1 0 2 .9 2 2v1c0 .7-.3 1.3-.8 1.7l.8 2.3h-2.3l-.6-1.7h-2.2v1.7H8V11.5c0-1.1.9-2 2-2Zm0 2v1.3h4v-1.3h-4Z" fill="currentColor" />
-      </svg>
-    ),
-    children: [
-      { to: "/jupiter", label: "Chat OpenAI + Ollama" },
-      { to: "/rag", label: "Asistente RAG" },
-      { to: "/chat", label: "Chat con memoria" },
-    ]
-  },
-  {
     key: "products",
     label: "Productos",
     icon: (
@@ -84,6 +70,20 @@ const groups: MenuGroup[] = [
       { to: "/inventario/pedidos", label: "Pedidos de stock" }
     ]
   },  
+  {
+    key: "jupiter",
+    label: "Consultas",
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3 4 7v5c0 5.2 3.4 8.8 8 10 4.6-1.2 8-4.8 8-10V7l-8-4Zm0 3.3 4.7 2.3v3.2c0 3.5-2 6.1-4.7 7.2-2.7-1.1-4.7-3.7-4.7-7.2V8.6L12 6.3Zm-2 3.2h4c1.1 0 2 .9 2 2v1c0 .7-.3 1.3-.8 1.7l.8 2.3h-2.3l-.6-1.7h-2.2v1.7H8V11.5c0-1.1.9-2 2-2Zm0 2v1.3h4v-1.3h-4Z" fill="currentColor" />
+      </svg>
+    ),
+    children: [
+      { to: "/jupiter", label: "Chat OpenAI/ Ollama" },
+      { to: "/rag", label: "Asistente RAG" },
+      { to: "/chat", label: "Chat con memoria" },
+    ]
+  },
   {
     key: "config",
     label: "Configuracion",
@@ -103,7 +103,6 @@ const groups: MenuGroup[] = [
       { to: "/maestros/conversiones", label: "Conversiones de unidad" },
       { to: "/maestros/conocimiento", label: "Base de conocimiento" },
       { to: "/users", label: "Usuarios" },      
-      { to: "/setup", label: "Configuracion de stockassistant" },
       { to: "/configuracion", label: "Estado de integraciones" },
     ]
   }
@@ -244,7 +243,6 @@ function PortalShell({
             <Route path="/inventario/pedidos" element={<StockOrdersPage />} />
             <Route path="/configuracion" element={<ConfigPage />} />
             <Route path="/rag" element={<RagChat />} />
-            <Route path="/setup" element={<ConfigPage />} />
             <Route path="/maestros/unidades" element={<MasterDataPage resource="units" />} />
             <Route path="/maestros/monedas" element={<MasterDataPage resource="currencies" />} />
             <Route path="/maestros/bodegas" element={<MasterDataPage resource="warehouses" />} />
