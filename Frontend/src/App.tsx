@@ -103,7 +103,6 @@ const groups: MenuGroup[] = [
       { to: "/maestros/conversiones", label: "Conversiones de unidad" },
       { to: "/maestros/conocimiento", label: "Base de conocimiento" },
       { to: "/users", label: "Usuarios" },      
-      { to: "/setup", label: "Configuracion de stockassistant" },
       { to: "/configuracion", label: "Estado de integraciones" },
     ]
   }
@@ -244,7 +243,6 @@ function PortalShell({
             <Route path="/inventario/pedidos" element={<StockOrdersPage />} />
             <Route path="/configuracion" element={<ConfigPage />} />
             <Route path="/rag" element={<RagChat />} />
-            <Route path="/setup" element={<ConfigPage />} />
             <Route path="/maestros/unidades" element={<MasterDataPage resource="units" />} />
             <Route path="/maestros/monedas" element={<MasterDataPage resource="currencies" />} />
             <Route path="/maestros/bodegas" element={<MasterDataPage resource="warehouses" />} />
