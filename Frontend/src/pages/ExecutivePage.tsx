@@ -9,6 +9,18 @@ import ExecutiveRoutingInfo from "./components/ExecutiveRoutingInfo";
 import ExecutiveAutomationInfo from "./components/ExecutiveAutomationInfo";
 import ExecutiveRunsInfo from "./components/ExecutiveRunsInfo";
 
+const quantityFormatter = new Intl.NumberFormat("es-ES", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+function formatProposalJustification(justification: string): string {
+  return justification.replace(
+    /(Ventas pendientes sin cobertura:\s*)([+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)(?=\s|;|$)/g,
+    (_, label: string, quantity: string) => `${label}${quantityFormatter.format(Number(quantity))}`,
+  );
+}
+
 export default function ExecutivePage() {
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [runs, setRuns] = useState<AutomationRun[]>([]);
@@ -111,7 +123,7 @@ const query = async (event: FormEvent<HTMLFormElement>) => {
     <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(answer.result, null, 2)}</pre>
   </details>
 </div>}</article>
-      <article className="card"><p className="section-label">Propuestas de compra</p><h3><SectionIcon kind="approval" />Aprobación humana obligatoria</h3><div className="inventory-list">{proposals.map((proposal) => <div className="inventory-list-item" key={`${proposal.source ?? "legacy"}-${proposal.id}`}><strong>{proposal.product_name}</strong><span>{proposal.suggested_qty} {proposal.base_unit_code} · {proposal.warehouse_name}</span><small>{proposal.status}: {proposal.justification}</small></div>)}{!proposals.length && <p className="muted">No hay propuestas pendientes.</p>}</div></article></section>
+      <article className="card"><p className="section-label">Propuestas de compra</p><h3><SectionIcon kind="approval" />Aprobación humana obligatoria</h3><div className="inventory-list">{proposals.map((proposal) => <div className="inventory-list-item" key={`${proposal.source ?? "legacy"}-${proposal.id}`}><strong>{proposal.product_name}</strong><span>{quantityFormatter.format(Number(proposal.suggested_qty))} {proposal.base_unit_code} · {proposal.warehouse_name}</span><small>{proposal.status}: {formatProposalJustification(proposal.justification)}</small></div>)}{!proposals.length && <p className="muted">No hay propuestas pendientes.</p>}</div></article></section>
     <section className="card"><p className="section-label">Automatizaciones del backend</p><div className="routing-info-heading"><h3><SectionIcon kind="automation" />Activar, ejecutar y auditar</h3><ExecutiveAutomationInfo /></div><div className="inventory-table">{rules.map((rule) => <div className="inventory-table-row executive-rule" key={rule.id}><span><strong>{rule.name}</strong><small>{rule.description}</small></span><span>{rule.is_active ? "Activa" : "Pausada"}</span><span><button className="chip-btn" onClick={() => void toggle(rule)} type="button">{rule.is_active ? "Pausar" : "Activar"}</button><button className="primary-btn" onClick={() => void run(rule.id)} type="button">Ejecutar</button></span></div>)}</div></section>
     <section className="card"><p className="section-label">Auditoría</p><div className="routing-info-heading"><h3><SectionIcon kind="audit" />Últimas ejecuciones</h3><ExecutiveRunsInfo /></div><div className="inventory-table">{runs.map((run) => <div className="inventory-table-row" key={run.id}><span>{run.rule_code}</span><span>{run.status}</span><span>{new Date(run.started_at).toLocaleString()}</span></div>)}{!runs.length && <p className="muted">Aún no hay ejecuciones auditadas.</p>}</div></section>
   </div>;

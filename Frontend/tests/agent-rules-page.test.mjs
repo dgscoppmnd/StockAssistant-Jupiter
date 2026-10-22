@@ -13,7 +13,7 @@ const compile=path=>ts.transpileModule(readFileSync(new URL(path,import.meta.url
 const objectives={stock_reorder_proposals:['Reducir roturas manteniendo cobertura y capital'],daily_inventory_report:['Resumen diario permitido']};
 const defaults={product_ids:[100],warehouse_ids:[1],products:[{id:100,name:'Producto'}],warehouses:[{id:1,name:'Central',is_active:true}]};
 function harness(){
-  const states=[],effects=[],calls=[];
+  const states=[],effects=[],calls=[],requests=[];
   let index=0;
   const module={exports:{}};
   const loader=name=>{
@@ -22,15 +22,16 @@ function harness(){
       return [states[key],value=>{states[key]=typeof value==='function'?value(states[key]):value;}];
     }};
     if(name==='react-router-dom')return {Link:props=>React.createElement('a',{href:props.to},props.children)};
-    if(name==='../api')return {automationRequest:async path=>{
-      calls.push(path);return {'/rules':[], '/control':{permissions:['edit']},'/objectives':objectives,'/scope-defaults':defaults}[path];
+    if(name==='../api')return {automationRequest:async(path,method,body)=>{
+      requests.push({path,method,body});
+      calls.push(path);return {'/rules':[], '/control':{permissions:['edit']},'/objectives':objectives,'/scope-defaults':defaults,'/rules/7/versions':[],'/simulate':{}}[path];
     }};
     if(name==='./components/RuleScopePicker')return {default:props=>React.createElement('div',{'data-scope':props.label},props.hint)};
     if(name==='../utils/ruleScope')return {parseScopeIds:text=>text?text.split(',').map(Number):[]};
     return require(name);
   };
-  vm.runInNewContext(`(function(require,module,exports){${compile('../src/pages/AgentRulesPage.tsx')}\n})`)(loader,module,module.exports);
-  return {states,effects,calls,render:()=>{index=0;return module.exports.default();}};
+  vm.runInNewContext(`(function(require,module,exports){${compile('../src/pages/AgentRulesPage.tsx')}\n})`,{window:{matchMedia:()=>({matches:false})}})(loader,module,module.exports);
+  return {states,effects,calls,requests,render:()=>{index=0;return module.exports.default();}};
 }
 const nodes=element=>!element||typeof element!=='object'?[]:[element,...React.Children.toArray(element.props?.children).flatMap(nodes)];
 
@@ -38,13 +39,36 @@ test('merged workspace loads objective catalog and scope defaults and completes 
   const view=harness();view.render();view.effects[0]();
   await new Promise(resolve=>setImmediate(resolve));
   assert.deepEqual([...view.calls],['/rules','/control','/objectives','/scope-defaults']);
-  assert.equal(view.states[14],'100');assert.equal(view.states[15],'1');assert.equal(view.states[16],false);
+  assert.equal(view.states[14],'');assert.equal(view.states[15],'');assert.equal(view.states[16],false);
   const html=renderToStaticMarkup(view.render());
   assert.match(html,/rules-workspace/);assert.match(html,/rules-layout/);
   assert.match(html,/Selecciona un objetivo dentro del alcance/);
-  assert.match(html,/Compras prioritarias/);assert.match(html,/primer almacén activo/);
+  assert.match(html,/Compras prioritarias/);assert.match(html,/almacén activo con más existencias/);
   assert.match(html,/Permitir análisis con IA/);
   assert.doesNotMatch(html,/Vacío incluye todos|Máximo de herramientas|Máximo de llamadas IA/);
+});
+
+test('editing and creating rules preserve empty scopes instead of copying current defaults',async()=>{
+  const view=harness();view.render();view.effects[0]();
+  await new Promise(resolve=>setImmediate(resolve));
+  const rule={id:7,name:'Dinámica',code:'stock_reorder_proposals',current_version:1,config:{product_ids:[],warehouse_ids:[]}};
+  view.states[0]=[rule];
+  const editButton=nodes(view.render()).find(node=>node.type==='button'&&node.props.children==='Editar regla');
+    await editButton.props.onClick();
+    assert.equal(view.states[14],'');assert.equal(view.states[15],'');
+    const pickers=nodes(view.render()).filter(node=>node.props?.loadOptions);
+    pickers[0].props.onChange('100');pickers[1].props.onChange('1');
+    const updated=nodes(view.render()).filter(node=>node.props?.loadOptions);
+    updated[0].props.onChange('');updated[1].props.onChange('');
+    assert.equal(view.states[14],'');assert.equal(view.states[15],'');
+    const simulate=nodes(view.render()).find(node=>node.type==='button'&&node.props.children==='Validar y simular');
+    simulate.props.onClick();
+    await new Promise(resolve=>setImmediate(resolve));
+    const request=view.requests.find(request=>request.path==='/simulate');
+    assert.equal(request.body.product_ids.length,0);assert.equal(request.body.warehouse_ids.length,0);
+    const createButton=nodes(view.render()).find(node=>node.type==='button'&&renderToStaticMarkup(node).includes('Nueva'));
+    await createButton.props.onClick();
+    assert.equal(view.states[14],'');assert.equal(view.states[15],'');
 });
 
 test('changing rule type preserves report restrictions inside the redesigned form',()=>{
