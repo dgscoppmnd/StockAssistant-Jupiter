@@ -126,6 +126,36 @@ class ContractTests(unittest.TestCase):
         qty = replenishment(sample(), RuleConfig(target_days=30, minimum_order=10, order_multiple=5))
         self.assertEqual(qty, Decimal(25))
 
+    def test_pending_sales_create_need_without_dispatch_history_or_reorder_threshold(self):
+        row = {**sample(), 'physical_qty': 0, 'reserved_qty': 0, 'pending': 0,
+               'sold_90': 0, 'reorder_point': 0, 'reorder_quantity': 0, 'sales_unreserved': 13}
+        scenario = AutomationService.compare(row, [row], RuleConfig())
+        self.assertTrue(scenario['relevant'])
+        self.assertEqual(replenishment(row, RuleConfig()), Decimal(13))
+        with patch('automation_service.generate_ai') as generate:
+            choices, meta = AutomationService(None).choose([scenario], RuleConfig(max_model_calls=0), lambda *_: None)
+        generate.assert_not_called()
+        self.assertEqual(choices[0].action, 'replenish')
+        self.assertEqual(meta['strategy'], 'uncovered_sales')
+
+    def test_pending_sales_do_not_double_count_reservations_or_incoming_purchases(self):
+        row = {**sample(), 'physical_qty': 12, 'reserved_qty': 12, 'pending': 0,
+               'sold_90': 0, 'reorder_point': 0, 'reorder_quantity': 0, 'sales_unreserved': 1}
+        self.assertEqual(replenishment(row, RuleConfig()), Decimal(1))
+        row['pending'] = 1
+        self.assertEqual(replenishment(row, RuleConfig()), Decimal(0))
+        self.assertFalse(AutomationService.compare(row, [row], RuleConfig())['relevant'])
+        row.update(physical_qty=0, reserved_qty=12, sales_unreserved=1, pending=3)
+        self.assertEqual(replenishment(row, RuleConfig()), Decimal(10))
+
+    def test_sales_proposal_survives_provider_failure_for_other_entities(self):
+        row = {**sample(), 'sales_unreserved': 10}
+        other = {**sample(), 'warehouse_id': 2}
+        scenarios = [AutomationService.compare(r, [row, other], RuleConfig()) for r in [row, other]]
+        with patch('automation_service.generate_ai', side_effect=ValueError('Proveedor no disponible')):
+            choices, _ = AutomationService(None).choose(scenarios, RuleConfig(), lambda *_: None)
+        self.assertEqual([(c.warehouse_id, c.action) for c in choices], [(1, 'replenish')])
+
     def test_no_demand_anywhere_offers_wait_no_speculative_transfer(self):
         row = sample(); row.update(sold_90=0,last_sale=None)
         result = AutomationService.compare(row, [row], RuleConfig(kind='stagnant_stock'))
@@ -258,6 +288,48 @@ class DatabaseTests(unittest.TestCase):
         return patch('automation_service.generate_ai',return_value=dict(response=json.dumps(dict(
             choices=[dict(product_id=self.pid,warehouse_id=1,action=action,reason='Comparación de alternativas verificadas')],finish_reason='Proponer acción')),
             provider='double',model='test',used_fallback=False))
+
+    def test_sales_without_stock_row_are_in_default_scope_and_proposed_without_ai(self):
+        self.s._write('DELETE FROM public.inventory_stock_levels WHERE product_id=%s', (self.pid,))
+        self.s._write('UPDATE public.product_inventory_config SET reorder_point=0,reorder_quantity=0 WHERE product_id=%s', (self.pid,))
+        order = self.s._one('''INSERT INTO public.sales_orders(customer_name,warehouse_id,sales_order_number,user_name)
+            VALUES('Cliente prueba',1,'SALES-NEED','tester') RETURNING id''')['id']
+        self.s._write('''INSERT INTO public.sales_order_lines(sales_order_id,product_id,requested_qty,pending_qty,
+            base_unit_id,currency_id,currency_code,exchange_rate_date)
+            SELECT %s,%s,13,13,c.base_unit_id,u.id,'EUR',CURRENT_DATE
+            FROM public.product_inventory_config c CROSS JOIN public.inventory_currencies u
+            WHERE c.product_id=%s AND u.iso_code='EUR' ''', (order,self.pid,self.pid))
+        self.c.commit()
+        self.assertIn(self.pid,self.s.scope_defaults()['product_ids'])
+        row = self.s.snapshots(RuleConfig(product_ids=[self.pid],warehouse_ids=[1]))[0]
+        self.assertEqual(row['physical_qty'],0)
+        self.assertEqual(row['sales_unreserved'],13)
+        with patch('automation_service.generate_ai') as generate:
+            result = self.s.run_rule(self.rid)
+        generate.assert_not_called()
+        self.assertEqual(len(result['result']['proposals']),1)
+        proposal = self.s.action_proposals()[0]
+        self.assertEqual(proposal['status'],'pending_approval')
+        self.assertEqual(Decimal(proposal['plan']['action']['quantity']),13)
+        self.s.decide(proposal['id'], True, 'Revisar necesidad pendiente', 'tester')
+        self.s._write("UPDATE public.sales_orders SET status='cancelado' WHERE id=%s", (order,))
+        self.c.commit()
+        self.assertEqual(self.s.snapshots(RuleConfig(product_ids=[self.pid],warehouse_ids=[1])),[])
+        with self.assertRaisesRegex(ValueError, 'datos cambiaron'):
+            self.s.revalidate(proposal)
+
+    def test_sales_snapshot_counts_unreserved_quantity_once_and_ignores_closed_orders(self):
+        for state in ('borrador','confirmado','parcial','cancelado','completado'):
+            order = self.s._one('''INSERT INTO public.sales_orders(customer_name,warehouse_id,sales_order_number,user_name,status)
+                VALUES('Cliente prueba',1,%s,'tester',%s) RETURNING id''', ('NEED-'+state,state))['id']
+            self.s._write('''INSERT INTO public.sales_order_lines(sales_order_id,product_id,requested_qty,pending_qty,reserved_qty,
+                base_unit_id,currency_id,currency_code,exchange_rate_date)
+                SELECT %s,%s,13,13,12,c.base_unit_id,u.id,'EUR',CURRENT_DATE
+                FROM public.product_inventory_config c CROSS JOIN public.inventory_currencies u
+                WHERE c.product_id=%s AND u.iso_code='EUR' ''', (order,self.pid,self.pid))
+        self.c.commit()
+        row = self.s.snapshots(RuleConfig(product_ids=[self.pid],warehouse_ids=[1]))[0]
+        self.assertEqual(row['sales_unreserved'],3)
 
     def propose(self):
         with self.ai(): self.s.run_rule(self.rid)

@@ -2152,6 +2152,12 @@ body[data-theme="day"] .chat-message-assistant {
 .agent-control table { width: 100%; border-collapse: collapse; }
 .agent-control th, .agent-control td { text-align: left; padding: .65rem; border-bottom: 1px solid currentColor; }
 .agent-table-scroll { overflow-x: auto; }
+.agent-sort-button { display: inline-flex; align-items: center; gap: .5rem; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: inherit; cursor: pointer; white-space: nowrap; }
+.agent-sort-button:hover { color: var(--cyan); }
+.agent-sort-button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; }
+.agent-run-pagination, .agent-run-pagination nav { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
+.agent-run-pagination { justify-content: space-between; margin-top: 1rem; }
+.agent-run-pagination label { font-size: .85rem; }
 .observed-ai { display: inline-flex; align-items: center; gap: .4rem; padding: .35rem .5rem; border: 1px solid var(--line-strong); border-radius: .5rem; background: var(--surface-soft); font: inherit; font-size: .85rem; cursor: pointer; white-space: nowrap; }
 .observed-ai svg, .observed-ai-logo { width: 1.15rem; height: 1.15rem; flex-shrink: 0; }
 .observed-ai-logo { filter: invert(1); }

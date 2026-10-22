@@ -244,7 +244,10 @@ def replenishment(row, config: RuleConfig):
     available = dec(row['physical_qty']) - dec(row['reserved_qty'])
     daily = dec(row['sold_90']) / Decimal(90)
     target = max(dec(row['reorder_point']), daily * (config.target_days + (config.lead_days or 0)) + config.safety_qty)
-    need = max(Decimal(0), target - available - dec(row['pending']))
+    # Reserved sales already reduce available stock. Add only the outstanding
+    # sales quantity that has not been reserved (including saved order drafts).
+    unreserved = dec(row.get('sales_unreserved', 0))
+    need = max(Decimal(0), target + unreserved - available - dec(row['pending']))
     if need:
         need = (max(need, config.minimum_order, dec(row['reorder_quantity'])) / config.order_multiple).to_integral_value(rounding=ROUND_CEILING) * config.order_multiple
     return need.quantize(Decimal('0.0001'))

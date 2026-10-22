@@ -19,7 +19,7 @@ from ai_service import generate_ai, AIProviderError
 from agent_service import AgentService
 from commercial_agent_service import CommercialAgentService
 from inventory_service import InventoryService
-from automation_contracts import RuleConfig, RuleDraft, parse_model_turn, model_turn_schema, replenishment, conditions_match, dec, forecast_metrics
+from automation_contracts import RuleConfig, RuleDraft, Choice, parse_model_turn, model_turn_schema, replenishment, conditions_match, dec, forecast_metrics
 from rules_policy import validate_rule_objective
 from SystemPrompts.rules_agents import rules_agent_system_prompt
 from trace_interpretation import interpret_trace
@@ -230,28 +230,42 @@ class AutomationService:
 
     def snapshots(self, config):
         # Correlated aggregates avoid multiplying sales by purchases or receipts.
-        return self._all('''SELECT s.product_id,s.warehouse_id,s.physical_qty,s.reserved_qty,
+        return self._all('''WITH entities AS (
+            SELECT product_id,warehouse_id FROM public.inventory_stock_levels
+            UNION
+            SELECT l.product_id,o.warehouse_id FROM public.sales_order_lines l
+            JOIN public.sales_orders o ON o.id=l.sales_order_id
+            WHERE o.status IN ('borrador','confirmado','parcial') AND l.pending_qty>0
+        )
+            SELECT e.product_id,e.warehouse_id,COALESCE(s.physical_qty,0) AS physical_qty,
+            COALESCE(s.reserved_qty,0) AS reserved_qty,
             s.updated_at AS stock_updated_at,TRIM(p.name_product) AS product_name,u.code AS unit,
             c.base_unit_id,c.reorder_point,c.reorder_quantity,
+            COALESCE((SELECT SUM(GREATEST(l.pending_qty-l.reserved_qty,0))
+              FROM public.sales_order_lines l JOIN public.sales_orders o ON o.id=l.sales_order_id
+              WHERE l.product_id=e.product_id AND o.warehouse_id=e.warehouse_id
+                AND o.status IN ('borrador','confirmado','parcial')),0) AS sales_unreserved,
             COALESCE((SELECT SUM(l.pending_qty) FROM public.purchase_order_lines l
               JOIN public.purchase_orders o ON o.id=l.purchase_order_id
-              WHERE l.product_id=s.product_id AND o.warehouse_id=s.warehouse_id
+              WHERE l.product_id=e.product_id AND o.warehouse_id=e.warehouse_id
                 AND o.status NOT IN ('cancelado','recibido','borrador')),0) AS pending,
             COALESCE((SELECT SUM(-m.quantity_signed) FROM public.inventory_movements m
-              WHERE m.product_id=s.product_id AND m.warehouse_id=s.warehouse_id
+              WHERE m.product_id=e.product_id AND m.warehouse_id=e.warehouse_id
                 AND m.movement_type='dispatch' AND m.created_at>=now()-INTERVAL '90 days'),0) AS sold_90,
             (SELECT MAX(m.created_at) FROM public.inventory_movements m
-              WHERE m.product_id=s.product_id AND m.warehouse_id=s.warehouse_id AND m.movement_type='dispatch') AS last_sale,
+              WHERE m.product_id=e.product_id AND m.warehouse_id=e.warehouse_id AND m.movement_type='dispatch') AS last_sale,
             (SELECT COUNT(DISTINCT DATE(m.created_at)) FROM public.inventory_movements m
-              WHERE m.product_id=s.product_id AND m.warehouse_id=s.warehouse_id
+              WHERE m.product_id=e.product_id AND m.warehouse_id=e.warehouse_id
                 AND m.movement_type='dispatch' AND m.created_at>=now()-INTERVAL '90 days') AS sales_days,
             (SELECT SUM(g.received_qty*g.unit_price*g.exchange_rate)/NULLIF(SUM(g.received_qty),0)
-              FROM public.goods_receipt_lines g WHERE g.product_id=s.product_id) AS historical_cost
-            FROM public.inventory_stock_levels s JOIN public.productos p ON p.pk_product=s.product_id
-            JOIN public.product_inventory_config c ON c.product_id=s.product_id
+              FROM public.goods_receipt_lines g WHERE g.product_id=e.product_id) AS historical_cost
+            FROM entities e LEFT JOIN public.inventory_stock_levels s
+              ON s.product_id=e.product_id AND s.warehouse_id=e.warehouse_id
+            JOIN public.productos p ON p.pk_product=e.product_id
+            JOIN public.product_inventory_config c ON c.product_id=e.product_id
             JOIN public.inventory_units u ON u.id=c.base_unit_id
-            WHERE (%s OR s.product_id=ANY(%s)) AND (%s OR s.warehouse_id=ANY(%s))
-            ORDER BY s.product_id,s.warehouse_id LIMIT %s''',
+            WHERE (%s OR e.product_id=ANY(%s)) AND (%s OR e.warehouse_id=ANY(%s))
+            ORDER BY e.product_id,e.warehouse_id LIMIT %s''',
             (not config.product_ids, config.product_ids, not config.warehouse_ids, config.warehouse_ids, config.max_entities))
 
     def suppressed(self, product_id, warehouse_id):
@@ -266,12 +280,15 @@ class AutomationService:
         coverage = available / daily if daily else None
         days_without = (datetime.now(timezone.utc) - row['last_sale']).days if row['last_sale'] else None
         values = {'available': available, 'pending': row['pending'], 'sold_90': row['sold_90'],
+                  'sales_unreserved': dec(row.get('sales_unreserved', 0)),
+                  'sales_shortage': max(Decimal(0), dec(row.get('sales_unreserved', 0)) - available - dec(row['pending'])),
                   'coverage_days': coverage, 'days_without_sales': days_without}
         need = replenishment(row, config)
         stagnant = available > 0 and ((coverage is not None and coverage > config.maximum_coverage_days)
                     or days_without is None or days_without >= config.stagnant_days)
         relevant = (need > 0 if config.kind == 'stock_reorder_proposals' else stagnant) and conditions_match(values, config.conditions)
         assumptions = ['Media de despachos en ventana de 90 días; días sin registro no prueban demanda cero.',
+                       'Pedidos de venta en borrador, confirmados y parciales: solo se añade el pendiente sin reservar; las reservas ya reducen el disponible.',
                        'No hay serie diaria completa de disponibilidad; la demanda puede estar censurada.',
                        'Costes históricos no constituyen una oferta vigente; moneda de referencia según cambios de cada línea.']
         if config.lead_days is None:
@@ -401,6 +418,34 @@ class AutomationService:
             raise
 
     def choose(self, scenarios, config, event):
+        """Uncovered sales require a reviewable proposal even without sales history or AI."""
+        validate_rule_objective(config.kind, config.objective)
+        required = [s for s in scenarios if config.kind == 'stock_reorder_proposals'
+                    and dec(s['values'].get('sales_shortage', 0)) > 0]
+        if not required:
+            return self._choose_model(scenarios, config, event)
+        choices = [Choice(product_id=s['product_id'], warehouse_id=s['warehouse_id'], action='replenish',
+                          reason=f"Ventas pendientes sin cobertura: {s['values']['sales_shortage']} {s['unit']}; preparar reposición para revisión")
+                   for s in required]
+        remaining = [s for s in scenarios if s not in required]
+        meta = {'strategy': 'uncovered_sales'}
+        event('sales_need', {'strategy': 'deterministic', 'entities': len(required)})
+        if remaining and config.max_model_calls > 0:
+            try:
+                extra, meta = self._choose_model(remaining, config,
+                    lambda phase, detail: event(phase, detail) if phase != 'decision' else None)
+                choices.extend(extra)
+            except (AIProviderError, ValueError, KeyError, TypeError) as exc:
+                # A provider failure must not discard proposals backed by actual sales orders.
+                meta = {'strategy': 'uncovered_sales', 'degraded_reason': str(exc)[:500]}
+                if isinstance(exc, AIProviderError):
+                    event('provider_failure', {'provider': exc.provider, 'retryable': exc.retryable})
+                event('degraded', {'reason': meta['degraded_reason'], 'sales_proposals_preserved': True})
+        event('decision', {'choices': [c.model_dump() for c in choices],
+                           'reason': 'Cubrir ventas pendientes; las compras requieren aprobación, oferta y presupuesto'})
+        return choices, meta
+
+    def _choose_model(self, scenarios, config, event):
         """One decision from complete precomputed evidence; no redundant tool round trips."""
         validate_rule_objective(config.kind, config.objective)
         if config.max_model_calls == 0:
@@ -482,6 +527,8 @@ class AutomationService:
                 if scenarios:
                     try:
                         choices, result['ai'] = self.choose(scenarios, config, event)
+                        if result['ai'].get('degraded_reason'):
+                            result.update(degraded=True, degraded_reason=result['ai']['degraded_reason'])
                     except (AIProviderError, ValueError, KeyError, TypeError) as exc:
                         result['degraded'] = True
                         result['degraded_reason'] = str(exc)[:500]
