@@ -278,7 +278,7 @@ class DatabaseTests(unittest.TestCase):
         self.c.commit()
         self.s.ensure_default_rules()
         self.rid = self.s._one("SELECT id FROM public.automation_rules WHERE code='stock_reorder_proposals'")['id']
-        self.config = RuleConfig(per_action_budget=1000,daily_budget=2000)
+        self.config = RuleConfig(per_action_budget=1000,daily_budget=2000,warehouse_ids=[1])
         self.s.save_rule(RuleDraft(name='Regla prueba',reason='Prueba aislada',config=self.config), 'tester',self.rid,True)
 
     def tearDown(self):
@@ -391,7 +391,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertFalse(self.s.action_proposals())
 
     def test_stagnant_stock_shares_direct_decision_validation_and_failure_handling(self):
-        config = RuleConfig(kind='stagnant_stock')
+        config = RuleConfig(kind='stagnant_stock',warehouse_ids=[1])
         saved = self.s.save_rule(RuleDraft(name='Estancado aislado',reason='Probar selector común',config=config),'tester')
         # Existing rows have no dispatch history and are relevant stagnant stock.
         with self.ai('wait') as generate:
@@ -595,22 +595,37 @@ class DatabaseTests(unittest.TestCase):
         moves=self.s._all("SELECT quantity_signed FROM public.inventory_movements WHERE movement_type IN ('transfer_in','transfer_out')")
         self.assertEqual(len(moves),2);self.assertEqual(sum(m['quantity_signed'] for m in moves),0)
 
-    def test_default_scope_matches_priority_purchases_and_first_active_warehouse(self):
+    def test_default_scope_matches_priority_purchases_and_highest_stock_warehouse(self):
+        self.config = RuleConfig(max_model_calls=0)
+        self.s.save_rule(RuleDraft(name='Alcance dinámico',reason='Valores vacíos',expected_version=1,config=self.config),'tester',self.rid)
         defaults=self.s.scope_defaults()
         priority=__import__('inventory_service').InventoryService(self.c).priority_purchase_rows()
         self.assertEqual(defaults['product_ids'],list(dict.fromkeys(p['product_id'] for p in priority)))
-        self.assertEqual(defaults['warehouse_ids'],[1])
+        self.assertEqual(defaults['warehouse_ids'],[2])
         preview=self.s.simulate(self.config)
         self.assertEqual(preview['resolved_scope']['product_ids'],defaults['product_ids'])
-        self.assertEqual(preview['resolved_scope']['warehouse_ids'],[1])
+        self.assertEqual(preview['resolved_scope']['warehouse_ids'],[2])
         with self.ai('wait'):
             result=self.s.run_rule(self.rid)
         run=self.s._one('SELECT config_snapshot FROM public.automation_runs WHERE id=%s',(result['run_id'],))
         self.assertEqual(run['config_snapshot']['product_ids'],defaults['product_ids'])
-        self.assertEqual(run['config_snapshot']['warehouse_ids'],[1])
+        self.assertEqual(run['config_snapshot']['warehouse_ids'],[2])
         self.assertEqual(result['result']['analysis_counts']['rows_examined'],1)
         event=next(e for e in self.s.trace(result['run_id']) if e['phase']=='observation')
         self.assertEqual(event['detail']['resolved_scope']['products_source'],'priority_purchases')
+        self.assertEqual(event['detail']['resolved_scope']['warehouses_source'],'highest_stock_active_warehouse')
+        self.assertEqual(self.s.config(self.s._one('SELECT * FROM public.automation_rules WHERE id=%s',(self.rid,))).warehouse_ids,[])
+
+    def test_default_warehouse_recalculates_stock_totals_and_breaks_ties_by_id(self):
+        self.assertEqual(self.s.scope_defaults()['warehouse_ids'],[2])
+        self.s._write('UPDATE public.inventory_stock_levels SET physical_qty=100 WHERE warehouse_id=1')
+        self.assertEqual(self.s.scope_defaults()['warehouse_ids'],[1])
+        self.s._write('UPDATE public.inventory_stock_levels SET physical_qty=101 WHERE warehouse_id=1')
+        self.assertEqual(self.s.scope_defaults()['warehouse_ids'],[1])
+        self.s._write('UPDATE public.inventory_warehouses SET is_active=FALSE WHERE id=1')
+        self.assertEqual(self.s.scope_defaults()['warehouse_ids'],[2])
+        self.s._write('UPDATE public.inventory_warehouses SET is_active=FALSE')
+        self.assertEqual(self.s.scope_defaults()['warehouse_ids'],[])
 
     def test_no_priority_products_never_expands_to_all_products(self):
         self.s._write('UPDATE public.inventory_stock_levels SET physical_qty=10000')

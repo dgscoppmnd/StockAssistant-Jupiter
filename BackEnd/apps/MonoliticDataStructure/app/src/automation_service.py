@@ -155,11 +155,14 @@ class AutomationService:
 
     def scope_defaults(self):
         warehouses = self._all('SELECT id,code,name,is_active FROM public.inventory_warehouses ORDER BY id')
-        first = next((w for w in warehouses if w['is_active']),None)
+        largest = self._one('''SELECT w.id FROM public.inventory_warehouses w
+            LEFT JOIN public.inventory_stock_levels s ON s.warehouse_id=w.id
+            WHERE w.is_active GROUP BY w.id
+            ORDER BY COALESCE(SUM(s.physical_qty),0) DESC,w.id LIMIT 1''')
         priorities = InventoryService(self.connection).priority_purchase_rows()
         products = list({p['product_id']: {'id':p['product_id'],'code':p['product_code'],
                          'name':p['product_name']} for p in priorities}.values())
-        return {'warehouses':warehouses,'products':products,'warehouse_ids':[first['id']] if first else [],
+        return {'warehouses':warehouses,'products':products,'warehouse_ids':[largest['id']] if largest else [],
                 'product_ids':[p['id'] for p in products]}
 
     def scope_product_options(self, ids):
@@ -173,9 +176,9 @@ class AutomationService:
         products = config.product_ids or defaults.get('product_ids',[])
         warehouses = config.warehouse_ids or defaults.get('warehouse_ids',[])
         resolved = config.model_copy(update={'product_ids':products,'warehouse_ids':warehouses})
-        scope = {'policy':'priority_defaults_v1','product_ids':products,'warehouse_ids':warehouses,
+        scope = {'policy':'priority_defaults_v2','product_ids':products,'warehouse_ids':warehouses,
                  'products_source':'selected' if config.product_ids else 'priority_purchases',
-                 'warehouses_source':'selected' if config.warehouse_ids else 'first_active_warehouse'}
+                 'warehouses_source':'selected' if config.warehouse_ids else 'highest_stock_active_warehouse'}
         return resolved,scope
 
     def scoped_snapshots(self, config):

@@ -1661,10 +1661,12 @@ body[data-theme="day"] .agent-result { background: rgba(230, 246, 255, 0.72); }
   color: var(--text-main);
 }
 
+.inventory-crud-table .react-bootstrap-table-pagination,
 .stock-orders-page .react-bootstrap-table-pagination {
   color: var(--text-main);
 }
 
+.inventory-crud-table .pagination,
 .stock-orders-page .pagination {
   --bs-pagination-color: var(--text-main);
   --bs-pagination-bg: var(--bg-1);
@@ -1682,6 +1684,7 @@ body[data-theme="day"] .agent-result { background: rgba(230, 246, 255, 0.72); }
   --bs-pagination-disabled-border-color: var(--line);
 }
 
+.inventory-crud-table .dropdown-menu,
 .stock-orders-page .dropdown-menu {
   --bs-dropdown-color: var(--text-main);
   --bs-dropdown-bg: var(--bg-1);
