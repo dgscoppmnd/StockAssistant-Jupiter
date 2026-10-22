@@ -18,7 +18,7 @@ from psycopg2.extras import Json, RealDictCursor
 from ai_service import generate_ai, AIProviderError
 from agent_service import AgentService
 from commercial_agent_service import CommercialAgentService
-from inventory_service import InventoryService
+from inventory_service import INVENTORY_ENTITIES_CTE, InventoryService
 from automation_contracts import RuleConfig, RuleDraft, Choice, parse_model_turn, model_turn_schema, replenishment, conditions_match, dec, forecast_metrics
 from rules_policy import validate_rule_objective
 from SystemPrompts.rules_agents import rules_agent_system_prompt
@@ -233,13 +233,7 @@ class AutomationService:
 
     def snapshots(self, config):
         # Correlated aggregates avoid multiplying sales by purchases or receipts.
-        return self._all('''WITH entities AS (
-            SELECT product_id,warehouse_id FROM public.inventory_stock_levels
-            UNION
-            SELECT l.product_id,o.warehouse_id FROM public.sales_order_lines l
-            JOIN public.sales_orders o ON o.id=l.sales_order_id
-            WHERE o.status IN ('borrador','confirmado','parcial') AND l.pending_qty>0
-        )
+        return self._all(INVENTORY_ENTITIES_CTE + '''
             SELECT e.product_id,e.warehouse_id,COALESCE(s.physical_qty,0) AS physical_qty,
             COALESCE(s.reserved_qty,0) AS reserved_qty,
             s.updated_at AS stock_updated_at,TRIM(p.name_product) AS product_name,u.code AS unit,

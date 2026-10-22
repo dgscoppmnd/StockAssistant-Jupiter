@@ -11,6 +11,31 @@ from psycopg2.extras import RealDictCursor
 
 logger = logging.getLogger("api.inventory")
 
+# Shared by dashboard priorities and automation snapshots. Infer one warehouse
+# only for products with replenishment settings and no stock or open sales anywhere.
+INVENTORY_ENTITIES_CTE = '''WITH demand AS (
+    SELECT l.product_id,o.warehouse_id,SUM(GREATEST(l.pending_qty-l.reserved_qty,0)) AS unreserved
+    FROM public.sales_order_lines l JOIN public.sales_orders o ON o.id=l.sales_order_id
+    WHERE o.status IN ('borrador','confirmado','parcial') AND l.pending_qty>0
+    GROUP BY l.product_id,o.warehouse_id
+), recorded_entities AS (
+    SELECT product_id,warehouse_id FROM public.inventory_stock_levels
+    UNION SELECT product_id,warehouse_id FROM demand
+), default_warehouse AS (
+    SELECT w.id FROM public.inventory_warehouses w
+    LEFT JOIN public.inventory_stock_levels s ON s.warehouse_id=w.id
+    WHERE w.is_active GROUP BY w.id
+    ORDER BY COALESCE(SUM(s.physical_qty),0) DESC,w.id LIMIT 1
+), entities AS (
+    SELECT product_id,warehouse_id FROM recorded_entities
+    UNION ALL
+    SELECT c.product_id,w.id FROM public.product_inventory_config c
+    CROSS JOIN default_warehouse w
+    WHERE (c.reorder_point>0 OR c.reorder_quantity>0)
+      AND NOT EXISTS (SELECT 1 FROM recorded_entities e WHERE e.product_id=c.product_id)
+)
+'''
+
 
 class InventoryError(Exception):
     def __init__(self, message: str, status_code: int = 400):
@@ -413,16 +438,7 @@ class InventoryService:
 
     def priority_purchase_rows(self):
         """Shared source for dashboard priorities and default automation products."""
-        return self._fetchall('''
-            WITH demand AS (
-                SELECT l.product_id,o.warehouse_id,SUM(GREATEST(l.pending_qty-l.reserved_qty,0)) AS unreserved
-                FROM public.sales_order_lines l JOIN public.sales_orders o ON o.id=l.sales_order_id
-                WHERE o.status IN ('borrador','confirmado','parcial') AND l.pending_qty>0
-                GROUP BY l.product_id,o.warehouse_id
-            ), entities AS (
-                SELECT product_id,warehouse_id FROM public.inventory_stock_levels
-                UNION SELECT product_id,warehouse_id FROM demand
-            )
+        return self._fetchall(INVENTORY_ENTITIES_CTE + '''
             SELECT e.product_id, p.name_product AS product_name, p.cdgo_producto_externo AS product_code,
                    e.warehouse_id, w.name AS warehouse_name,
                    COALESCE(s.physical_qty,0) AS physical_qty, COALESCE(s.reserved_qty,0) AS reserved_qty,
