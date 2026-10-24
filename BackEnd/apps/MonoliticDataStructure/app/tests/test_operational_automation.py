@@ -318,6 +318,52 @@ class DatabaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'datos cambiaron'):
             self.s.revalidate(proposal)
 
+    def test_configured_product_without_stock_or_sales_is_a_priority_and_automation_snapshot(self):
+        inventory = __import__('inventory_service').InventoryService(self.c)
+        self.s._write('DELETE FROM public.inventory_stock_levels WHERE product_id=%s', (self.pid,))
+        other = self.s._one("INSERT INTO public.productos(name_product) VALUES('Solo catálogo') RETURNING pk_product")['pk_product']
+        self.s._write('''INSERT INTO public.inventory_stock_levels(product_id,warehouse_id,physical_qty)
+            VALUES(%s,2,100)''', (other,))
+        rows = inventory.get_executive_dashboard()['priority_purchases']
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual((row['product_id'], row['warehouse_id']), (self.pid, 2))
+        self.assertEqual((row['physical_qty'], row['reserved_qty'], row['available_qty']), (0, 0, 0))
+        self.assertEqual((row['priority'], row['estimated_impact']), ('critica', 20))
+        defaults = self.s.scope_defaults()
+        self.assertEqual(defaults['product_ids'], [self.pid])
+        snapshots = self.s.scoped_snapshots(RuleConfig(product_ids=defaults['product_ids'], warehouse_ids=defaults['warehouse_ids']))
+        self.assertEqual(len(snapshots), 1)
+        self.assertEqual((snapshots[0]['product_id'], snapshots[0]['warehouse_id'], snapshots[0]['physical_qty']), (self.pid, 2, 0))
+
+    def test_missing_stock_fallback_uses_active_warehouse_and_breaks_empty_stock_ties_by_id(self):
+        inventory = __import__('inventory_service').InventoryService(self.c)
+        self.s._write('DELETE FROM public.inventory_stock_levels WHERE product_id=%s', (self.pid,))
+        self.assertEqual([r['warehouse_id'] for r in inventory.priority_purchase_rows()], [1])
+        self.s._write('UPDATE public.inventory_warehouses SET is_active=FALSE WHERE id=1')
+        self.assertEqual([r['warehouse_id'] for r in inventory.priority_purchase_rows()], [2])
+        self.s._write('UPDATE public.inventory_warehouses SET is_active=FALSE')
+        self.assertEqual(inventory.priority_purchase_rows(), [])
+        self.assertEqual(self.s.snapshots(RuleConfig(product_ids=[self.pid])), [])
+
+    def test_existing_stock_does_not_create_synthetic_priorities_in_other_warehouses(self):
+        inventory = __import__('inventory_service').InventoryService(self.c)
+        self.s._write('DELETE FROM public.inventory_stock_levels WHERE warehouse_id=2')
+        self.s._write('UPDATE public.inventory_stock_levels SET physical_qty=100')
+        self.assertEqual(inventory.priority_purchase_rows(), [])
+        self.s._write('UPDATE public.inventory_stock_levels SET physical_qty=5')
+        rows = inventory.priority_purchase_rows()
+        self.assertEqual([(r['product_id'], r['warehouse_id']) for r in rows], [(self.pid, 1)])
+
+    def test_missing_stock_without_replenishment_settings_does_not_create_empty_purchase(self):
+        inventory = __import__('inventory_service').InventoryService(self.c)
+        self.s._write('DELETE FROM public.inventory_stock_levels WHERE product_id=%s', (self.pid,))
+        self.s._write('UPDATE public.product_inventory_config SET reorder_point=0,reorder_quantity=0 WHERE product_id=%s', (self.pid,))
+        self.assertEqual(inventory.priority_purchase_rows(), [])
+        self.assertEqual(self.s.snapshots(RuleConfig(product_ids=[self.pid])), [])
+        self.s._write('UPDATE public.product_inventory_config SET reorder_quantity=12 WHERE product_id=%s', (self.pid,))
+        self.assertEqual([r['product_id'] for r in inventory.priority_purchase_rows()], [self.pid])
+
     def test_sales_snapshot_counts_unreserved_quantity_once_and_ignores_closed_orders(self):
         for state in ('borrador','confirmado','parcial','cancelado','completado'):
             order = self.s._one('''INSERT INTO public.sales_orders(customer_name,warehouse_id,sales_order_number,user_name,status)
