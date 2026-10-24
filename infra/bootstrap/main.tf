@@ -172,6 +172,15 @@ data "aws_iam_policy_document" "github_deploy" {
   }
 
   statement {
+    sid = "EcrPublicLogin"
+    actions = [
+      "ecr-public:GetAuthorizationToken",
+      "sts:GetServiceBearerToken",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
     sid = "EcrPush"
     actions = [
       "ecr:BatchCheckLayerAvailability",
