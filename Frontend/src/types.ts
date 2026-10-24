@@ -10,6 +10,33 @@ export type AgentChatRequest = {
   use_tools?: boolean;
   max_web_results?: number;
   max_tool_results?: number;
+  period_days?: number;
+  context?: "dashboard";
+  history?: Array<{ role: "user" | "assistant"; text: string }>;
+  include_comparison?: boolean;
+};
+
+export type PurchasePlanLine = {
+  product_id: number; product_name: string; product_code?: string | null;
+  warehouse_id: number; warehouse_name: string; base_unit_code: string;
+  available_qty: number | string; sales_unreserved: number | string; pending_qty: number | string;
+  reorder_point: number | string; recommended_qty: number | string; priority: string; reason: string;
+  unit_cost?: number | string | null; currency?: string | null; subtotal?: number | string | null;
+  cost_source?: string; cost_date?: string | null; supplier_name?: string | null;
+};
+
+export type PurchasePlan = {
+  generated_at: string; period_days: number; lines: PurchasePlanLine[]; excluded: PurchasePlanLine[];
+  totals_by_currency: Record<string, number | string>; unpriced_lines: number;
+  budget: number | string | null; budget_currency: string | null;
+  filters: { product_query: string; warehouse_query: string; critical_only: boolean };
+  candidate_count: number; limit: number; truncated: boolean;
+  assumptions: string[]; status: "draft"; persistence: "browser_only";
+};
+
+export type AssistantEvidence = {
+  sources: Array<{ name: string; tool: string }>; generated_at: string;
+  period_days: number | null; warnings: string[];
 };
 
 export type WebSearchResult = {
@@ -41,6 +68,8 @@ export type AgentChatResponse = {
   };
   web_results?: WebSearchResult[];
   tool_results?: Record<string, unknown>;
+  purchase_plan?: PurchasePlan | null;
+  evidence?: AssistantEvidence;
   meta?: {
     selected_provider?: "openai" | "ollama";
     ai?: {

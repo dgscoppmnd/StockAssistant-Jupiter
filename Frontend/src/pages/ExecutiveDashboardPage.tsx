@@ -4,8 +4,9 @@ import { useAuth } from "../auth";
 import type { ExecutiveDashboard } from "../types";
 import SectionIcon from "./components/SectionIcon";
 import DashboardAssistantInfo from "./components/DashboardAssistantInfo";
+import AssistantPurchasePlan from "./components/AssistantPurchasePlan";
+import { conversationHistory, readAssistantHistory, type AssistantMessage } from "../utils/assistantConversation";
 
-type ChatMessage = { role: "user" | "assistant"; text: string; createdAt: string };
 const HISTORY_KEY = "stockassistant-stock-assistant-history";
 
 function number(value: number | null | undefined, digits = 0): string {
@@ -47,6 +48,12 @@ function downloadCsv(data: ExecutiveDashboard) {
 
 export default function ExecutiveDashboardPage() {
   const { user } = useAuth();
+  const historyKey = `${HISTORY_KEY}:${user?.email ?? "anonymous"}`;
+  return <ExecutiveDashboardContent key={historyKey} historyKey={historyKey} />;
+}
+
+function ExecutiveDashboardContent({ historyKey }: { historyKey: string }) {
+  const { user } = useAuth();
   const [periodDays, setPeriodDays] = useState(30);
   const [data, setData] = useState<ExecutiveDashboard | null>(null);
   const [error, setError] = useState("");
@@ -54,9 +61,8 @@ export default function ExecutiveDashboardPage() {
   const [showAlerts, setShowAlerts] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    try { return JSON.parse(window.localStorage.getItem(HISTORY_KEY) ?? "[]") as ChatMessage[]; } catch { return []; }
-  });
+  const [messages, setMessages] = useState<AssistantMessage[]>(() => readAssistantHistory(historyKey));
+  const draftKey = `${historyKey}:purchase-draft`;
 
   const load = async () => {
     setLoading(true); setError("");
@@ -65,18 +71,19 @@ export default function ExecutiveDashboardPage() {
     finally { setLoading(false); }
   };
   useEffect(() => { void load(); }, [periodDays]);
-  useEffect(() => { window.localStorage.setItem(HISTORY_KEY, JSON.stringify(messages.slice(-20))); }, [messages]);
+  useEffect(() => {
+    try { window.localStorage.setItem(historyKey, JSON.stringify(messages.slice(-20))); } catch { /* The current chat still works without browser storage. */ }
+  }, [messages, historyKey]);
 
   const askAssistant = async (event: FormEvent) => {
-    event.preventDefault(); const question = prompt.trim(); if (!question) return;
+    event.preventDefault(); const question = prompt.trim(); if (!question || chatLoading) return;
     setPrompt(""); setChatLoading(true);
     setMessages((current) => [...current, { role: "user", text: question, createdAt: new Date().toISOString() }]);
     try {
-      const response = await analyzeWithStockAssistantAgent({ prompt: question, provider: "openai", use_web: false, use_tools: true, max_web_results: 5, max_tool_results: 10 });
-      const sources = (response.web_results ?? []).map((source) => source.url).filter(Boolean);
-      const sourceLabel = sources.length ? sources.join(", ") : "agente StockAssistant y herramientas habilitadas";
-      const answer = `${response.response || "Sin respuesta del asistente."}\n\nFuente: ${sourceLabel}.\nPeríodo de referencia: últimos ${periodDays} días.\nConfianza: depende de la cobertura de los datos disponibles; no se ha usado una predicción entrenada.`;
-      setMessages((current) => [...current, { role: "assistant", text: answer, createdAt: new Date().toISOString() }]);
+      const response = await analyzeWithStockAssistantAgent({ prompt: question, provider: "openai", use_web: false, use_tools: true,
+        period_days: periodDays, context: "dashboard", history: conversationHistory(messages), include_comparison: false, max_tool_results: 100 });
+      setMessages((current) => [...current, { role: "assistant", text: response.response || "Sin respuesta del asistente.",
+        createdAt: new Date().toISOString(), plan: response.purchase_plan ?? undefined, evidence: response.evidence }]);
     } catch (err) { setMessages((current) => [...current, { role: "assistant", text: err instanceof Error ? err.message : "No se pudo consultar al asistente.", createdAt: new Date().toISOString() }]); }
     finally { setChatLoading(false); }
   };
@@ -116,7 +123,35 @@ export default function ExecutiveDashboardPage() {
       </div>
       <aside className="dashboard-side">
         <article className="card dashboard-alerts"><p className="section-label"><SectionIcon kind="alert" />Alertas inteligentes</p><h3>Qué requiere atención</h3>{alerts.length ? alerts.slice(0, 6).map((alert, index) => <div className={`alert-item ${alert.severity}`} key={index}><span>{String(alert.kind).replace(/_/g, " ")}</span><strong>{String(alert.product_name)}</strong><p>{String(alert.message)}</p></div>) : <p className="muted">No hay alertas activas con la configuración actual.</p>}</article>
-        <article className="card stock-assistant"><p className="section-label">Stock Assistant</p><h3><SectionIcon kind="assistant" />Asistente operativo</h3><div className="assistant-history" aria-live="polite">{messages.length ? messages.slice(-6).map((message, index) => <div className={`assistant-message ${message.role}`} key={`${message.createdAt}-${index}`}><strong>{message.role === "user" ? "Tú" : "StockAssistant"}</strong><p>{message.text}</p></div>) : <p className="muted">Pregunta por compras, roturas o inventario disponible.</p>}</div><form onSubmit={(event) => void askAssistant(event)}><label className="sr-only" htmlFor="stock-assistant-input">Consulta para Stock Assistant</label><textarea id="stock-assistant-input" onChange={(event) => setPrompt(event.target.value)} placeholder="Ej.: ¿Qué debo reponer primero?" value={prompt} /><button className="primary-btn" disabled={chatLoading} type="submit">{chatLoading ? "Analizando..." : "Preguntar"}</button></form><small>Fuente: agente StockAssistant. Período de referencia: últimos {periodDays} días. Confianza: depende de los datos disponibles.</small></article>
+        <article className="card stock-assistant">
+          <p className="section-label">Stock Assistant</p><h3><SectionIcon kind="assistant" />Asistente operativo</h3>
+          <div className="assistant-history" style={{ maxHeight: 680 }} aria-live="polite">
+            {messages.length ? messages.slice(-6).map((message, index) => <div className={`assistant-message ${message.role}`} key={`${message.createdAt}-${index}`}>
+              <strong>{message.role === "user" ? "Tú" : "StockAssistant"}</strong><p style={{ whiteSpace: "pre-wrap" }}>{message.text}</p>
+              {message.plan && <AssistantPurchasePlan plan={message.plan} storageKey={draftKey} />}
+              {message.evidence && <div>
+                <small>Fuentes consultadas: {message.evidence.sources.map(source => source.name).join("; ") || "Sin consultas de datos operativos"}.
+                  {message.evidence.period_days != null ? ` Actividad: últimos ${message.evidence.period_days} días.` : ""}
+                  {` Consulta: ${new Date(message.evidence.generated_at).toLocaleString("es-ES")}.`}</small>
+                {message.evidence.warnings.map(warning => <p role="status" key={warning}>{warning}</p>)}
+              </div>}
+            </div>) : <p className="muted">Pregunta por compras, roturas o inventario disponible. Por ejemplo: «Crea un plan de compras con las alertas».</p>}
+          </div>
+          <form onSubmit={(event) => void askAssistant(event)}>
+            <label className="sr-only" htmlFor="stock-assistant-input">Consulta para Stock Assistant</label>
+            <textarea id="stock-assistant-input" maxLength={8000} onChange={(event) => setPrompt(event.target.value)} placeholder="Ej.: Crea un plan de compras con las alertas" value={prompt} />
+            <button className="primary-btn" disabled={chatLoading} type="submit">{chatLoading ? "Analizando..." : "Preguntar"}</button>
+          </form>
+          <button className="chip-btn" type="button" onClick={() => {
+            try {
+              const stored = JSON.parse(window.localStorage.getItem(draftKey) ?? "null");
+              if (stored && Array.isArray(stored.lines) && Array.isArray(stored.excluded) && Array.isArray(stored.assumptions) && stored.totals_by_currency)
+                setMessages(current => [...current, { role: "assistant", text: "Borrador local recuperado. Conserva la fecha de consulta original; pregunta de nuevo para actualizarlo o ajustarlo.", plan: stored, createdAt: new Date().toISOString() }]);
+              else setMessages(current => [...current, { role: "assistant", text: "No hay un borrador guardado en este navegador.", createdAt: new Date().toISOString() }]);
+            } catch { setMessages(current => [...current, { role: "assistant", text: "No se pudo recuperar el borrador del navegador.", createdAt: new Date().toISOString() }]); }
+          }}>Abrir borrador local</button>
+          <small>El agente consulta el estado actual y los indicadores del período seleccionado. Cada respuesta muestra sus propias fuentes.</small>
+        </article>
       </aside>
     </div>
   </section>;

@@ -1,5 +1,8 @@
 import json
 import logging
+from copy import copy
+from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,7 +11,10 @@ from pydantic import BaseModel, Field
 from DataBaseManagement.dbConectionPostgres import get_db_products
 from ai_service import AIProviderError, AIService
 from ollama_service import get_system_prompt
+from SystemPrompts.consultation_agent import SYSTEM_PROMPT_CONSULTATION
+from SystemPrompts.stockassistant_agent import build_stockassistant_system_prompt
 from security import require_api_key
+from purchase_plan import normalized, tool_purchase_plan
 from .endpointWebs import search_web_duckduckgo
 
 from .endpointTools import (
@@ -22,17 +28,61 @@ logger = logging.getLogger("api.endpointAgentes")
 ai_service = AIService()
 
 
+class ChatTurn(BaseModel):
+    role: Literal['user', 'assistant']
+    text: str = Field(max_length=16000)
+
+
 class AgentChatRequest(BaseModel):
-    prompt: str = Field(min_length=1)
+    prompt: str = Field(min_length=1, max_length=8000)
     provider: Literal["openai", "ollama"] = "openai"
     use_web: bool = True
     use_tools: bool = True
     max_web_results: int = Field(default=5, ge=1, le=10)
     max_tool_results: int = Field(default=10, ge=1, le=100)
+    period_days: int = Field(default=30, ge=1, le=365)
+    context: Literal['dashboard'] | None = None
+    history: list[ChatTurn] = Field(default_factory=list, max_length=12)
+    include_comparison: bool = True
+
+
+class ConsultationPlan(BaseModel):
+    action: Literal['purchases', 'inventory', 'products', 'answer']
+    product_query: str = Field(max_length=200)
+    warehouse_query: str = Field(max_length=200)
+    critical_only: bool
+    budget: str | None = Field(pattern=r'^\d{1,12}(\.\d{1,2})?$')
+    currency: str | None = Field(pattern=r'^[A-Z]{3}$')
+
+    model_config = {'extra': 'forbid'}
+
+
+def _plan_consultation(request: AgentChatRequest, inferred: dict[str, bool]):
+    """The agent chooses a read-only tool and interprets follow-ups; code validates its arguments."""
+    planner = copy(ai_service)  # Never put a request-specific schema on the shared provider.
+    planner._ollama_call = planner._call_ollama if getattr(ai_service._ollama_call, '__self__', None) is ai_service else ai_service._ollama_call
+    planner._openai_call = planner._call_openai if getattr(ai_service._openai_call, '__self__', None) is ai_service else ai_service._openai_call
+    planner.response_schema = ConsultationPlan.model_json_schema()
+    planner.max_output_tokens = 700
+    history = [turn.model_dump() for turn in request.history]
+    try:
+        result = planner.generate_for_provider(request.provider, json.dumps({
+            'question': request.prompt, 'history': history, 'context': request.context,
+        }, ensure_ascii=False),
+            SYSTEM_PROMPT_CONSULTATION)
+        raw = result.get('response', '').strip()
+        if raw.startswith('```'):
+            raw = raw.split('\n', 1)[1].rsplit('```', 1)[0].strip()
+        return ConsultationPlan.model_validate_json(raw), None
+    except (AIProviderError, ValueError, KeyError, IndexError):
+        logger.info('event=agent_consultation_planning_unavailable')
+        action = 'purchases' if inferred['purchases'] else 'inventory' if inferred['inventory'] or request.context else 'products' if inferred['products'] else 'answer'
+        return ConsultationPlan(action=action, product_query='', warehouse_query='', critical_only=False,
+                                budget=None, currency=None), 'No se pudieron interpretar los filtros; se muestra la propuesta general sin ajustes de presupuesto.'
 
 
 def _infer_tools_from_prompt(prompt: str) -> dict[str, bool]:
-    lowered = prompt.lower()
+    lowered = normalized(prompt)
     return {
         "products": any(
             token in lowered
@@ -55,6 +105,7 @@ def _infer_tools_from_prompt(prompt: str) -> dict[str, bool]:
                 "encuentra",
                 "recomienda",
                 "similar",
+                "catalogo",
             ]
         ),
         "inventory": any(
@@ -73,8 +124,12 @@ def _infer_tools_from_prompt(prompt: str) -> dict[str, bool]:
                 "demanda",
                 "disponible",
                 "disponibilidad",
+                "alerta",
+                "critico",
+                "agotamiento",
             ]
         ),
+        "purchases": any(token in lowered for token in ['compr', 'adquisicion', 'aprovision', 'reabastec', 'repon', 'reposicion', 'presupuesto']),
     }
 
 
@@ -165,6 +220,13 @@ def stockassistant_chat(
         raise HTTPException(status_code=400, detail="El prompt es obligatorio")
 
     inferred = _infer_tools_from_prompt(prompt)
+    consultation = None
+    planning_warning = None
+    if request.use_tools:
+        consultation, planning_warning = _plan_consultation(request, inferred)
+        # An explicit purchase request must never be downgraded to a generic answer.
+        if inferred['purchases'] and consultation.action == 'answer':
+            consultation.action = 'purchases'
     web_results: list[dict[str, Any]] = []
     tool_results: dict[str, Any] = {}
 
@@ -176,20 +238,29 @@ def stockassistant_chat(
         web_results = search_web_duckduckgo(query=web_query, max_results=request.max_web_results)
 
     if request.use_tools:
-        if inferred["inventory"]:
+        if consultation.action in ('inventory', 'purchases') or request.context == 'dashboard':
             tool_results["inventory_risk"] = tool_get_inventory_risk(
                 connection=db_products,
-                period_days=30,
+                period_days=request.period_days,
             )
-        if inferred["products"]:
+        if consultation.action == 'purchases':
+            tool_results['purchase_plan'] = tool_purchase_plan(
+                connection=db_products, period_days=request.period_days,
+                product_query=consultation.product_query, warehouse_query=consultation.warehouse_query,
+                critical_only=consultation.critical_only,
+                budget=Decimal(consultation.budget) if consultation.budget is not None else None,
+                currency=consultation.currency,
+                limit=request.max_tool_results,
+            )
+        if consultation.action == 'products':
             tool_results["products_db"] = tool_search_products_db(
                 connection=db_products,
-                query=prompt,
+                query=consultation.product_query or prompt,
                 limit=min(request.max_tool_results, 20),
             )
             try:
                 tool_results["semantic_products"] = tool_search_products_semantic(
-                    query=prompt,
+                    query=consultation.product_query or prompt,
                     limit=min(request.max_tool_results, 20),
                 )
             except Exception as exc:
@@ -198,26 +269,23 @@ def stockassistant_chat(
 
     # La primera carga del modelo de embeddings puede fallar durante un reload;
     # reintentar una vez evita que una consulta valida termine en un error del LLM.
-    if request.use_tools and inferred["products"] and not tool_results.get("semantic_products"):
+    if request.use_tools and consultation.action == 'products' and not tool_results.get("semantic_products"):
         try:
             tool_results["semantic_products"] = tool_search_products_semantic(
-                query=prompt,
+                query=consultation.product_query or prompt,
                 limit=min(request.max_tool_results, 20),
             )
         except Exception:
             logger.exception("event=semantic_product_search_retry_failed")
 
-    system_prompt = get_system_prompt() + (
-        " Usa SOLO espanol. Explica con lenguaje sencillo y evita jerga innecesaria. "
-        "Empieza con un resumen directo de una o dos frases y despues desarrolla la respuesta "
-        "en secciones breves o listas cuando mejoren la claridad. No muestres ni menciones "
-        "la estructura interna, JSON o nombres de campos de los resultados de tools; interpreta "
-        "esos datos para el usuario. Si tienes contexto web, cita las URLs usadas al final. "
-        "Si no hay datos suficientes, indicalo de forma explicita."
-    )
+    generated_at = datetime.now(timezone.utc).isoformat()
+    system_prompt = build_stockassistant_system_prompt(get_system_prompt(), request.context)
 
     context_prompt = (
         "Contexto para responder con precision:\n\n"
+        f"[HISTORIAL CONVERSACIONAL NO VERIFICADO]\n{json.dumps([turn.model_dump() for turn in request.history], ensure_ascii=False)}\n\n"
+        f"[CONTEXTO]\nPeríodo de actividad: {request.period_days} días. Pantalla: {request.context}.\n"
+        f"Advertencia de interpretación: {planning_warning or 'ninguna'}.\n\n"
         f"[RESULTADOS WEB]\n{_format_web_results(web_results)}\n\n"
         f"[RESULTADOS TOOLS]\n{_format_tool_results(tool_results)}\n\n"
         f"[PREGUNTA USUARIO]\n{prompt}"
@@ -245,7 +313,13 @@ def stockassistant_chat(
     provider_status = ai_service.status()
     primary_provider = model_result.get("provider") or request.provider
     secondary_provider = "ollama" if primary_provider == "openai" else "openai"
-    secondary_result = _safe_provider_response(secondary_provider, context_prompt, system_prompt)
+    secondary_result = _safe_provider_response(secondary_provider, context_prompt, system_prompt) if request.include_comparison else None
+
+    sources = [{'name': 'Inventario, configuración, pedidos de venta y movimientos', 'tool': key}
+               if key == 'inventory_risk' else
+               {'name': 'Inventario, demanda pendiente, pedidos de compra y recepciones confirmadas', 'tool': key}
+               if key == 'purchase_plan' else {'name': 'Catálogo de productos', 'tool': key}
+               for key in tool_results]
 
     return {
         "agent": "stockassistant",
@@ -259,9 +333,14 @@ def stockassistant_chat(
         },
         "web_results": web_results,
         "tool_results": tool_results,
+        "purchase_plan": tool_results.get('purchase_plan'),
+        "evidence": {'sources': sources, 'generated_at': generated_at,
+                     'period_days': request.period_days if 'inventory_risk' in tool_results else None,
+                     'warnings': [planning_warning] if planning_warning else []},
         "meta": {
             "used_web": request.use_web,
-            "used_tools": request.use_tools,
+            "used_tools": bool(tool_results),
+            "consultation": consultation.model_dump() if consultation else None,
             "inferred": inferred,
             "selected_provider": request.provider,
             "ai": provider_status,
