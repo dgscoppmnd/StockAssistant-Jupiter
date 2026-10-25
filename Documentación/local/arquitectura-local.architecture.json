@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "StockAssistant Jupiter - Arquitectura local",
+    "output": "arquitectura-local.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    { "id": "browser", "type": "external", "label": "Usuario", "sublabel": "Navegador local", "pos": [30, 245], "size": [150, 64] },
+    { "id": "google", "type": "security", "label": "Google OAuth", "sublabel": "Login opcional", "pos": [30, 75], "size": [150, 64] },
+    { "id": "vite", "type": "frontend", "label": "Frontend · Vite", "sublabel": "React 18 · TypeScript · :5173", "pos": [260, 75], "size": [190, 68] },
+    { "id": "nginx", "type": "cloud", "label": "Nginx", "sublabel": "SPA compilada · :8080", "pos": [260, 320], "size": [190, 68] },
+    { "id": "api", "type": "backend", "label": "Backend FastAPI", "sublabel": "Uvicorn · :8000 · trabajador", "pos": [550, 230], "size": [210, 72] },
+    { "id": "postgres", "type": "database", "label": "PostgreSQL 15", "sublabel": "DB supply_chain · :5433 host", "pos": [830, 75], "size": [210, 68] },
+    { "id": "qdrant", "type": "database", "label": "Qdrant", "sublabel": "Vectores · REST :6333 · gRPC :6334", "pos": [830, 230], "size": [210, 68] },
+    { "id": "pgadmin", "type": "cloud", "label": "pgAdmin", "sublabel": "Administración · :5050", "pos": [1100, 75], "size": [210, 68] },
+    { "id": "ai-services", "type": "external", "label": "IA y APIs externas", "sublabel": "Ollama host · OpenAI · SerpAPI", "pos": [550, 450], "size": [210, 68] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Docker Compose · red bridge jupiter_network", "wraps": ["vite", "nginx", "api", "postgres", "qdrant", "pgadmin"] }
+  ],
+  "connections": [
+    { "id": "browser-vite", "from": "browser", "to": "vite", "label": "HTTP · :5173" },
+    { "id": "browser-nginx", "from": "browser", "to": "nginx", "label": "HTTP · :8080" },
+    { "id": "browser-google", "from": "browser", "to": "google", "label": "OAuth" },
+    { "id": "vite-api", "from": "vite", "to": "api", "label": "Proxy /api · :8000" },
+    { "id": "nginx-api", "from": "nginx", "to": "api", "label": "Proxy /api y /media" },
+    { "id": "api-postgres", "from": "api", "to": "postgres", "label": "SQL · postgres:5432" },
+    { "id": "api-qdrant", "from": "api", "to": "qdrant", "label": "HTTP · qdrant:6333", "labelDx": -65, "labelDy": -47 },
+    { "id": "pgadmin-postgres", "from": "pgadmin", "to": "postgres", "label": "Administración SQL", "fromSide": "left", "toSide": "right", "labelDy": 58 },
+    { "id": "api-ai-services", "from": "api", "to": "ai-services", "label": "HTTP / HTTPS", "fromSide": "bottom", "toSide": "top", "labelDy": 24 }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Ejecución", "items": ["Vite sirve el frontend de desarrollo; Nginx sirve la SPA compilada", "FastAPI ejecuta la API y el trabajador de automatizaciones", "Los contenedores se comunican en la red bridge de Compose"] },
+    { "dot": "emerald", "title": "Datos e integraciones", "items": ["PostgreSQL y Qdrant persisten sus datos en volúmenes Docker", "Ollama se ejecuta en el host; OpenAI, Google y SerpAPI son opcionales", "Puertos locales: PostgreSQL 5433, Qdrant 6333/6334, pgAdmin 5050"] }
+  ]
+}
