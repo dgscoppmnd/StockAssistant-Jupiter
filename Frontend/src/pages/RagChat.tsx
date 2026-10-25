@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { getApiKey, getSessionToken } from '../api';
+import CosineScores from './components/CosineScores';
 
 interface Message {
   id: string;
@@ -132,6 +133,7 @@ export default function RagChat() {
                     ))}
                   </ul>
                   {msg.provider && <span>Proveedor: {msg.provider === 'openai' ? 'OpenAI' : 'Ollama'}</span>}
+                  <CosineScores sources={msg.citations} />
                 </div>
               )}
               {msg.ingestionWarnings && msg.ingestionWarnings.length > 0 && (

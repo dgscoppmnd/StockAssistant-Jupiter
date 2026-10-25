@@ -4,6 +4,7 @@ import type { CustomerSupportAnswer, ProductOption, SupportTurn } from "../../ty
 import ProductCombobox from "./ProductCombobox";
 import SectionIcon from "./SectionIcon";
 import CustomerSupportInfo from "./CustomerSupportInfo";
+import CosineScores from "./CosineScores";
 
 type ChatMessage = SupportTurn & { result?: CustomerSupportAnswer; failed?: boolean };
 
@@ -59,6 +60,7 @@ export default function CustomerSupportChat() {
           {message.result.stock.map((stock, stockIndex) => <p key={stockIndex}>{stock.warehouse}: {stock.available_qty} {stock.unit}</p>)}
         </div>}
         {message.result?.ai && <small>Proveedor: {message.result.ai.provider === "openai" ? "OpenAI" : "Ollama"}{message.result.ai.used_fallback ? " · Respaldo automático" : ""}</small>}
+        {message.result && <CosineScores sources={message.result.sources} />}
         {!!message.result?.ingestion_warnings?.length && <details><summary>Documentos pendientes o incidencias</summary>
           <ul>{message.result.ingestion_warnings.map((warning, warningIndex) => <li key={warningIndex}>{warning}</li>)}</ul>
         </details>}
